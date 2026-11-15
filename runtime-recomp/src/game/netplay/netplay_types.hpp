@@ -196,6 +196,11 @@ bool valid_display_name(std::string_view value);
 bool valid_room_name(std::string_view value);
 bool valid_rules(const Rules& rules);
 std::uint64_t stable_hash(std::string_view bytes);
+// The class of CPU architectures whose simulation has been shown to agree bit
+// for bit. Peers race together only inside one class; an architecture that has
+// not been checked is a class of its own. docs/CROSS-ARCHITECTURE.md has the
+// evidence behind each entry and how to qualify another architecture.
+std::string_view determinism_class(std::string_view architecture);
 std::uint64_t manifest_hash(const CompatibilityManifest& manifest);
 bool valid_mod_manifest_hash(std::string_view hash);
 

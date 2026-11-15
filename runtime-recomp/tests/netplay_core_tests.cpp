@@ -123,6 +123,36 @@ int main() {
                OnlineFailureCode::DeterminismFailure);
     }
 
+    // x86_64 and arm64 share a determinism class: they are admitted together
+    // and agree on the launch hash. An unchecked architecture is its own class.
+    {
+        const CompatibilityManifest host = Manifest();
+        CompatibilityManifest racer = host;
+        racer.architecture = "arm64";
+        assert(incompatibility_reason(host, racer).empty());
+        assert(incompatibility_reason(racer, host).empty());
+        assert(manifest_hash(host) == manifest_hash(racer));
+        assert(determinism_class("x86_64") == determinism_class("arm64"));
+
+        for (const char* unchecked : {"riscv64", "unknown", ""}) {
+            racer.architecture = unchecked;
+            assert(determinism_class(unchecked) == unchecked);
+            assert(incompatibility_reason(host, racer) ==
+                   "This platform pair has not passed deterministic compatibility.");
+            assert(incompatibility_reason(racer, host) ==
+                   "This platform pair has not passed deterministic compatibility.");
+            assert(manifest_hash(host) != manifest_hash(racer));
+        }
+        CompatibilityManifest same = racer;
+        assert(incompatibility_reason(same, racer).empty());
+
+        racer = host;
+        racer.architecture = "arm64";
+        racer.floating_point_mode = "fast";
+        assert(incompatibility_reason(host, racer) == "This platform pair has not passed deterministic compatibility.");
+        assert(manifest_hash(host) != manifest_hash(racer));
+    }
+
     static_assert(kAuthoritativeDeltaKeyframeInterval % kLiveReplicaCorrectionInterval == 0U,
                   "Every reliable replica anchor must be a correction frame.");
     assert(live_replica_correction_due(0U));
