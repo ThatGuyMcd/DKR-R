@@ -249,21 +249,68 @@ compiler or libm that rounds differently.
 
 ## Checking a new target
 
-Nothing has to be changed for a new architecture to be admitted. Before
-shipping one, run the two checks above against a target that already has
-evidence:
+Nothing has to be changed for a new architecture to be admitted, but nothing
+else shows that it computes the same bits. `scripts/port_check.py` does: it
+builds the replay probe with your toolchain, runs the same captured race, and
+compares every byte of the result with the same run on a machine that already
+races.
 
-1. Build the replay probe for both targets from the same commit and the same
-   generated payload. Capture the fixture once and copy the same bytes to both
-   machines. Run it for both ROM revisions with 2, 3 and 4 players and compare
-   every output with `scripts/compare_replay_references.py`. Any difference is
-   a stop: find the first differing frame, do not normalise it away.
-2. Race the two machines against each other with the self-test, in both host
-   and joiner seats and on both revisions, including a run with
-   `DKR_OWNED_CHECK_DELIVERY_MS=60` so both sides roll back. Compare the
-   `[check][state]` lines with `scripts/compare_state_hashes.py`.
-3. Record the result in the tables above.
+You need your own ROMs and a machine that races today (x86_64 or arm64), plus
+the prepared payloads from `scripts/prepare_payloads.py`. Capture one fixture
+per ROM revision there with `scripts/capture_replay_fixture.py` and copy the
+same bytes to the target.
+
+```sh
+# On the known-good machine: writes the reference.
+python3 scripts/port_check.py --out ref \
+    --fixture 77=race77.dkr-component --fixture 80=race80.dkr-component \
+    --rom 77=us77.z64 --rom 80=us80.z64
+
+# On the target: native, or --toolchain-file t.cmake [--emulator qemu-riscv64],
+# or --docker-image debian:trixie --docker-platform linux/riscv64.
+python3 scripts/port_check.py --out target --reference ref \
+    --fixture 77=race77.dkr-component --fixture 80=race80.dkr-component \
+    --rom 77=us77.z64 --rom 80=us80.z64
+```
+
+It prints the contract line the build reports, runs the probe's self-test and
+the 2, 3 and 4 player workloads, and ends with one of:
+
+- `IDENTICAL`: every comparison matched byte for byte.
+- `DIFFERENT`: it says which comparison, the first differing checkpoint byte
+  and the first differing frame. Exit 1.
+- `INCONCLUSIVE`: the two runs were not comparable (another fixture or frame
+  count). Exit 2.
+
+The reference and the fixture are full copies of guest memory, so they come
+from your ROM and cannot be shared or committed. Everybody makes their own;
+the script prints only hashes, offsets and frame numbers, and `--out` has to
+stay private.
+
+### When it says DIFFERENT
+
+riscv64 and ppc64le did, with GCC 14 at `-O3`, although both reported
+`strict-ieee754-v1`. The first difference was at frame 0, in the audio heap, a
+single bit. Same code at `-O0` to `-O2` matched. To find it:
+
+1. Rerun with `--ubsan` and a fresh `--out`. It builds with
+   `-fsanitize=signed-integer-overflow,shift` and lists every `file:line` the
+   run reported. The scalar RSP multiply in `rsp_vu_impl.hpp` was the only one
+   in library code; shifts in the generated guest code are reported too and
+   are not the cause.
+2. Check it is optimisation dependent (`--cmake-arg=-DCMAKE_C_FLAGS_RELEASE=-O1`
+   and the same for CXX). If `-O1` matches and `-O3 -fwrapv` matches, it is
+   undefined behaviour the optimiser exploits on your target.
+3. Fix the arithmetic (unsigned, or an explicit wrap) rather than the flags.
+   Patch `0029` is the example.
+
+Only x86_64 and arm64 run the SIMD RSP path, so a new architecture runs the
+scalar fallback that nobody else compiles: expect the bug there.
 
 If a target cannot honour the contract (it needs fast-math, or its compiler
 cannot turn contraction off), make its build fail the compile-time check so
-it advertises `unverified-<architecture>`.
+it advertises `unverified-<architecture>`. The script still runs, and the
+contract report names the clause that is not met. Then record the result in
+the table above. A live race between two machines
+(`docs/ROLLBACK-SELF-TEST.md`, `scripts/compare_state_hashes.py`) is the
+second check before shipping.
