@@ -2872,6 +2872,11 @@ if(BUILD_TESTING)
     target_include_directories(DKRWidescreenPolicyTests PRIVATE "${CMAKE_CURRENT_LIST_DIR}/src/game")
     add_test(NAME DKRWidescreenPolicy COMMAND DKRWidescreenPolicyTests)
 
+    add_executable(DKRSoundSettingsTests tests/sound_settings_tests.cpp)
+    target_compile_features(DKRSoundSettingsTests PRIVATE cxx_std_20)
+    target_include_directories(DKRSoundSettingsTests PRIVATE "${CMAKE_CURRENT_LIST_DIR}/src/game")
+    add_test(NAME DKRSoundSettings COMMAND DKRSoundSettingsTests)
+
     if(DKR_RUNTIME_BUILD_RT64 AND TARGET DKRPortGame)
         # The settings file through the real LoadSettings and SaveSettings; the
         # host preset does not compile runtime_ui.cpp, so this needs the game.
