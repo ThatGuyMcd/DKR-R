@@ -38,7 +38,20 @@ RECORDED = {
             "gDialogueCameraAngle": (0x8011D586, 0x8011DB06),
             "gCurrentPlayerIndex": (0x8011D55C, 0x8011DADC),
         },
-    )
+    ),
+    "water_symbols.hpp": (
+        ["enhanced_water_registry.hpp"],
+        {
+            "gWaveController": (0x80129FC8, 0x8012A588),
+            "gWavePlayerCount": (0x8012A078, 0x8012A638),
+            "gWaveBatch": (0x8012A07C, 0x8012A63C),
+            "gWaveTriangles": (0x800E3080, 0x800E3610),
+            "D_800E3090": (0x800E3090, 0x800E3620),
+            "gWaveTextureHeader": (0x800E30D0, 0x800E3660),
+            "gWaveModel": (0x800E30D8, 0x800E3668),
+        },
+    ),
+    "scenery_symbols.hpp": (["local_scenery_rt64.cpp"], {"dRenderSettingsCommon": (0x800DE8E8, 0x800DEE68)}),
 }
 
 

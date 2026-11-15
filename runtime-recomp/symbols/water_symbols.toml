@@ -1,0 +1,23 @@
+# Wave state the enhanced water registry reads (enhanced_water_registry.hpp).
+schema = 1
+header = "water_symbols.hpp"
+table = "sdk"
+hex = "upper"
+symbols = [
+  "gWaveController",
+  "gWavePlayerCount",
+  "gWaveBatch",
+  "gWaveTriangles",
+  "D_800E3090",
+  "gWaveTextureHeader",
+  "gWaveModel",
+]
+template = '''#pragma once
+#include <cstdint>
+namespace dkr::runtime::water_symbols {
+struct Symbols {std::uint32_t controller;std::uint32_t players;std::uint32_t batch;std::uint32_t triangles;std::uint32_t fallback;std::uint32_t texture;std::uint32_t model;};
+inline constexpr Symbols symbols77{@ALL:77@};
+inline constexpr Symbols symbols80{@ALL:80@};
+inline constexpr const Symbols& for_revision(bool us_v80) { return us_v80 ? symbols80 : symbols77; }
+}
+'''
