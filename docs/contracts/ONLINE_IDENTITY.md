@@ -53,3 +53,43 @@ binaries. The values were also recomputed from `6bdbcde` and `5cab242` with
 The chain no longer runs. Sources now change without changing the contract.
 Change the contract on purpose, by editing `legacy_identity.hpp` and this
 table together, when a change breaks compatibility with older peers.
+
+## The input record
+
+`architecture/online-identity-inputs.json` is the lock on everything that can
+change what peers simulate: the generated guest code, the owned engine's
+sources and the online wire behaviour (`globs`), the sha256 of each matching
+file, and the contract they were recorded against (`identity`, from
+`legacy_identity.hpp`). `scripts/identity_guard.py check` runs in the guard
+suite and fails when a file differs from its digest.
+
+Each input carries the reason it last changed, next to its digest:
+
+```json
+"scripts/gen_guest_symbols.py": {
+  "sha256": "…",
+  "reason": "Type the names default for pyright; generated headers are byte-identical"
+}
+```
+
+Record a change with one of:
+
+- `python3 scripts/identity_guard.py update --compatible "why old and new peers stay compatible"`
+  when `legacy_identity.hpp` is unchanged. It re-records the inputs that changed
+  and writes your reason on those, and only those. It refuses when the contract
+  changed.
+- `python3 scripts/identity_guard.py update` after bumping `legacy_identity.hpp`
+  (and the table above). Each changed input gets "online identity changed to
+  <new identity>". It refuses while the contract is unchanged.
+
+A reason is replaced when its input changes again, and an input nobody touched
+keeps its old reason, so the record reads as "why each file last changed". The
+reviewer's diff shows the new reason on every changed digest; in CI,
+`identity_guard.py check --against <base>` fails a PR where a digest changed
+and its reason did not (a hand-edited hash, or a merge that dropped one).
+
+Two branches that change different inputs touch different entries, so they
+merge without a conflict and `check` passes on the merge without re-running
+`update`. A conflict means both changed the same input, or both edited
+`identity`; resolve it by taking one side and running `update` again for
+your change.
