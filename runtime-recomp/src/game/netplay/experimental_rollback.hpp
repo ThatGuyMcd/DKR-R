@@ -109,6 +109,11 @@ class Simulation {
                         bool scene_boundary, std::string& error) = 0;
 };
 
+// Self-test only (--self-test-owned-*): print `[check][state]` with the
+// confirmed-state hash every `every` confirmed frames (0 = off, the default).
+// Diagnostic output only: nothing is sent and no simulation state changes.
+void set_check_state_log_interval(std::uint32_t every);
+
 struct Configuration {
     std::uint64_t epoch = 0U;
     std::uint8_t players = 2U;

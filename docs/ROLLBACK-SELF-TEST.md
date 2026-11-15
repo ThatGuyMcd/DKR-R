@@ -85,6 +85,40 @@ frame: there was no race to read (menus, loading), or
 The menus are not steered: the test presses Start and A on a timer, so the
 race is whatever the character, vehicle and track cursors start on.
 
+## Comparing state between peers
+
+The game does not cross-check simulation state between peers during a race.
+Inputs are exchanged, and state is compared only when the checkpoint is
+admitted and at scene boundaries (the menu-to-race hand-over). A mid-race
+divergence would not stop the session or log a failure, so a clean exit code
+says little about whether two peers still agree.
+
+To check it, every peer of a self-test run logs the hash of its confirmed
+state at a fixed cadence (every 30 confirmed frames, `DKR_OWNED_CHECK_STATE_EVERY`):
+
+```text
+[check][state] epoch=92 frame=300 hash=7DC1FBCE66916E54 us=312
+```
+
+`hash` is the hash saved with that confirmed frame's checkpoint, the whole
+simulation state, so it matches between peers whenever they agree. `us` is what
+reading it cost on that peer (about 0.3 ms on an M-series Mac, a few ms at worst),
+nothing else. Nothing is sent and nothing it reads is changed; it only runs in
+`--self-test-owned-*` runs.
+
+Compare the `runtime.log` files of two or more peers:
+
+```sh
+python3 scripts/compare_state_hashes.py host/logs/runtime.log join/logs/runtime.log
+```
+
+It prints how many frames both logs share and the first mismatching
+`(epoch, frame)` if any. Exit 0 means every shared frame is equal, 1 means a
+mismatch, 2 means the input is unusable (no state lines, no frames in common,
+or fewer than `--minimum` frames compared, 20 by default, so a run that barely
+started doesn't count as equal). It only speaks for the frames that were
+logged, and logs from different runs aren't expected to agree.
+
 ## Switches
 
 Set these in the environment of a peer before starting it. They only do
@@ -100,6 +134,7 @@ anything in a self-test run.
 | `DKR_OWNED_CHECK_DELIVERY_MS=<n>` | Delay every route by `n` ms, to stand in for a real connection. `DKR_OWNED_CHECK_JITTER_MS`, `DKR_OWNED_CHECK_SPIKE_MS` and `DKR_OWNED_CHECK_LOSS_EVERY` add jitter, spikes and dropped packets on top. |
 | `DKR_OWNED_CHECK_RECEIVE_MS=<n>` | Delay what this peer receives by `n` ms, with 15 ms of jitter. |
 | `DKR_OWNED_CHECK_WATCH=1` | On a joiner: join as a spectator, not a racer. |
+| `DKR_OWNED_CHECK_STATE_EVERY=<n>` | Log `[check][state]` every `n` confirmed frames (1 to 100, default 30). 1 is every frame. |
 
 Two peers on one machine have almost no latency between them, so a plain run
 never exercises late inputs. Use the delivery or receive delay when that is
