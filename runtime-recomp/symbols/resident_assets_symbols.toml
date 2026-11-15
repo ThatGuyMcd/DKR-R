@@ -1,0 +1,36 @@
+# Resident asset lookup tables and cache tables the immutable asset bank
+# mirrors (mods/legacy_resident_assets.cpp). The second lookup pointer is the
+# 3D texture table, word 1 of gTextureAssetTable: no symbol names it, so the
+# template spells it as that symbol plus 4.
+schema = 1
+header = "resident_assets_symbols.hpp"
+table = "sdk"
+hex = "upper"
+symbols = [
+  "gTextureAssetTable",
+  "gSpriteOffsetTable",
+  "gObjectModelTable",
+  "gAnimationTable",
+  "gObjectAnimationTable",
+  "gSequenceTable",
+  "gSeqLengthTable",
+  "gNumberOfLoadedTextures",
+  "gTextureCache",
+  "gSpriteCacheCount",
+  "gSpriteCache",
+  "gModelCacheCount",
+  "gModelCache",
+]
+template = '''#pragma once
+#include <array>
+#include <cstdint>
+namespace dkr::runtime::resident_assets_symbols {
+struct Cache {std::uint32_t count;std::uint32_t table;};
+struct Symbols {std::array<std::uint32_t, 8> tables;Cache textures;Cache sprites;Cache models;};
+inline constexpr Symbols symbols77{{{@gTextureAssetTable:77@, @gTextureAssetTable:77@ + 4U, @gSpriteOffsetTable:77@, @gObjectModelTable:77@, @gAnimationTable:77@, @gObjectAnimationTable:77@, @gSequenceTable:77@, @gSeqLengthTable:77@}},
+    {@gNumberOfLoadedTextures:77@, @gTextureCache:77@}, {@gSpriteCacheCount:77@, @gSpriteCache:77@}, {@gModelCacheCount:77@, @gModelCache:77@}};
+inline constexpr Symbols symbols80{{{@gTextureAssetTable:80@, @gTextureAssetTable:80@ + 4U, @gSpriteOffsetTable:80@, @gObjectModelTable:80@, @gAnimationTable:80@, @gObjectAnimationTable:80@, @gSequenceTable:80@, @gSeqLengthTable:80@}},
+    {@gNumberOfLoadedTextures:80@, @gTextureCache:80@}, {@gSpriteCacheCount:80@, @gSpriteCache:80@}, {@gModelCacheCount:80@, @gModelCache:80@}};
+inline constexpr const Symbols& for_revision(bool us_v80) { return us_v80 ? symbols80 : symbols77; }
+}
+'''
