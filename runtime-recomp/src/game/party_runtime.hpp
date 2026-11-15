@@ -16,6 +16,8 @@ class PartyRuntime final {
                  net::experimental::PresentationMailbox& presentation, net::LaunchDescriptor launch, HashState hash);
     ~PartyRuntime();
     bool begin(std::string& error);
+    // Cross-check confirmed-state hashes with the other racers (state_cross_check.hpp).
+    void enable_state_check(bool enabled);
     bool pulse(Clock::time_point now, net::PackedInput input, std::string& error);
     bool watching() const;
     unsigned local_port() const;

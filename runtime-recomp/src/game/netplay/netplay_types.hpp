@@ -196,7 +196,18 @@ bool valid_display_name(std::string_view value);
 bool valid_room_name(std::string_view value);
 bool valid_rules(const Rules& rules);
 std::uint64_t stable_hash(std::string_view bytes);
+// The hash racers on one architecture have always agreed on. It names the
+// architecture itself, so it is what every earlier build computes.
 std::uint64_t manifest_hash(const CompatibilityManifest& manifest);
+// The same hash without the architecture, which peers on different
+// architectures share when the rest of their manifests agree.
+std::uint64_t manifest_class_hash(const CompatibilityManifest& manifest);
+// What a host puts in the launch descriptor: the shared hash only when the
+// lobby actually spans architectures, so a single-architecture lobby launches
+// with the hash earlier builds expect.
+std::uint64_t launch_compatibility_hash(const CompatibilityManifest& host, bool spans_architectures);
+// A racer accepts either form computed over its own manifest.
+bool launch_hash_accepted(std::uint64_t hash, const CompatibilityManifest& own);
 bool valid_mod_manifest_hash(std::string_view hash);
 
 enum class OnlineFailureCode : std::uint8_t {

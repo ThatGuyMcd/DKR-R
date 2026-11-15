@@ -123,6 +123,7 @@
 #include "netplay/netplay_build_identity.hpp"
 #include "netplay/experimental_runtime_admission.hpp"
 #include "netplay/experimental_runtime_presence.hpp"
+#include "netplay/determinism_contract.hpp"
 #include "netplay/experimental_latency.hpp"
 #if defined(DKR_EXPERIMENTAL_RACE_TEST)
 #include "netplay/check_names.hpp"
@@ -4511,14 +4512,20 @@ dkr::runtime::netplay::CompatibilityManifest BuildNetplayManifest(const dkr::run
             stable_hash(std::string_view(reinterpret_cast<const char*>(canonical_save.data()), canonical_save.size()));
     }
     manifest.simulation_rate = 30U;
-#if defined(_M_X64) || defined(__x86_64__)
-    manifest.architecture = "x86_64";
-#elif defined(_M_ARM64) || defined(__aarch64__)
-    manifest.architecture = "arm64";
-#else
-    manifest.architecture = "unknown";
-#endif
-    manifest.floating_point_mode = "strict-ieee754-v1";
+    manifest.architecture = std::string(build_architecture());
+    manifest.floating_point_mode = floating_point_contract();
+    // Once per run, for whoever is bringing up a new platform: what this build
+    // tells its peers, and which clause it misses if it cannot race them.
+    static const bool reported = [&manifest] {
+        std::fprintf(stderr, "[online][contract] architecture=%s contract=%s\n", manifest.architecture.c_str(),
+                     manifest.floating_point_mode.c_str());
+        for (const auto& clause : kStrictIeee754Clauses)
+            if (!clause.holds)
+                std::fprintf(stderr, "[online][contract] not met: %.*s\n", int(clause.requirement.size()),
+                             clause.requirement.data());
+        return true;
+    }();
+    (void)reported;
 #if defined(DKR_EXPERIMENTAL_RACE_TEST)
     manifest.owned_engine_hash = experimental::runtime_engine_identity(identity.revision);
 #endif
@@ -9988,6 +9995,22 @@ bool dkr::runtime::ui::configure_owned_online_check(const rom::Identity& identit
                 every = number;
         }
         dkr::runtime::netplay::experimental::set_check_state_log_interval(every);
+    }
+    // Self-test hooks for the live cross-architecture state check.
+    {
+        const char* verify = std::getenv("DKR_OWNED_CHECK_VERIFY");
+        dkr::runtime::netplay::experimental::set_check_verify_forced(verify && std::string_view(verify) == "1");
+        unsigned corrupt = 0;
+        if (const char* text = std::getenv("DKR_OWNED_CHECK_CORRUPT_STATE_AT"); text && *text) {
+            bool valid = true;
+            for (const char* at = text; *at; ++at) {
+                valid = valid && *at >= '0' && *at <= '9' && corrupt < 10000000U;
+                corrupt = corrupt * 10 + unsigned(*at - '0');
+            }
+            if (!valid)
+                corrupt = 0;
+        }
+        dkr::runtime::netplay::experimental::set_check_corrupt_state_at(corrupt);
     }
     if (const char* missing = std::getenv("DKR_OWNED_CHECK_MISSING_TARGET");
         missing && std::string_view(missing) == "1")

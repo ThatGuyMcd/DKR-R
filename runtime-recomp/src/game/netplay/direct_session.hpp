@@ -841,6 +841,9 @@ class DirectSession final {
     std::uint64_t match_id_ = 0U;
     std::uint64_t sender_id_ = 0U;
     std::uint64_t host_sender_id_ = 0U;
+    // Host only: senders admitted from another architecture of this
+    // build's determinism class (netplay_types.hpp).
+    std::unordered_set<std::uint64_t> other_architecture_senders_;
     std::uint64_t next_sequence_ = 1U;
     std::string local_name_;
     std::string advertised_host_;

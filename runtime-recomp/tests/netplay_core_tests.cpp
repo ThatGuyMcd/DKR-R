@@ -1,3 +1,4 @@
+#include "determinism_contract.hpp"
 #include "netplay_lobby.hpp"
 #include "rollback_policy.hpp"
 #include "netplay_build_identity.hpp"
@@ -10,6 +11,7 @@
 #include "revision_addresses.hpp"
 #include "rollback_ring.hpp"
 #include "session_transport.hpp"
+#include "state_cross_check.hpp"
 #include "authoritative_state_codec.hpp"
 
 #include <array>
@@ -18,6 +20,7 @@
 #include <cstring>
 #include <cstdio>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 namespace {
@@ -38,9 +41,102 @@ dkr::runtime::netplay::CompatibilityManifest Manifest() {
     return manifest;
 }
 
+void StateCrossCheckTests() {
+    using namespace dkr::runtime::netplay;
+    using V = StateCrossCheck::Verdict;
+    constexpr std::uint64_t kEpoch = 92U, kA = 11U, kB = 22U;
+    StateMismatch mismatch{};
+    {
+        // Equal hashes in any arrival order verify the frame and free it.
+        StateCrossCheck check;
+        check.set_peers({kA, kB});
+        assert(check.report(kA, kEpoch, 30U, 7U) == V::Accepted);
+        assert(check.local(kEpoch, 30U, 7U) == V::Accepted);
+        assert(check.pending() == 1U);
+        assert(check.report(kB, kEpoch, 30U, 7U) == V::Accepted);
+        assert(check.pending() == 0U && check.verified_frames() == 1U);
+    }
+    {
+        // A differing report is a mismatch whichever side arrives first.
+        StateCrossCheck check;
+        check.set_peers({kA});
+        assert(check.local(kEpoch, 60U, 5U) == V::Accepted);
+        assert(check.report(kA, kEpoch, 60U, 6U, &mismatch) == V::Mismatch);
+        assert(mismatch.epoch == kEpoch && mismatch.frame == 60U && mismatch.peer == kA && mismatch.local == 5U &&
+               mismatch.remote == 6U);
+        StateCrossCheck late;
+        late.set_peers({kA});
+        assert(late.report(kA, kEpoch, 60U, 6U) == V::Accepted);
+        assert(late.local(kEpoch, 60U, 5U, &mismatch) == V::Mismatch);
+        assert(mismatch.local == 5U && mismatch.remote == 6U);
+    }
+    {
+        // Malformed, unexpected and conflicting reports change nothing.
+        StateCrossCheck check;
+        check.set_peers({kA});
+        assert(check.report(kA, kEpoch, 31U, 1U) == V::Rejected);  // off the cadence
+        assert(check.report(kA, kEpoch, 0U, 1U) == V::Rejected);   // frame 0
+        assert(check.report(kA, 0U, 30U, 1U) == V::Rejected);      // no epoch
+        assert(check.report(99U, kEpoch, 30U, 1U) == V::Rejected); // not a racer
+        assert(check.pending() == 0U);
+        assert(check.report(kA, kEpoch, 30U, 1U) == V::Accepted);
+        assert(check.report(kA, kEpoch, 30U, 1U) == V::Duplicate);
+        assert(check.report(kA, kEpoch, 30U, 2U) == V::Rejected); // conflicting repeat is ignored
+        assert(check.local(kEpoch, 30U, 1U) == V::Accepted);
+        assert(check.verified_frames() == 1U);
+    }
+    {
+        // Memory is bounded: a flood of distinct frames keeps `capacity` entries, and a
+        // report older than everything kept is refused.
+        StateCrossCheck check(4U);
+        check.set_peers({kA});
+        for (std::uint32_t frame = 30U; frame <= 30U * 1000U; frame += 30U)
+            assert(check.report(kA, kEpoch, frame, frame) == V::Accepted);
+        assert(check.pending() == 4U);
+        assert(check.report(kA, kEpoch, 30U, 30U) == V::Rejected);
+        assert(check.report(kA, kEpoch + 1U, 30U, 30U) == V::Accepted); // a newer epoch still fits
+        assert(check.pending() == 4U);
+    }
+    {
+        // A peer that never reports is named once, only for frames this peer sampled.
+        StateCrossCheck check(2U);
+        check.set_peers({kA, kB});
+        for (std::uint32_t frame = 30U; frame <= 150U; frame += 30U) {
+            assert(check.local(kEpoch, frame, frame) == V::Accepted);
+            assert(check.report(kA, kEpoch, frame, frame) == V::Accepted);
+        }
+        const auto silent = check.take_silent();
+        assert(silent.size() == 1U && silent.front() == kB);
+        assert(check.take_silent().empty());
+        assert(check.verified_frames() == 0U);
+        // A stray report for a frame this peer never sampled names nobody.
+        StateCrossCheck stray(2U);
+        stray.set_peers({kA, kB});
+        for (std::uint32_t frame = 30U; frame <= 150U; frame += 30U)
+            assert(stray.report(kA, kEpoch, frame, frame) == V::Accepted);
+        assert(stray.take_silent().empty());
+    }
+    {
+        // The other-architecture set follows the lobby: leavers go, present peers stay.
+        std::unordered_set<std::uint64_t> senders{1U, 2U, 3U};
+        prune_other_architecture_senders(senders, {2U, 3U, 9U});
+        assert(senders.size() == 2U && senders.contains(2U) && senders.contains(3U));
+        prune_other_architecture_senders(senders, {});
+        assert(senders.empty());
+    }
+    {
+        // Only a launch in the architecture-free form counts as spanning architectures.
+        auto own = Manifest();
+        assert(lobby_spans_architectures(manifest_class_hash(own), own));
+        assert(!lobby_spans_architectures(manifest_hash(own), own));
+        assert(!lobby_spans_architectures(0U, own));
+    }
+}
+
 } // namespace
 
 int main() {
+    StateCrossCheckTests();
     using namespace dkr::runtime::netplay;
 
     // Post-race rendering hitches must not advance the host's transition
@@ -121,6 +217,60 @@ int main() {
                    .code == OnlineFailureCode::HostUnreachable);
         assert(classify_online_failure("Rollback determinism failed at simulation frame 35.").code ==
                OnlineFailureCode::DeterminismFailure);
+    }
+
+    // Peers are admitted on the floating point contract their build vouches
+    // for, not on the CPU. A lobby on one architecture launches with the hash
+    // every earlier build computes; only a lobby that spans architectures
+    // uses the shared hash, and a racer accepts either form of its own.
+    {
+        // The per-architecture hash is frozen: same-version peers built before
+        // contracts must keep agreeing with it.
+        assert(manifest_hash(Manifest()) == 0xB2DD0BA0FA4A6277ULL);
+
+        CompatibilityManifest host = Manifest();
+        host.floating_point_mode = floating_point_contract(true, "x86_64");
+        assert(host.floating_point_mode == "strict-ieee754-v1");
+        for (const char* architecture : {"arm64", "riscv64", "ppc64le", "some-future-cpu"}) {
+            CompatibilityManifest racer = host;
+            racer.architecture = architecture;
+            assert(incompatibility_reason(host, racer).empty());
+            assert(incompatibility_reason(racer, host).empty());
+            assert(manifest_hash(host) != manifest_hash(racer));
+            assert(manifest_class_hash(host) == manifest_class_hash(racer));
+            assert(manifest_class_hash(host) != manifest_hash(host));
+
+            assert(launch_compatibility_hash(host, false) == manifest_hash(host));
+            assert(launch_compatibility_hash(host, true) == manifest_class_hash(host));
+            assert(launch_hash_accepted(launch_compatibility_hash(host, false), host));
+            assert(launch_hash_accepted(launch_compatibility_hash(host, true), host));
+            assert(launch_hash_accepted(launch_compatibility_hash(host, true), racer));
+            assert(!launch_hash_accepted(launch_compatibility_hash(host, false), racer));
+            CompatibilityManifest other_settings = racer;
+            other_settings.gameplay_settings_hash ^= 1U;
+            assert(!launch_hash_accepted(launch_compatibility_hash(host, true), other_settings));
+        }
+
+        // A build that cannot vouch for the contract only meets its own kind.
+        const char* refused = "This platform pair has not passed deterministic compatibility.";
+        CompatibilityManifest loose = host;
+        loose.architecture = "x86";
+        loose.floating_point_mode = floating_point_contract(false, "x86");
+        assert(loose.floating_point_mode == "unverified-x86");
+        assert(incompatibility_reason(host, loose) == refused);
+        assert(incompatibility_reason(loose, host) == refused);
+        assert(!launch_hash_accepted(launch_compatibility_hash(host, true), loose));
+        assert(incompatibility_reason(loose, loose).empty());
+        CompatibilityManifest other_loose = loose;
+        other_loose.architecture = "arm";
+        other_loose.floating_point_mode = floating_point_contract(false, "arm");
+        assert(incompatibility_reason(loose, other_loose) == refused);
+
+        // Every target we build for honours the contract, clause by clause.
+        for (const auto& clause : kStrictIeee754Clauses)
+            assert(clause.holds && !clause.requirement.empty());
+        assert(kStrictIeee754 && floating_point_contract() == "strict-ieee754-v1");
+        assert(!build_architecture().empty());
     }
 
     static_assert(kAuthoritativeDeltaKeyframeInterval % kLiveReplicaCorrectionInterval == 0U,
