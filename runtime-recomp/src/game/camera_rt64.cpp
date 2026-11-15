@@ -4,6 +4,7 @@
 #include "game_payload.hpp"
 #include "camera_rt64.hpp"
 #include "revision_addresses.hpp"
+#include "camera_symbols.hpp"
 #include <algorithm>
 #include <atomic>
 #include <cmath>
@@ -114,7 +115,7 @@ void RenderPass::prepare(std::span<const std::uint8_t> retained, std::span<std::
                 return;
             }
             const auto revision = payload->revision;
-            const auto address = revision == rom::Revision::UsV77 ? 0x800DC918U : 0x800DCE88U;
+            const auto address = camera_symbols::for_revision(revision != rom::Revision::UsV77).level_model;
             const auto model = word(retained, address);
             const auto identity = (std::uint64_t(stamp.epoch) << 32) ^ stamp.scene ^ model;
             if (identity != collision_key) {

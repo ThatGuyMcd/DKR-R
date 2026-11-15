@@ -74,11 +74,11 @@ if(CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64|arm64|ARM64)$" AND CMAKE_CXX_COMPIL
     set_property(
         SOURCE "${DKRPORT_ROOT}/runtime-recomp/src/game/vehicle_package.cpp"
         APPEND
-        PROPERTY COMPILE_OPTIONS -ffp-contract=off
+        PROPERTY COMPILE_OPTIONS -ffp-contract=off ${DKR_SIMULATION_WRAP_OPTIONS}
     )
     foreach(target DKRVehicleOriginalTests DKRVehicleOriginalBeforeTests)
         if(TARGET ${target})
-            target_compile_options(${target} PRIVATE -ffp-contract=off)
+            target_compile_options(${target} PRIVATE -ffp-contract=off ${DKR_SIMULATION_WRAP_OPTIONS})
         endif()
     endforeach()
 endif()

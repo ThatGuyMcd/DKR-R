@@ -1,6 +1,7 @@
 #include "water_style/appearance.hpp"
 #pragma once
 #include "enhanced_water_registry.hpp"
+#include "camera_symbols.hpp"
 #include "enhanced_water_settings.hpp"
 #include "revision_addresses.hpp"
 #include "runtime_legacy_mods.hpp"
@@ -13,7 +14,7 @@
 namespace dkr::runtime::water::enhanced {
 
 inline std::uint32_t level_model_symbol() {
-    return revision_addresses::selected_revision() == rom::Revision::UsV80 ? 0x800DCE88U : 0x800DC918U;
+    return camera_symbols::for_revision(revision_addresses::selected_revision() == rom::Revision::UsV80).level_model;
 }
 inline std::uint32_t wave_batch_symbol() {
     return wave_symbols(revision_addresses::selected_revision() == rom::Revision::UsV80).batch;

@@ -1,5 +1,6 @@
 #include "look_behind/policy.hpp"
 #include "camera_session.hpp"
+#include "camera_symbols.hpp"
 #include "mods/sdk2_bridge.hpp"
 #include <cmath>
 #include <cstring>
@@ -62,7 +63,7 @@ ViewBatch PresentationSession::evaluate(std::span<const std::uint8_t> retained, 
             (frame.capabilities & DKR_VIEW_STATIC_COLLISION)) {
             if (retained.size() < 0x800000U)
                 throw mods::Error("Camera presentation requires a complete retained image.");
-            const auto address = revision_ == rom::Revision::UsV77 ? 0x800DC918U : 0x800DCE88U;
+            const auto address = camera_symbols::for_revision(revision_ != rom::Revision::UsV77).level_model;
             std::uint32_t model;
             std::memcpy(&model, retained.data() + address - 0x80000000U, 4);
             if (!scene_attempted_ || scene_ != stamp.scene || epoch_ != stamp.epoch || model_ != model) {

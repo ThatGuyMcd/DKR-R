@@ -5,8 +5,11 @@ import unittest
 from unittest.mock import patch
 import hashlib
 import os
+import sys
 from unittest import mock
 
+# generate_replay_probe imports its sibling scripts by bare name.
+sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "scripts"))
 spec = importlib.util.spec_from_file_location(
     "probe_generator", Path(__file__).resolve().parents[3] / "scripts/generate_replay_probe.py")
 generator = importlib.util.module_from_spec(spec)
@@ -141,17 +144,20 @@ class InstrumentationTests(unittest.TestCase):
             with patch.dict(generator.REVIEWED_MAIN_MERGE_HASH, {name: "unreviewed"}, clear=True):
                 with self.assertRaises(ValueError): generator.input_native_audit()
 
-    def reviewed_bodies(self, revision):
-        root=Path("G:/DiddykongWorkFolder" if os.name=="nt" else "/mnt/g/DiddykongWorkFolder")
+    def reviewed_dir(self, revision):
         configured=os.environ.get(f"DKR_REVIEWED_GENERATED_V{revision}")
-        directory=(Path(configured) if configured else
-                   Path(os.environ["DKR_TEST_GENERATED_ROOT"])/f"v{revision}/RecompiledFuncs"
-                   if os.environ.get("DKR_TEST_GENERATED_ROOT") else
-                   root/f"water-performance-20260926/pipeline/generated-v{revision}")
+        if configured:
+            return Path(configured)
+        if os.environ.get("DKR_TEST_GENERATED_ROOT"):
+            return Path(os.environ["DKR_TEST_GENERATED_ROOT"])/f"v{revision}/RecompiledFuncs"
+        self.skipTest(f"Set DKR_REVIEWED_GENERATED_V{revision} or DKR_TEST_GENERATED_ROOT to the generated sources")
+
+    def reviewed_bodies(self, revision):
+        directory=self.reviewed_dir(revision)
         if not directory.exists():self.skipTest("Reviewed scene inputs unavailable")
         bodies={}
         for path in directory.glob("*.c"):
-            source=path.read_text();matches=list(generator.DEF.finditer(source))
+            source=generator.HOOK_NULL_STATEMENT.sub("    ",path.read_text());matches=list(generator.DEF.finditer(source))
             for i,match in enumerate(matches):
                 bodies[match[1]]=source[match.start():matches[i+1].start() if i+1<len(matches) else len(source)]
         return bodies
@@ -249,11 +255,11 @@ class InstrumentationTests(unittest.TestCase):
     def test_confirmed_resume_preserves_continuation_not_second_input(self):
         root=Path("G:/DiddykongWorkFolder" if os.name=="nt" else "/mnt/g/DiddykongWorkFolder")
         for revision in (77,80):
-            directory=root/f"water-performance-20260926/pipeline/generated-v{revision}"
+            directory=self.reviewed_dir(revision)
             if not directory.exists():self.skipTest("Private reviewed scene inputs unavailable")
             bodies={}
             for path in directory.glob("*.c"):
-                source=path.read_text();matches=list(generator.DEF.finditer(source))
+                source=generator.HOOK_NULL_STATEMENT.sub("    ",path.read_text());matches=list(generator.DEF.finditer(source))
                 for i,match in enumerate(matches):
                     if match[1] in ("main_game_loop","mode_game"):
                         bodies[match[1]]=source[match.start():matches[i+1].start() if i+1<len(matches) else len(source)]
@@ -292,11 +298,11 @@ class InstrumentationTests(unittest.TestCase):
     def test_unload_retains_free_sequence_not_live_scheduler(self):
         root=Path("G:/DiddykongWorkFolder" if os.name=="nt" else "/mnt/g/DiddykongWorkFolder")
         for revision in (77,80):
-            directory=root/f"water-performance-20260926/pipeline/generated-v{revision}"
+            directory=self.reviewed_dir(revision)
             if not directory.exists():self.skipTest("Private reviewed scene inputs unavailable")
             body=None
             for path in directory.glob("*.c"):
-                source=path.read_text();matches=list(generator.DEF.finditer(source))
+                source=generator.HOOK_NULL_STATEMENT.sub("    ",path.read_text());matches=list(generator.DEF.finditer(source))
                 for i,match in enumerate(matches):
                     if match[1]=="unload_level_game":
                         body=source[match.start():matches[i+1].start() if i+1<len(matches) else len(source)]
@@ -318,11 +324,11 @@ class InstrumentationTests(unittest.TestCase):
     def test_video_cpu_retains_retail_blackout_and_roles(self):
         root=Path("G:/DiddykongWorkFolder" if os.name=="nt" else "/mnt/g/DiddykongWorkFolder")
         for revision in (77,80):
-            source_dir=root/f"water-performance-20260926/pipeline/generated-v{revision}"
+            source_dir=self.reviewed_dir(revision)
             if not source_dir.exists():self.skipTest("Private reviewed video inputs unavailable")
             bodies={}
             for path in source_dir.glob("*.c"):
-                source=path.read_text(encoding="utf-8");matches=list(generator.DEF.finditer(source))
+                source=generator.HOOK_NULL_STATEMENT.sub("    ",path.read_text(encoding="utf-8"));matches=list(generator.DEF.finditer(source))
                 for i,m in enumerate(matches):
                     if m[1] in ("fb_update","fb_swap"):
                         bodies[m[1]]=source[m.start():matches[i+1].start() if i+1<len(matches) else len(source)]
@@ -353,9 +359,9 @@ class InstrumentationTests(unittest.TestCase):
     def test_authored_cpu_exact_readonly_phases(self):
         root=Path("G:/DiddykongWorkFolder" if os.name=="nt" else "/mnt/g/DiddykongWorkFolder")
         for revision in (77,80):
-            path=root/f"water-performance-20260926/pipeline/generated-v{revision}/funcs_14.c"
+            path=self.reviewed_dir(revision)/"funcs_14.c"
             if not path.exists():self.skipTest("Private reviewed main-loop inputs unavailable")
-            source=path.read_text(encoding="utf-8")
+            source=generator.HOOK_NULL_STATEMENT.sub("    ",path.read_text(encoding="utf-8"))
             matches=list(generator.DEF.finditer(source))
             i=next(i for i,m in enumerate(matches) if m[1]=="main_game_loop")
             body=source[matches[i].start():matches[i+1].start()]
@@ -406,7 +412,7 @@ class InstrumentationTests(unittest.TestCase):
         source = generator.audited_input_path("runtime-recomp/src/game/runtime_legacy_mods.cpp")
         read_bytes = Path.read_bytes
         original = read_bytes(source)
-        changed = original.replace(b"RaceCleared=2;", b"RaceCleared=4;", 1)
+        changed = original.replace(b"RaceCleared = 2;", b"RaceCleared = 4;", 1)
         self.assertNotEqual(original, changed)
         def read_with_drift(path):
             return changed if path == source else read_bytes(path)
@@ -513,9 +519,9 @@ class InstrumentationTests(unittest.TestCase):
         # Optional private payloads: never download/generate/modify them here.
         root=Path("G:/DiddykongWorkFolder" if os.name=="nt" else "/mnt/g/DiddykongWorkFolder")
         for revision,index in ((77,26),(80,27)):
-            path=root/f"water-performance-20260926/pipeline/generated-v{revision}/funcs_{index}.c"
+            path=self.reviewed_dir(revision)/f"funcs_{index}.c"
             if not path.exists(): self.skipTest("Private reviewed pipeline inputs are unavailable")
-            source=path.read_text(encoding="utf-8")
+            source=generator.HOOK_NULL_STATEMENT.sub("    ",path.read_text(encoding="utf-8"))
             matches=list(generator.DEF.finditer(source))
             selected=next(i for i,m in enumerate(matches) if m[1]=="mode_game")
             body=source[matches[selected].start():matches[selected+1].start() if selected+1<len(matches) else len(source)]
@@ -530,11 +536,11 @@ class InstrumentationTests(unittest.TestCase):
     def test_private_audio_callbacks_have_exact_retained_guest_addresses(self):
         root=Path("G:/DiddykongWorkFolder" if os.name=="nt" else "/mnt/g/DiddykongWorkFolder")
         for revision in (77,80):
-            source_dir=root/f"water-performance-20260926/pipeline/generated-v{revision}"
+            source_dir=self.reviewed_dir(revision)
             if not source_dir.exists(): self.skipTest("Private reviewed pipeline inputs are unavailable")
             bodies={}
             for path in source_dir.glob("*.c"):
-                source=path.read_text(encoding="utf-8")
+                source=generator.HOOK_NULL_STATEMENT.sub("    ",path.read_text(encoding="utf-8"))
                 matches=list(generator.DEF.finditer(source))
                 for i,match in enumerate(matches):
                     if match[1] in generator.AUDIO_CALLBACKS:
@@ -558,25 +564,41 @@ class InstrumentationTests(unittest.TestCase):
         # copy or +1. The generated RSP may not duplicate/evade that boundary.
         boundary=(Path(__file__).parent/"probe_bridge.c").read_text()
         self.assertLess(boundary.index('inclusive_length >= 4096 - dmem_address'),boundary.index('const unsigned bytes = inclusive_length + 1'))
-        self.assertLess(boundary.index('inclusive_length >= probe.bytes - dram_address'),boundary.index('if (write) ram[dram_lane]'))
+        self.assertLess(boundary.index('inclusive_length >= probe.bytes - dram_address'),boundary.index('ram[dram_lane] = dmem[dmem_lane]'))
         self.assertNotIn('#include "ultramodern/ultra64.h"',headers["rsp.hpp"])
 
     def test_audited_native_source_contracts_do_not_drift(self):
         root=Path(__file__).resolve().parents[3]
+        # runtime_stubs.cpp and runtime_enhancements.cpp are pinned by the
+        # generator's own table (checked in CI by scripts/tests/test_generator_pins.py);
+        # a second copy here only goes stale.
         pins={
-            "runtime-recomp/src/game/runtime_stubs.cpp":"3bd058b1674d9fa12d282f99cfdf0771406dd5da7ba816d81b32225485ff9e51",
             "runtime-recomp/src/game/track_select_draw_guest.h":"053e11b284c433b88b19470534003519ad3d16bc3e625ce4bcc2b5f4f172041e",
             "runtime-recomp/src/game/audio_event_queue.h":"7899cd55f01c95221a71eac64857611a929bc19ff2d1603ca4c3e56a1a4ebf18",
             "runtime-recomp/src/game/audio_event_queue_state.h":"7e479c5c99dc4ab0d43c9ddfc1a082437d631adc688b14e86c7d5a3edf0f7ecf",
-            "runtime-recomp/src/game/runtime_enhancements.cpp":"fe0d3653eb692b20708de52c2aa916aff5b30394a5e016dfa6e8794040e3a56a",
-            "runtime-recomp/src/game/runtime_hud_layout.cpp":"9ec1d648e835dfb6b61495f888a6685d10ce75daf3137c7308e368709ab4d7ad",
+            "runtime-recomp/src/game/runtime_hud_layout.cpp":"207fa4d66d1340fbe0362a90fae74ddfb35a25d9dcb2ef8252c9be517c3eecc2",
             # Audited camera-clearance metadata: read-only guest observations
             # and local matrix bindings; no simulation/checkpoint writes.
             # Preserve the already-shipped water camera-root/time metadata.
             # These are bounded renderer sidecars, not guest simulation writes.
             # The local Modern camera's look-back adds a one-shot camera epoch
             # cut here; it is never set in owned or replayed frames.
-            "runtime-recomp/src/game/presentation_identity.cpp":"bcfa277012ccca66123351a50a97ca77c3123f3011a97cd4d02b483bcd77e29a",
+            # Re-audited on main d971982 (2026-11-15) for runtime_hud_layout.cpp
+            # and presentation_identity.cpp, which had been left at their
+            # pre-fold digests. Every guest write was enumerated:
+            #  - presentation_identity.cpp has no MEM_* store. Its only guest
+            #    call is live_fov::refresh (cam_set_fov), which writes only in
+            #    the Modern profile (or to undo that), never in an active
+            #    netplay session. detail_observer.inl only reads.
+            #  - runtime_hud_layout.cpp stores only in Modern split-screen HUD
+            #    hooks, put back before the hook pair returns (element x/y/
+            #    scale, HudColour 0xFFFFFFFE, text cursor), plus the host
+            #    rumble mask in dkr_refresh_combined_accessories (live pak init).
+            # None of those hooks is reachable from the owned engine: owned runs
+            # Accurate, its payload is the unhooked baseline, and the
+            # dkr_experimental_v*_ symbols resolve to probe_presentation.c.
+            # Re-audit if a new store, guest call or hook appears in either file.
+            "runtime-recomp/src/game/presentation_identity.cpp":"1ad27d1d0bae2a501152e413b99d9982ffb986038e5b2a70a3722180c58750d9",
             "runtime-recomp/src/game/widescreen_policy.hpp":"3c3ff51000c969d6c7a9628364345fe1293e1c26de057197120728e79f975f36",
             "extern/dkr-decomp/src/save_data.c":"898df1a185c17e1d6ba11302fc5c140a1d7bd10ff3d8b86ff937c834bb13a607",
             "extern/dkr-decomp/src/thread3_main.c":"437434837706ee88e91578ce9e1aa2cd960e65e1e3a6f1aa47ae3b6289892d8e",

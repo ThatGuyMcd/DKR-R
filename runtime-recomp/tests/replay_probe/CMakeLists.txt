@@ -4,6 +4,7 @@ project(DKRGuestReplayProbe LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 include("${CMAKE_CURRENT_LIST_DIR}/../../cmake/SourceRoots.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/../../cmake/SimulationFlags.cmake")
 set(DKR_PROBE_GENERATED "" CACHE PATH "Separate Patch Pipeline probe output")
 if(NOT EXISTS "${DKR_PROBE_GENERATED}/manifest.json")
     message(FATAL_ERROR "Generate an isolated probe payload first")
@@ -202,6 +203,7 @@ else()
             -fno-strict-aliasing
             -ffp-contract=off
             -fno-fast-math
+            ${DKR_SIMULATION_WRAP_OPTIONS}
             $<$<COMPILE_LANGUAGE:C>:-Werror=implicit-function-declaration>
     )
     target_link_libraries(DKRGuestReplayProbe PRIVATE m)

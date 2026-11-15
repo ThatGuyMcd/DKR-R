@@ -3,6 +3,7 @@
 #include "hle/rt64_rdp.h"
 #include "hle/rt64_rsp.h"
 #include "revision_addresses.hpp"
+#include "title_text_symbols.hpp"
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -17,12 +18,6 @@ namespace dkr::runtime::presentation {
 // recognised title-name runs from the immutable task. Never change guest RAM,
 // font metrics, timings, texture uploads, colours or unrelated menu scissors.
 class TitleTextViewport {
-    struct Symbols {
-        std::uint32_t begin, modes, fonts, font_count, kerning, names, colours;
-    };
-    static constexpr std::array<Symbols, 2> symbol_tables_{
-        {{0x800E3690U, 0x800E36C8U, 0x8012A7E4U, 0x8012A7E0U, 0x8012A7F0U, 0x800DF83CU, 0x800DF9F8U},
-         {0x800E3C20U, 0x800E3C58U, 0x8012ADA4U, 0x8012ADA0U, 0x8012ADB0U, 0x800DFDBCU, 0x800DFF78U}}};
     struct Glyph {
         const RT64::DisplayList* command = nullptr;
         int left = 0, top = 0, right = 0, bottom = 0, s = 0, t = 0, atlas = -1;
@@ -30,7 +25,7 @@ class TitleTextViewport {
     static constexpr unsigned capacity = 96;
     std::array<Glyph, capacity> glyphs_{};
     unsigned count_ = 0;
-    const Symbols* symbols_ = nullptr;
+    const title_text_symbols::Symbols* symbols_ = nullptr;
     const std::uint8_t* ram_ = nullptr;
     std::uint32_t font_ = 0;
     float cover_ = 1.F;
@@ -39,7 +34,6 @@ class TitleTextViewport {
     unsigned image_count_ = 0;
     bool credits_ = false, quiet_ = false;
     std::uint32_t font_base_ = 0, credits_elements_ = 0;
-    static constexpr std::array<std::uint32_t, 2> credit_rows_{{0x800E1B50U, 0x800E20D0U}};
 
     void skipped(unsigned reason, unsigned detail = 0) const {
         if (quiet_)
@@ -263,8 +257,8 @@ class TitleTextViewport {
         if (!credits_ && (menu != 0 || u32(revision_addresses::TitleRevealTimer) != 0))
             return;
         const bool v80 = revision_addresses::CurrentMenuId == revision_addresses::kUsV80.CurrentMenuId;
-        symbols_ = &symbol_tables_[v80 ? 1 : 0];
-        credits_elements_ = credit_rows_[v80 ? 1 : 0];
+        symbols_ = &title_text_symbols::for_revision(v80);
+        credits_elements_ = symbols_->credits_elements;
         const auto fonts = u32(symbols_->fonts);
         font_base_ = fonts;
         if (u32(symbols_->font_count) < 3 || u32(symbols_->font_count) > 32 || !valid(fonts, 3 * 0x400)) {

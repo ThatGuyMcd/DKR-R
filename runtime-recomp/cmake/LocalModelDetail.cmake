@@ -26,7 +26,12 @@ function(dkr_add_local_model_kernel target directory revision)
     if(NOT MSVC)
         target_compile_options(
             ${target}
-            PRIVATE -fno-strict-aliasing -ffp-contract=off -fno-fast-math -Werror=implicit-function-declaration
+            PRIVATE
+                -fno-strict-aliasing
+                -ffp-contract=off
+                -fno-fast-math
+                ${DKR_SIMULATION_WRAP_OPTIONS}
+                -Werror=implicit-function-declaration
         )
         target_link_libraries(${target} PRIVATE m)
     endif()

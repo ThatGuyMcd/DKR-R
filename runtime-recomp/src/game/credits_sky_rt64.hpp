@@ -1,4 +1,5 @@
 #pragma once
+#include "credits_sky_symbols.hpp"
 #include "revision_addresses.hpp"
 #include "hle/rt64_state.h"
 #include "hle/rt64_rsp.h"
@@ -15,9 +16,6 @@ namespace dkr::runtime::presentation {
 // use that single camera, but now expose a wide viewport. Apply the same lateral
 // basis expansion to decoder-local vertices, never to the authored guest mesh.
 class CreditsSky {
-    static constexpr std::array<std::array<std::uint32_t, 5>, 2> symbols_{
-        {{0x800DC924U, 0x8011D480U, 0x8011D488U, 0x8011D4B4U, 0x8011D4B6U},
-         {0x800DCE94U, 0x8011DA00U, 0x8011DA08U, 0x8011DA34U, 0x8011DA36U}}};
     std::uint32_t begin_ = 0, end_ = 0;
     float lateral_x_ = 0, lateral_z_ = 0, centre_x_ = 0, centre_z_ = 0, length_ = 1, cover_ = 1;
     static std::uint32_t word(const std::uint8_t* ram, std::uint32_t address) {
@@ -41,15 +39,15 @@ class CreditsSky {
             word(state.RDRAM, revision_addresses::ViewportLayout) != 0)
             return;
         const bool v80 = revision_addresses::CurrentMenuId == revision_addresses::kUsV80.CurrentMenuId;
-        const auto& symbols = symbols_[v80 ? 1 : 0];
-        if (!word(state.RDRAM, symbols[0]))
+        const auto& symbols = credits_sky_symbols::for_revision(v80);
+        if (!word(state.RDRAM, symbols.data))
             return; // gVoidData: allocation still alive.
-        const auto flip = byte(state.RDRAM, symbols[3]);
-        const auto count = half(state.RDRAM, symbols[4]);
+        const auto flip = byte(state.RDRAM, symbols.vertex_flip);
+        const auto count = half(state.RDRAM, symbols.vert_count);
         if (flip > 1 || count > 24 || count % 4)
             return;
-        const auto first = word(state.RDRAM, symbols[1] + (1 - flip) * 4) & 0x1FFFFFFFU;
-        const auto tail = word(state.RDRAM, symbols[2]) & 0x1FFFFFFFU;
+        const auto first = word(state.RDRAM, symbols.verts + (1 - flip) * 4) & 0x1FFFFFFFU;
+        const auto tail = word(state.RDRAM, symbols.curr_verts) & 0x1FFFFFFFU;
         const auto end = std::uint64_t(tail) + count * 10U;
         // void_generate_primitive flushes every 24 vertices. Its final cursor
         // plus count covers ALL batches, not merely the last submitted batch.
