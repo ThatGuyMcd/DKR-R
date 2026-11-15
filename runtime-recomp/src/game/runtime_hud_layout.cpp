@@ -1,3 +1,5 @@
+#include "hud_layout_code_symbols.hpp"
+#include "hud_layout_symbols.hpp"
 #include "display_settings/policy.hpp"
 #include "mods/legacy_memory_safety.h"
 #include "runtime_hud_layout.hpp"
@@ -335,11 +337,12 @@ extern "C" void dkr_hud_asset_load_failed(std::uint8_t* rdram, recomp_context* c
     const auto read = [&](std::uint32_t address) {
         return static_cast<std::uint32_t>(MEM_W(0, RdramAddress(address)));
     };
+    const auto& symbols = dkr::runtime::hud_layout_symbols::for_revision(v80);
     std::fprintf(
         stderr,
         "[hud][resource-context] sprite=%u layout=%u allocated-layout=%u dl=0x%08X tri=0x%08X; guest cursors and resource retries preserved\n",
-        sprite, read(v80 ? 0x80121260U : 0x80120CE0U), read(v80 ? 0x80123A8CU : 0x8012350CU),
-        read(v80 ? 0x80121778U : 0x801211F8U), read(v80 ? 0x801217A8U : 0x80121228U));
+        sprite, read(symbols.viewport_layout), read(symbols.prev_player_count), read(symbols.curr_display_list),
+        read(symbols.game_curr_tri_list));
 
     const dkr_memory_view view{rdram, 0x800000U, v80 ? 80U : 77U};
     const auto heap = dkr_memory_measure(view);
@@ -383,7 +386,8 @@ bool BeginWidget(std::uint8_t* rdram, std::uint32_t holder, dkr::runtime::hud::W
         state.mode, aspect,
         dkr::runtime::hud::reference::anchor(element, widget, g_scenario, g_frame_layout == 1, g_general_pass_active,
                                              authored_x),
-        static_cast<float>(MEM_W(0, RdramAddress(v80 ? 0x801272E4U : 0x80126D24U))), slides);
+        static_cast<float>(MEM_W(0, RdramAddress(dkr::runtime::hud_layout_symbols::for_revision(v80).hud_offset_x))),
+        slides);
     if (transform.identity())
         return false;
     const auto command = static_cast<std::uint32_t>(MEM_W(0, RdramAddress(holder)));
@@ -449,11 +453,19 @@ extern "C" void dkr_hud_text_begin(std::uint8_t* rdram, recomp_context* ctx) {
     const auto ra = static_cast<std::uint32_t>(ctx->r31);
     const bool v80 =
         dkr::runtime::revision_addresses::CurrentHud == dkr::runtime::revision_addresses::kUsV80.CurrentHud;
-    const std::array<std::uint32_t, 6> stopwatch =
-        v80 ? std::array<std::uint32_t, 6>{0x800A3A98, 0x800A3AD4, 0x800A3B10, 0x800A3B68, 0x800A3BA0, 0x800A3BD8}
-            : std::array<std::uint32_t, 6>{0x800A3550, 0x800A358C, 0x800A35C8, 0x800A3620, 0x800A3658, 0x800A3690};
-    const std::array<std::uint32_t, 3> finish = v80 ? std::array<std::uint32_t, 3>{0x800A65D4, 0x800A66B0, 0x800A678C}
-                                                    : std::array<std::uint32_t, 3>{0x800A608C, 0x800A6168, 0x800A6244};
+    // Return addresses of the text calls inside hud_main_time_trial and
+    // hud_finish_position: the function from the symbol table plus the call
+    // offset (v80 inserted eight bytes into the first function).
+    const auto& code = dkr::runtime::hud_layout_code_symbols::for_revision(v80);
+    constexpr std::array<std::uint32_t, 6> kStopwatch77{0xDD4, 0xE10, 0xE4C, 0xEA4, 0xEDC, 0xF14};
+    constexpr std::array<std::uint32_t, 6> kStopwatch80{0xDDC, 0xE18, 0xE54, 0xEAC, 0xEE4, 0xF1C};
+    constexpr std::array<std::uint32_t, 3> kFinish{0x174, 0x250, 0x32C};
+    std::array<std::uint32_t, 6> stopwatch;
+    for (std::size_t i = 0; i < stopwatch.size(); ++i)
+        stopwatch[i] = code.time_trial + (v80 ? kStopwatch80 : kStopwatch77)[i];
+    std::array<std::uint32_t, 3> finish;
+    for (std::size_t i = 0; i < finish.size(); ++i)
+        finish[i] = code.finish_position + kFinish[i];
     std::optional<dkr::runtime::hud::Widget> w;
     if (std::find(stopwatch.begin(), stopwatch.end(), ra) != stopwatch.end())
         w = dkr::runtime::hud::Widget::Stopwatch;
@@ -465,7 +477,8 @@ extern "C" void dkr_hud_text_begin(std::uint8_t* rdram, recomp_context* ctx) {
     g_text_widget_active = BeginWidget(rdram, g_text_holder, *w, CurrentHudOwner(rdram));
     // Text uses a persistent cursor; bias only its X coordinate (Y controls
     // native line clipping), then restore the final cursor at the return.
-    g_text_box = static_cast<std::uint32_t>(MEM_W(0, RdramAddress(v80 ? 0x8012ADA8U : 0x8012A7E8U)));
+    g_text_box = static_cast<std::uint32_t>(
+        MEM_W(0, RdramAddress(dkr::runtime::hud_layout_symbols::for_revision(v80).dialogue_box_background)));
     const int x = static_cast<std::int32_t>(ctx->r5);
     if (g_text_widget_active && x >= -200 && x <= 700 && IsRdramPointer(g_text_box, 4) &&
         RectBiasMarker(rdram, g_text_holder, true, 1)) {
@@ -502,7 +515,7 @@ void dkr::runtime::hud::begin_authored_frame(std::uint8_t* rdram) {
     const int type = static_cast<unsigned char>(MEM_B(0x4C, RdramAddress(level)));
     // Addresses independently verified against both decomp symbol maps.
     const bool v80 = revision_addresses::CurrentHud == revision_addresses::kUsV80.CurrentHud;
-    const bool trial = MEM_B(0, RdramAddress(v80 ? 0x8011B474U : 0x8011AEF4U)) != 0;
+    const bool trial = MEM_B(0, RdramAddress(hud_layout_symbols::for_revision(v80).time_trial_enabled)) != 0;
     // Match retail hud_init_element / Golden Balloon's mode predicates.
     // Taj challenges use the race layout, not the boss-only banana relocation.
     g_scenario = trial ? hg::Scenario::TimeTrial : type == 1 ? hg::Scenario::Adventure : hg::scenario_for(type, false);
