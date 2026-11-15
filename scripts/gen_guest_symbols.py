@@ -7,6 +7,16 @@ and a template for the header text:
 * ``table = "sdk"``: modding/reference-us-v<revision>/data.toml, the admitted
   address-only SDK kit;
 * ``table = "decomp"``: extern/dkr-decomp/ver/symbols/symbol_addrs.us.v<revision>.txt.
+* ``table = "functions"``: patch sites, ``[[site]]`` entries of ``name``, ``function``
+  and a word aligned byte ``offset`` (and ``revisions = ["77"]`` for a site only
+  one revision has), resolved against
+  modding/reference-us-v<revision>/functions.toml. An unknown function, an offset
+  outside the function and a site for a revision lacking the function are errors.
+  The template names each site with ``@name:<revision>@``.
+
+With ``table = "sdk"``, ``decomp = [...]`` lists symbols that come from the decomp
+list instead, and ``[names.X]`` gives a symbol that is named differently in each
+revision's table (``"77" = ...``, ``"80" = ...``).
 
 ``@ALL:<revision>@`` in the template becomes every listed symbol's address for
 that revision, comma-separated, and ``@<name>:<revision>@`` one symbol's. An
@@ -35,6 +45,7 @@ import dataclasses
 from pathlib import Path
 import re
 import sys
+from typing import Any
 
 import tomllib
 
@@ -53,6 +64,14 @@ def _no_names() -> dict[str, dict[str, str]]:
 
 
 @dataclasses.dataclass(frozen=True)
+class Site:
+    name: str
+    function: str
+    offset: int
+    revisions: tuple[str, ...]
+
+
+@dataclasses.dataclass(frozen=True)
 class Request:
     header: str
     table: str
@@ -64,6 +83,9 @@ class Request:
     # A listed symbol that has a different name in a revision's table, as
     # {symbol: {"77": name, "80": name}} (the SDK names unnamed data D_<address>).
     names: dict[str, dict[str, str]] = dataclasses.field(default_factory=_no_names, hash=False)
+    # table = "functions": named patch sites, each a function plus a byte offset
+    # into it, resolved per revision from the function tables.
+    sites: tuple[Site, ...] = dataclasses.field(default=(), hash=False)
 
 
 def load(path: Path) -> Request:
@@ -74,22 +96,62 @@ def load(path: Path) -> Request:
         data["header"],
         data["table"],
         data["hex"],
-        tuple(data["symbols"]),
+        tuple(data.get("symbols", ())),
         data["template"],
         tuple(data.get("decomp", ())),
         {symbol: dict(by_revision) for symbol, by_revision in data.get("names", {}).items()},
+        tuple(load_site(path, entry) for entry in data.get("site", ())),
     )
+    if request.table == "functions":
+        if not request.sites or request.symbols or request.decomp or request.names:
+            raise SymbolError(f"{path.name}: a functions request lists [[site]] entries and nothing else")
+        if len({site.name for site in request.sites}) != len(request.sites):
+            raise SymbolError(f"{path.name}: site names must be unique")
+    elif request.sites:
+        raise SymbolError(f"{path.name}: [[site]] needs table = functions")
     for listed in (*request.decomp, *request.names):
         if listed not in request.symbols:
             raise SymbolError(f"{path.name}: {listed} is not a listed symbol")
     for symbol, by_revision in request.names.items():
         if set(by_revision) - set(REVISIONS):
             raise SymbolError(f"{path.name}: names for {symbol} may only name revisions {REVISIONS}")
-    if request.table not in ("sdk", "decomp") or request.hex not in ("upper", "lower"):
-        raise SymbolError(f"{path.name}: table must be sdk or decomp, hex upper or lower")
+    if request.table not in ("sdk", "decomp", "functions") or request.hex not in ("upper", "lower"):
+        raise SymbolError(f"{path.name}: table must be sdk, decomp or functions, hex upper or lower")
     if "/" in request.header or not request.header.endswith(".hpp"):
         raise SymbolError(f"{path.name}: header must be a bare *.hpp name")
     return request
+
+
+def load_site(path: Path, entry: dict[str, Any]) -> Site:
+    missing = [key for key in ("name", "function", "offset") if key not in entry]
+    if missing:
+        raise SymbolError(f"{path.name}: a [[site]] needs name, function and offset ({missing[0]!r} is absent)")
+    name: Any = entry["name"]
+    function: Any = entry["function"]
+    offset: Any = entry["offset"]
+    listed: Any = entry.get("revisions", REVISIONS)
+    revisions = tuple(str(revision) for revision in listed)
+    if (
+        not isinstance(name, str)
+        or not isinstance(function, str)
+        or not isinstance(offset, int)
+        or offset < 0
+        or offset % 4
+        or not revisions
+        or set(revisions) - set(REVISIONS)
+    ):
+        raise SymbolError(f"{path.name}: site {name} needs a word aligned offset and revisions within {REVISIONS}")
+    return Site(name, function, offset, revisions)
+
+
+def function_table(revision: str, root: Path) -> dict[str, list[tuple[int, int]]]:
+    """Every (address, size) each function has in one revision's function table."""
+    found: dict[str, list[tuple[int, int]]] = {}
+    data = tomllib.loads((root / f"modding/reference-us-v{revision}/functions.toml").read_text(encoding="utf-8"))
+    for section in data["section"]:
+        for function in section.get("functions", []):
+            found.setdefault(function["name"], []).append((function["vram"], function["size"]))
+    return found
 
 
 def table(kind: str, revision: str, root: Path, dependencies: Path | None = None) -> dict[str, list[int]]:
@@ -100,6 +162,8 @@ def table(kind: str, revision: str, root: Path, dependencies: Path | None = None
         for section in data["section"]:
             for symbol in section.get("symbols", []):
                 found.setdefault(symbol["name"], []).append(symbol["vram"])
+    elif kind == "functions":
+        raise SymbolError("function tables hold sites; use a [[site]] request")
     else:
         text = (
             (dependencies or root / "extern") / f"dkr-decomp/ver/symbols/symbol_addrs.us.v{revision}.txt"
@@ -109,7 +173,44 @@ def table(kind: str, revision: str, root: Path, dependencies: Path | None = None
     return found
 
 
+def render_sites(request: Request, root: Path) -> str:
+    functions = {revision: function_table(revision, root) for revision in REVISIONS}
+    resolved: dict[tuple[str, str], int] = {}
+    for site in request.sites:
+        for revision in site.revisions:
+            found = functions[revision].get(site.function, [])
+            if len(found) != 1:
+                raise SymbolError(
+                    f"{request.header}: {site.function} has {len(found)} entries in the US v{revision} function table"
+                )
+            base, size = found[0]
+            if site.offset >= size:
+                raise SymbolError(
+                    f"{request.header}: site {site.name} offset {site.offset:#x} is outside "
+                    f"{site.function} (size {size:#x}) in US v{revision}"
+                )
+            resolved[(site.name, revision)] = base + site.offset
+
+    def text(value: int) -> str:
+        return (f"0x{value:08X}" if request.hex == "upper" else f"0x{value:08x}") + "U"
+
+    def substitute(match: re.Match[str]) -> str:
+        name, revision = match.group(1), match.group(2)
+        if name == "ALL":
+            return ",".join(
+                text(resolved[(site.name, revision)]) for site in request.sites if revision in site.revisions
+            )
+        if (name, revision) not in resolved:
+            raise SymbolError(f"{request.header}: @{name}:{revision}@ is not a site declared for US v{revision}")
+        return text(resolved[(name, revision)])
+
+    return re.sub(r"@([A-Za-z_][A-Za-z0-9_]*):(77|80)@", substitute, request.template)
+
+
 def render(request: Request, root: Path, dependencies: Path | None = None) -> str:
+    if request.table == "functions":
+        return render_sites(request, root)
+
     def address(name: str, revision: str, addresses: dict[str, list[int]]) -> str:
         kind = "decomp" if name in request.decomp else request.table
         looked_up = request.names.get(name, {}).get(revision, name)

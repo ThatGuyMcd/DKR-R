@@ -117,6 +117,7 @@
     "runtime-recomp/symbols/achievement_symbols.toml": "565d8e8c96549fc69e47d741753766e535187241275b87d54b546cd133df69f2",
     "runtime-recomp/symbols/audio_queue_symbols.toml": "6f0a404ec4901866bb680d02c37f19ecabf81b2e3079e046eac7d52b345bee8e",
     "runtime-recomp/symbols/autopilot_symbols.toml": "0d3f7f89ae01d1d4d3974cf7687484649e7934f25c3fe1ba85393dd10845fec6",
+    "runtime-recomp/symbols/behaviour_site_symbols.toml": "f9f68a537d5e5f4f51425beee8e8e5d153742688fe02c16fb6f95bcd787994e3",
     "runtime-recomp/symbols/camera_symbols.toml": "f58d94f8691f36ad215872f79e5167caf4b67292451fcbbb506bc915cbd1c005",
     "runtime-recomp/symbols/capture_symbols.toml": "69db87e0e04eb3c6259140bf4d78e6b1c6deaa4795d5f178b464b93fa00c6102",
     "runtime-recomp/symbols/credits_sky_symbols.toml": "251b1726a5ed6851df51b1d792de72f4df0f344ee895e966dfe3457b25cbc70f",
@@ -181,9 +182,9 @@
     "scripts/character_portrait_pipeline.py": "4cc7f51d062a6b36f1a6a9db1259501693d6e03da963522a3390b46d8ab2ebae",
     "scripts/compose_legacy_mod_policy.py": "07dbea02c2f55fabd65ae89e3159d5327b221ca5eb152751e7a566cb96ad6eb4",
     "scripts/compose_payloads.py": "c662355843564ccd40759cb245de158888abae80baf59c7f309834897626ba68",
-    "scripts/gen_guest_symbols.py": "52ac0b14f1893278011f04267858b6f40140e79e8a96e18a552e70f0c3315fbc",
+    "scripts/gen_guest_symbols.py": "f9c74c5c8214fae6372595db4c5f2721e656dabed9c783aa0bb3c6d7dc3e8202",
     "scripts/generate_recomp_config.py": "444874a216c9011e6f196aa0a1269594517afcdea5fb3763196e092d99bfc473",
-    "scripts/generate_replay_probe.py": "0d2daa9e5f65f13425f0cc16eca6b409d84852d0d94e162bf019fa7436f00580",
+    "scripts/generate_replay_probe.py": "967cb975a6a0e04faa60444169f76188655e80dc767112c55b19cd95a1385b6b",
     "scripts/generate_revision_policy.py": "bafbefad41542e00b6c5ec13b02acde69dda7f48e34025f46d92d028da6427b9",
     "scripts/guest_hooks.py": "4058af2139c1211c2db79c8748734c2c1f231ec6168e964166d90c83bb48c6cc",
     "scripts/host_task_policy.py": "aa28c9bcd8110d0ef16b2f6dfde7ec51b8767578f46d3bc5371f197efb016f78",
@@ -206,6 +207,6 @@
   },
   "last_update": {
     "identity_changed": false,
-    "reason": "Mod guest calls moved onto GuestCallContext and mod guest addresses onto generated symbol tables; values and behaviour unchanged"
+    "reason": "Mod behaviour patch sites moved onto generated function-relative symbols; every address value unchanged"
   }
 }

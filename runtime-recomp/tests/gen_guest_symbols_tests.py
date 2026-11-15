@@ -18,6 +18,7 @@ sys.modules[SPEC.name] = gen_guest_symbols
 SPEC.loader.exec_module(gen_guest_symbols)
 
 GOLDEN = {
+    "behaviour_site_symbols.hpp": "0e201b44",
     "revision_symbols.hpp": "e93fe4af",
     "enhancements_symbols.hpp": "99c824ec",
     "hud_layout_code_symbols.hpp": "2cc7e3df",
@@ -79,6 +80,16 @@ class GeneratorTests(unittest.TestCase):
                     """),
                 encoding="utf-8",
             )
+            functions = [
+                f'{{ name = "fOne", vram = 0x{base + 0x100:08X}, size = 0x40 }},',
+                f'{{ name = "fTwice", vram = 0x{base + 0x200:08X}, size = 0x10 }},',
+                f'{{ name = "fTwice", vram = 0x{base + 0x300:08X}, size = 0x10 }},',
+            ]
+            if revision == "77":
+                functions.append(f'{{ name = "fOnly77", vram = 0x{base + 0x400:08X}, size = 0x20 }},')
+            (kit / "functions.toml").write_text(
+                "[[section]]\nfunctions = [\n" + "\n".join(functions) + "\n]\n", encoding="utf-8"
+            )
             decomp = self.root / "extern/dkr-decomp/ver/symbols"
             decomp.mkdir(parents=True, exist_ok=True)
             (decomp / f"symbol_addrs.us.v{revision}.txt").write_text(
@@ -119,6 +130,50 @@ class GeneratorTests(unittest.TestCase):
             gen_guest_symbols.render(request, self.root),
             "0x80100010U 0x80200010U 0x80200020U 0x80100010U,0x80100020U,0x801000ABU",
         )
+
+    def sites(self, body, template="@ALL:77@|@ALL:80@"):
+        path = self.root / "request.toml"
+        path.write_text(
+            'schema = 1\nheader = "x.hpp"\ntable = "functions"\nhex = "upper"\n'
+            f"template = '''{template}'''\n" + body,
+            encoding="utf-8",
+        )
+        return gen_guest_symbols.load(path)
+
+    def test_function_sites_resolve_per_revision(self):
+        request = self.sites(
+            '[[site]]\nname = "a"\nfunction = "fOne"\noffset = 0x10\n'
+            '[[site]]\nname = "b"\nfunction = "fOnly77"\noffset = 0x1C\nrevisions = ["77"]\n',
+            "@a:77@ @a:80@ @b:77@ [@ALL:77@] [@ALL:80@]",
+        )
+        self.assertEqual(
+            gen_guest_symbols.render(request, self.root),
+            "0x80100110U 0x80200110U 0x8010041CU [0x80100110U,0x8010041CU] [0x80200110U]",
+        )
+
+    def test_function_sites_reject_bad_requests(self):
+        site = '[[site]]\nname = "a"\nfunction = "{}"\noffset = {}\n{}'
+        for function, offset, extra, why in (
+            ("fMissing", "0", "", "unknown function"),
+            ("fOne", "0x40", "", "offset at the end of the function"),
+            ("fOne", "0x1000", "", "offset beyond the function"),
+            ("fOnly77", "0", "", "declared for a revision without the function"),
+            ("fTwice", "0", "", "ambiguous function"),
+        ):
+            with self.subTest(why), self.assertRaises(gen_guest_symbols.SymbolError):
+                gen_guest_symbols.render(self.sites(site.format(function, offset, extra)), self.root)
+        with self.assertRaises(gen_guest_symbols.SymbolError):  # a placeholder for a revision the site lacks
+            gen_guest_symbols.render(
+                self.sites(site.format("fOnly77", "0", 'revisions = ["77"]\n'), "@a:80@"), self.root
+            )
+        for body in (
+            site.format("fOne", "2", ""),  # not word aligned
+            site.format("fOne", "0", 'revisions = ["81"]\n'),
+            site.format("fOne", "0", "") * 2,  # duplicate name
+            "",  # nothing
+        ):
+            with self.subTest(body), self.assertRaises(gen_guest_symbols.SymbolError):
+                self.sites(body)
 
     def test_names_and_decomp_must_be_listed_symbols(self):
         path = self.root / "request.toml"
