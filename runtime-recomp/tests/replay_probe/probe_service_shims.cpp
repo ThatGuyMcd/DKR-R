@@ -16,6 +16,10 @@ PreparationScope::~PreparationScope() = default;
 
 namespace dkr::sdk2 {
 void network_epoch(std::uint64_t, unsigned, unsigned) {}
-std::vector<std::uint8_t> network_packet(unsigned) { return {}; }
-bool network_receive(unsigned, std::span<const std::uint8_t>) { return false; }
+std::vector<std::uint8_t> network_packet(unsigned) {
+    return {};
+}
+bool network_receive(unsigned, std::span<const std::uint8_t>) {
+    return false;
+}
 } // namespace dkr::sdk2
