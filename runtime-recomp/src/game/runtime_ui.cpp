@@ -126,6 +126,7 @@
 #include "netplay/determinism_contract.hpp"
 #include "netplay/experimental_latency.hpp"
 #if defined(DKR_EXPERIMENTAL_RACE_TEST)
+#include "netplay/check_names.hpp"
 #include "netplay/experimental_rollback.hpp"
 #include "netplay/experimental_runtime.hpp"
 #include "netplay/experimental_performance.hpp"
@@ -10144,7 +10145,8 @@ bool dkr::runtime::ui::configure_owned_online_check(const rom::Identity& identit
     request.rules.rollback_window = std::uint8_t(g_online_rollback_window);
     request.save_mode = saves::OnlineSaveSeedMode::Fresh;
     request.room = g_online_room_name;
-    request.name = g_online_player_name;
+    request.name = netplay::check_names::choose();
+    std::fprintf(stderr, "[check][name] %s\n", request.name.c_str());
     if (std::getenv("DKR_OWNED_CHECK_CARS") || std::getenv("DKR_OWNED_CHECK_ROAD_WHEELS")) {
         // The fresh-profile launcher starts asynchronous library scans. Let
         // those release their ordinary library locks before freezing cars.

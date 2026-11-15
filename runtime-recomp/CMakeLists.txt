@@ -3432,6 +3432,13 @@ if(BUILD_TESTING)
     dkr_guest_symbols(DKRCheckAutopilotTests)
     add_test(NAME DKRCheckAutopilot COMMAND DKRCheckAutopilotTests)
 
+    # The names self-test racers join a lobby under.
+    add_executable(DKRCheckNamesTests tests/check_names_tests.cpp)
+    target_compile_features(DKRCheckNamesTests PRIVATE cxx_std_20)
+    target_include_directories(DKRCheckNamesTests PRIVATE "${CMAKE_CURRENT_LIST_DIR}/src/game")
+    target_link_libraries(DKRCheckNamesTests PRIVATE DKRNetplayCore)
+    add_test(NAME DKRCheckNames COMMAND DKRCheckNamesTests)
+
     # Compile the production residency algorithm with synthetic cache interfaces.
     add_executable(DKRLiquidResidencyTests tests/liquid_residency_tests.cpp)
     target_compile_features(DKRLiquidResidencyTests PRIVATE cxx_std_20)

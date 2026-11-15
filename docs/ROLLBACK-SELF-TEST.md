@@ -82,6 +82,11 @@ CPU racers do (`netplay/check_autopilot.cpp`), holding the accelerator. Every
 frame: there was no race to read (menus, loading), or
 `DKR_OWNED_CHECK_INPUT=wave` is set.
 
+Each peer joins the lobby under a name it picks for itself, a race number
+and a moniker such as `#27 Ping Kong`, and logs it as `[check][name]`. The
+lists live in `netplay/check_names.hpp`; anything added there is checked
+against the lobby's name rules when it compiles.
+
 The menus are not steered: the test presses Start and A on a timer, so the
 race is whatever the character, vehicle and track cursors start on.
 
@@ -126,6 +131,7 @@ anything in a self-test run.
 
 | Variable | Effect |
 | --- | --- |
+| `DKR_OWNED_CHECK_NAME=<name>` | Race under this name (1 to 24 printable ASCII characters). Without it each peer picks its own, see below. |
 | `DKR_OWNED_CHECK_INPUT=wave` | Drive with the old pattern: accelerator held, stick left and right every 15 frames. |
 | `DKR_OWNED_CHECK_MODERN=1` | Use the Modern presentation preset. Needed for the three below. |
 | `DKR_OWNED_CHECK_FPS=60\|120\|180` | Fixed refresh target. |
