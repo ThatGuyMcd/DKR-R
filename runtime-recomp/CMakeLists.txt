@@ -3348,6 +3348,9 @@ if(BUILD_TESTING)
     )
     dkr_guest_symbols(DKRStartupFlowGuestTests)
     add_test(NAME DKRStartupFlowGuest COMMAND DKRStartupFlowGuestTests)
+    add_executable(DKRRevisionAddressesCurrentTests tests/revision_addresses_current_tests.cpp)
+    target_include_directories(DKRRevisionAddressesCurrentTests PRIVATE "${CMAKE_CURRENT_LIST_DIR}/src/game")
+    add_test(NAME DKRRevisionAddressesCurrent COMMAND DKRRevisionAddressesCurrentTests)
     # Explicit for the current tree, also compatible with main's centralized
     # assertion policy (which covers these new targets automatically).
     foreach(startup_test IN ITEMS DKRStartupFlowTests DKRStartupFlowGuestTests)
