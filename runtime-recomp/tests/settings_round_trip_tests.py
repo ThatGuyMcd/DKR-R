@@ -9,7 +9,7 @@ the keys that are only written conditionally), so a key that is written but
 never read, or the reverse, shows up as a diff here.
 """
 
-import filecmp
+import difflib
 import pathlib
 import shutil
 import subprocess
@@ -49,6 +49,26 @@ def run_round_trip(executable: str, source: pathlib.Path | None, workdir: pathli
     return workdir / SETTINGS_FILE
 
 
+def compare(expected: pathlib.Path, actual: pathlib.Path) -> str | None:
+    """Return None when the files match, else a description of the difference.
+
+    The game writes through a text-mode stream, so Windows produces CRLF while
+    the goldens are checked out LF (.gitattributes). Line endings are therefore
+    compared after normalising, but each file must still use one ending
+    throughout: a mix would mean the writer changed, not the platform.
+    """
+    texts = []
+    for path in (expected, actual):
+        raw = path.read_bytes()
+        crlf = raw.count(b"\r\n")
+        if crlf not in (0, raw.count(b"\n")):
+            return f"{path.name}: mixed LF and CRLF line endings"
+        texts.append(raw.replace(b"\r\n", b"\n").decode().splitlines(keepends=True))
+    if texts[0] == texts[1]:
+        return None
+    return "".join(difflib.unified_diff(texts[0], texts[1], "golden", "written"))
+
+
 def read(path: pathlib.Path) -> dict[str, str]:
     return dict(line.split("=", 1) for line in path.read_text().splitlines() if "=" in line)
 
@@ -66,16 +86,16 @@ def main() -> int:
         for name in ("defaults.ini", "non-default.ini"):
             golden = fixtures / name
             written = run_round_trip(executable, golden, scratch_path / name)
-            if not filecmp.cmp(golden, written, shallow=False):
-                diff = subprocess.run(["diff", str(golden), str(written)], capture_output=True, text=True, check=False)
-                failures.append(f"{name}: save(load(golden)) differs from the golden\n{diff.stdout}")
+            difference = compare(golden, written)
+            if difference:
+                failures.append(f"{name}: save(load(golden)) differs from the golden\n{difference}")
         # No file at all: the second save of a fresh install is the defaults
         # golden. The first save is not a fixed point: the default analogue
         # bindings share a source with Z and Accelerate, and loading them in
         # file order unbinds the earlier action.
         first = run_round_trip(executable, None, scratch_path / "fresh")
         second = run_round_trip(executable, first, scratch_path / "fresh-again")
-        if not filecmp.cmp(fixtures / "defaults.ini", second, shallow=False):
+        if compare(fixtures / "defaults.ini", second):
             failures.append("a fresh install no longer settles on defaults.ini after two saves")
     defaults = read(fixtures / "defaults.ini")
     other = read(fixtures / "non-default.ini")
