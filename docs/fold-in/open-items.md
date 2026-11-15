@@ -303,13 +303,15 @@ What the deleted release-prep scripts did, for B9b:
 
 ## For Phase C
 
-- Rollback on Apple: the RACE_TEST FATAL on Apple stays. With it lifted, the
-  configure fails applying `patches/rt64/staged/0001-render-stability.patch`
-  to `rt64_framebuffer_renderer.cpp`: the patch was derived from the
-  Linux/Windows chain, and the Apple chain reaches that file in a different
-  state. Rebase it (and `0003-present-queue-pacer.patch`) onto the Apple
-  chain as registered stage patches, run the rollback tests natively, then
-  lift the FATAL.
+- Rollback on Apple: `DKR_EXPERIMENTAL_RACE_TEST=ON` now configures and builds
+  on desktop macOS (arm64; enhanced water stays off, so
+  `0006-render-stability-apple.patch` replaces `0001`). The headless
+  `--self-test-owned-host/-join` races pass locally for both revisions, but
+  `release-macos` still builds without it, the standalone
+  `DKRExperimentalRaceTest` frontend stays Windows/Linux only, and no
+  Mac<->Windows play has been tried. A prepared `extern/` needs the rt64
+  `0021` and plume `0003` patches (runtime MSL shaders) without a Metal
+  toolchain: configure with `-DDKR_RT64_PRECOMPILE_MSL=OFF`.
 
 - `atomic_snapshot.hpp`'s libc++ branch uses the free `std::atomic_load`/
   `std::atomic_store` on `shared_ptr`, deprecated in C++20 and removed in

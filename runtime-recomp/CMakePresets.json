@@ -112,7 +112,7 @@
     },
     {
       "name": "release-macos",
-      "displayName": "Release build, macOS (no integrated rollback yet)",
+      "displayName": "Release build, macOS (integrated rollback off)",
       "inherits": "release-base",
       "generator": "Ninja",
       "cacheVariables": {
@@ -123,7 +123,7 @@
         "lhs": "${hostSystemName}",
         "rhs": "Darwin"
       },
-      "description": "The one release preset without integrated rollback: DKR_EXPERIMENTAL_RACE_TEST is FATAL on Apple until the rollback RT64 stage patches are rebased onto the Apple chain ('Rollback on Apple' in docs/fold-in/open-items.md)."
+      "description": "The one release preset without integrated rollback. It builds and runs on desktop macOS with -DDKR_EXPERIMENTAL_RACE_TEST=ON, but stays off here until it has been checked against other machines ('Rollback on Apple' in docs/fold-in/open-items.md)."
     }
   ],
   "buildPresets": [
