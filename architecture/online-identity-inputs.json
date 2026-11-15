@@ -181,7 +181,7 @@
     "scripts/prepare_legacy_character_fragment.py": "4dadc0868b1fe2f4b78f3ce7d5a3a47b80a8b28171e261f0f0cb9cd090aa222b",
     "scripts/prepare_legacy_character_menu_fragment.py": "e712a8f010881713d94e865b3aedeee80fea382103321866854d2b69e3ad4f63",
     "scripts/prepare_legacy_menu_fragment.py": "5dc03054a6911b4bb3b632f23abc1f4046b1cae8447dec43d557c4b22627c250",
-    "scripts/prepare_payloads.py": "5a33f602dfa4cd57a8766b785642c449d046122400cfbf04deee2a39ac146bd3",
+    "scripts/prepare_payloads.py": "a2e0e2835e5f172334265d7c33904a094a97bf0dfb69d99a5490a8a8c0002d36",
     "scripts/save_layout_pipeline.py": "7a042379c088b5294058586a5e8debefc7f3d13b5334ee855526530d23a7b65e",
     "scripts/startup_flow_policy.py": "4957a7856663c74ebc5ff31e39334288fa7b46656a59aba23093b8dc449338fb",
     "scripts/track_select_draw_policy.py": "08d32224fca9b3b684813bcd69450ce283ef70ae8ae06acbcc5d9cdc8999c532",
@@ -189,6 +189,6 @@
   },
   "last_update": {
     "identity_changed": false,
-    "reason": "Scalar RSP multiplies avoid signed overflow; the SIMD path x86_64 and arm64 use is unchanged"
+    "reason": "prepare_payloads.py keeps the previous bundle until the new one is complete: staging and every prepared byte unchanged"
   }
 }
