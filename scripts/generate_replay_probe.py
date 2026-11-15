@@ -607,7 +607,12 @@ INPUT_NATIVE_HASH = {
     # Oct 12: reviewed merge with PR56's frozen-course guard BEFORE any live
     # transport read. Retains caller-owned background lists and offline vehicle
     # selection; neither changes owned checkpoint semantics or asset routing.
-    "runtime-recomp/src/game/runtime_legacy_mods.cpp": "187ca1108cb6987c631b6a6161351d0d1e78c809d6ec05b690e470a26820d989",
+    # Nov 15: every guest call made from a copied context (get_settings,
+    # is_drumstick/tt_unlocked, sndp_*, sound_play, get_filtered_cheats,
+    # mempool_alloc_safe, material_set and the track-select cover) now uses
+    # GuestCallContext, which repairs f_odd. None of those callees touches an
+    # odd float register or a double, so no register, RAM or ordering changes.
+    "runtime-recomp/src/game/runtime_legacy_mods.cpp": "eaeaea6513dc7b27fa91fdebb257c81cec89971c61561ceaa9fc905e50a4cf9b",
     # Oct 9: guest-owned deferred queue/reserve; no shortened borrower lifetime.
     "runtime-recomp/src/game/mods/legacy_memory_safety.h": "e4eb9ee8218c6f76ccfbfe9f5f0604c3b7f8725db7ca28dfe6e3e7c15ae2c48f",
     "runtime-recomp/src/game/mods/legacy_model_safety.hpp": "6b98ab3841104b67ec1295653657c9c1065290abea57648336d77e9665a277a8",
@@ -616,7 +621,9 @@ INPUT_NATIVE_HASH = {
     "runtime-recomp/src/game/mods/legacy_character_limits.hpp": "a22e3c2c15674ffb5f954a28e2a268641a0ffbe2acb5459a7fc5b43a156e955a",
     "runtime-recomp/src/game/mods/legacy_character_audio.cpp": "603b776b2cdbc4bfe0e8d4c1283c929a8a524fe966e29bd99b51a32f73bafae3",
     "runtime-recomp/src/game/mods/legacy_character_materialize.cpp": "0f1eddcbdd225a488913d76492dec6b805d446ea1baaa68990df083ea24b5dbd",
-    "runtime-recomp/src/game/mods/legacy_character_presentation.cpp": "09a5c45ccad79f4fb63abc68f0702bae47aeba8ecfb13b3e1a551aae3510c1f0",
+    # Nov 15: the presentation callbacks run on a GuestCallContext (f_odd repaired);
+    # the callees (alloc, texture load, bank relocate/play, param, spatial point) use no odd float register.
+    "runtime-recomp/src/game/mods/legacy_character_presentation.cpp": "178ef4f7a55594ac13e3ac9b0f07180445a75c6b8893c1deab06c61fd7773d22",
     # Preserve the already-shipped stock-preview restore correction: empty
     # custom identity is allowed only for a pending retail preview, not races.
     "runtime-recomp/src/game/mods/legacy_guest_checkpoint.cpp": "92db808732d530ad8e70c93bad1e14f3e4396e486d71d758a75cf0f3f9d6af50",
@@ -630,7 +637,8 @@ INPUT_NATIVE_HASH = {
     # filesystem/network operations, or non-checkpointed interpreter state.
     "runtime-recomp/src/game/mods/legacy_behaviour.cpp": "f5fd6fac497716550c5a40dba59346c0369bf9f28c4fe97c2e7df3f3cdf64d1d",
     "runtime-recomp/src/game/mods/legacy_behaviour.hpp": "b5263d08404731789e779f7acbf627bf0c2f0d3eff49aebb6d32f28080c64614",
-    "runtime-recomp/src/game/mods/legacy_runtime_character.cpp": "6c2dc43a80d66ce217a8d66a502282f82262cf8aebc72fd3c68129ec6da85e5b",
+    # Nov 15: texture animation and AI RNG calls use GuestCallContext (they already repaired f_odd by hand).
+    "runtime-recomp/src/game/mods/legacy_runtime_character.cpp": "2958ed50acec5864f7fb5d0a65445175b504a28ccf495d4e611a5d1a6ce09ec7",
     "runtime-recomp/src/game/mods/legacy_character_roster.cpp": "cba46e095827e67e733377a75712af87b5b82bb0970df6db970ddeda61ee060c",
     # Pure immutable namespace capacities; stock limits retained. Guards stop
     # before cache stores/null racer writes and cannot mutate replay state.
@@ -710,7 +718,7 @@ REVIEWED_MAIN_MERGE_HASH = {
     # Nov 8: event 2 derives selected-actor label anchors and calls three
     # read-only font/camera accessors through the same private payload. The
     # reviewed diff leaves input, Pak, rumble and checkpoint ownership intact.
-    "runtime-recomp/src/game/runtime_legacy_mods.cpp": "187ca1108cb6987c631b6a6161351d0d1e78c809d6ec05b690e470a26820d989",
+    "runtime-recomp/src/game/runtime_legacy_mods.cpp": "eaeaea6513dc7b27fa91fdebb257c81cec89971c61561ceaa9fc905e50a4cf9b",
     "runtime-recomp/src/game/mods/legacy_guest_checkpoint.cpp": "92db808732d530ad8e70c93bad1e14f3e4396e486d71d758a75cf0f3f9d6af50",
 }
 

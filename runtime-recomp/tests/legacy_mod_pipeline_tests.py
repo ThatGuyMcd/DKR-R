@@ -303,8 +303,8 @@ class PipelineTests(unittest.TestCase):
         self.assertIn("dkr_character_select_animation_fraction,p->stage_camera", owner)
         stage = Source((source / "mods/legacy_character_stage.cpp").read_text())
         self.assertLess(
-            stage.index("calls.animation_fraction(memory.data(),&music)"),
-            stage.index("calls.animation_override(memory.data(),&music)"),
+            stage.index("calls.animation_fraction(memory.data(),music.get())"),
+            stage.index("calls.animation_override(memory.data(),music.get())"),
         )
         self.assertNotIn("advance_character_select_phase", stage)  # never tick per actor
         for rev in (77, 80):

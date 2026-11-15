@@ -1,3 +1,4 @@
+#include "guest_call_context.hpp"
 #include "primary_heap.h"
 #include "owned_vehicle_menu.hpp"
 #include <array>
@@ -185,9 +186,9 @@ void lend_course_clear(std::uint8_t* rdram, const recomp_context& ctx, unsigned 
     const auto word = [&](std::uint32_t address) -> std::int32_t& {
         return MEM_W(0, static_cast<gpr>(static_cast<std::int32_t>(address)));
     };
-    auto call = ctx;
-    payload->get_settings(rdram, &call);
-    const auto settings = static_cast<std::uint32_t>(call.r2);
+    dkr::runtime::GuestCallContext call(ctx);
+    payload->get_settings(rdram, call.get());
+    const auto settings = static_cast<std::uint32_t>(call->r2);
     if (!valid(settings + SettingsCourseFlags))
         return;
     const auto flags = static_cast<std::uint32_t>(word(settings + SettingsCourseFlags));
@@ -662,20 +663,18 @@ extern "C" void dkr_legacy_character_ai_event(std::uint8_t* rdram, recomp_contex
             const auto p = legacy::guest_payload();
             if (!p)
                 throw dkr::mods::Error("Missing race AI revision.");
-            auto drum = *ctx, tt = *ctx;
+            dkr::runtime::GuestCallContext drum(*ctx), tt(*ctx);
             // Same scratch discipline as the AI RNG; do not alias the live
             // track_setup_racers caller frame or its float registers.
             const auto sp = std::uint32_t(ctx->r29);
             if ((sp & 0xe0000000U) != 0x80000000U || (sp & 0x1fffffffU) < 0x100 || (sp & 7))
                 throw dkr::mods::Error("Invalid race AI unlock stack.");
-            drum.r29 = tt.r29 = static_cast<std::int32_t>(sp - 0x100);
-            drum.f_odd = drum.mips3_float_mode ? &drum.f1.u32l : &drum.f0.u32h;
-            tt.f_odd = tt.mips3_float_mode ? &tt.f1.u32l : &tt.f0.u32h;
-            p->unlock_drumstick(rdram, &drum);
-            p->unlock_tt(rdram, &tt);
-            if (drum.r2)
+            drum->r29 = tt->r29 = static_cast<std::int32_t>(sp - 0x100);
+            p->unlock_drumstick(rdram, drum.get());
+            p->unlock_tt(rdram, tt.get());
+            if (drum->r2)
                 pool[count++] = 6;
-            if (tt.r2)
+            if (tt->r2)
                 pool[count++] = 8;
         }
         std::lock_guard lock(state->mutex);
@@ -719,13 +718,13 @@ extern "C" int dkr_legacy_character_menu(std::uint8_t* rdram, recomp_context* ct
                                                                          : dkr_character_select_animation_fraction,
                                                    p->stage_camera};
         if (event == 0) {
-            auto drum = *ctx, tt = *ctx;
-            p->unlock_drumstick(rdram, &drum);
-            p->unlock_tt(rdram, &tt);
+            dkr::runtime::GuestCallContext drum(*ctx), tt(*ctx);
+            p->unlock_drumstick(rdram, drum.get());
+            p->unlock_tt(rdram, tt.get());
             {
                 std::lock_guard lock(state->mutex);
                 state->selector->reset();
-                state->selector->set_unlocks(drum.r2 != 0, tt.r2 != 0);
+                state->selector->set_unlocks(drum->r2 != 0, tt->r2 != 0);
             }
             state->stage.initialize({rdram, legacy::guest_memory_size()}, addresses, *ctx, stage,
                                     state->selector->entries());
@@ -803,24 +802,24 @@ extern "C" int dkr_legacy_character_menu(std::uint8_t* rdram, recomp_context* ct
             const auto bank = state->presentation.selection_bank(
                 {rdram, legacy::guest_memory_size()}, *ctx, legacy::presentation_calls(*p), state->selector->entries(),
                 static_cast<unsigned>(*selected), active->character_sample_address(static_cast<unsigned>(*selected)));
-            auto play = *ctx;
-            play.r4 = static_cast<gpr>(static_cast<std::int32_t>(bank));
-            play.r5 = cue.sound;
-            play.r6 = cue.priority;
-            play.r7 = static_cast<gpr>(static_cast<std::int32_t>(handle));
-            p->sound_bank_play(rdram, &play);
+            dkr::runtime::GuestCallContext play(*ctx);
+            play->r4 = static_cast<gpr>(static_cast<std::int32_t>(bank));
+            play->r5 = cue.sound;
+            play->r6 = cue.priority;
+            play->r7 = static_cast<gpr>(static_cast<std::int32_t>(handle));
+            p->sound_bank_play(rdram, play.get());
             const auto voice = guest.read(handle);
             if (voice) {
-                auto param = *ctx;
-                param.r4 = static_cast<gpr>(static_cast<std::int32_t>(voice));
-                param.r5 = 8;
-                param.r6 = cue.volume * 256;
-                p->sound_parameter(rdram, &param);
-                param = *ctx;
-                param.r4 = static_cast<gpr>(static_cast<std::int32_t>(voice));
-                param.r5 = 16;
-                param.r6 = std::bit_cast<std::uint32_t>(cue.pitch / 100.0f);
-                p->sound_parameter(rdram, &param);
+                dkr::runtime::GuestCallContext param(*ctx);
+                param->r4 = static_cast<gpr>(static_cast<std::int32_t>(voice));
+                param->r5 = 8;
+                param->r6 = cue.volume * 256;
+                p->sound_parameter(rdram, param.get());
+                param.reset(*ctx);
+                param->r4 = static_cast<gpr>(static_cast<std::int32_t>(voice));
+                param->r5 = 16;
+                param->r6 = std::bit_cast<std::uint32_t>(cue.pitch / 100.0f);
+                p->sound_parameter(rdram, param.get());
             }
             return 1;
         } else if (event == 4) {
@@ -834,9 +833,9 @@ extern "C" int dkr_legacy_character_menu(std::uint8_t* rdram, recomp_context* ct
             }
             if (!p->filtered_cheats)
                 throw dkr::mods::Error("Character menu cheat policy is unavailable.");
-            auto cheats = *ctx;
-            p->filtered_cheats(rdram, &cheats);
-            const bool duplicates = (static_cast<std::uint32_t>(cheats.r2) & (1U << 22)) != 0;
+            dkr::runtime::GuestCallContext cheats(*ctx);
+            p->filtered_cheats(rdram, cheats.get());
+            const bool duplicates = (static_cast<std::uint32_t>(cheats->r2) & (1U << 22)) != 0;
             std::vector<unsigned> sounds;
             auto previous = *state->selector;
             std::array<unsigned, 4> previous_indices{};
@@ -871,10 +870,10 @@ extern "C" int dkr_legacy_character_menu(std::uint8_t* rdram, recomp_context* ct
             for (auto id : sounds) {
                 if (!p->menu_sound_play)
                     throw dkr::mods::Error("Character menu sound callback is unavailable.");
-                auto sound = *ctx;
-                sound.r4 = id;
-                sound.r5 = 0;
-                p->menu_sound_play(rdram, &sound);
+                dkr::runtime::GuestCallContext sound(*ctx);
+                sound->r4 = id;
+                sound->r5 = 0;
+                p->menu_sound_play(rdram, sound.get());
             }
             if (event == 5)
                 return 1;
@@ -1071,9 +1070,9 @@ extern "C" std::uint32_t dkr_legacy_character_portrait_lookup(std::uint8_t* rdra
         const auto p = legacy::guest_payload();
         if (!p)
             throw dkr::mods::Error("Missing portrait revision.");
-        auto settings = *ctx;
-        p->get_settings(rdram, &settings);
-        const auto base = std::uint32_t(settings.r2);
+        dkr::runtime::GuestCallContext settings(*ctx);
+        p->get_settings(rdram, settings.get());
+        const auto base = std::uint32_t(settings->r2);
         // Native sites pass Settings + racer_index * sizeof(Racer). The
         // original character lookup at +0x59 is otherwise left intact.
         if (racer_base < base || (racer_base - base) % 0x18 || (racer_base - base) / 0x18 >= 8)
@@ -1335,14 +1334,14 @@ extern "C" int dkr_legacy_track_menu(std::uint8_t* rdram, recomp_context* ctx, u
                 const auto payload = legacy::guest_payload();
                 if (!payload || !payload->asset_allocate)
                     throw dkr::mods::Error("Native menu heap callback is unavailable.");
-                auto allocation = *ctx;
-                allocation.r4 = bytes;
-                allocation.r5 = 0x7f7f7fff;
+                dkr::runtime::GuestCallContext allocation(*ctx);
+                allocation->r4 = bytes;
+                allocation->r5 = 0x7f7f7fff;
                 // Original guest allocation may yield: never hold a host mutex.
-                payload->asset_allocate(rdram, &allocation);
+                payload->asset_allocate(rdram, allocation.get());
                 std::lock_guard lock(state->mutex);
                 state->adapter.install_names({rdram, legacy::guest_memory_size()},
-                                             static_cast<std::uint32_t>(allocation.r2));
+                                             static_cast<std::uint32_t>(allocation->r2));
             }
         }
         dkr::mods::TrackMenuEffect effect;
@@ -1363,21 +1362,19 @@ extern "C" int dkr_legacy_track_menu(std::uint8_t* rdram, recomp_context* ctx, u
                 throw dkr::mods::Error("Native background material callback is unavailable.");
             const auto dl_field = effect.background_display_list;
             for (const auto& background : effect.backgrounds) {
-                auto call = *ctx;
-                call.r4 = static_cast<std::int32_t>(dl_field);
-                call.r5 = static_cast<std::int32_t>(background.texture);
-                call.r6 = 0;
-                call.r7 = 0;
-                call.f_odd = call.mips3_float_mode ? &call.f1.u32l : &call.f0.u32h;
+                dkr::runtime::GuestCallContext call(*ctx);
+                call->r4 = static_cast<std::int32_t>(dl_field);
+                call->r5 = static_cast<std::int32_t>(background.texture);
+                call->r6 = 0;
+                call->r7 = 0;
                 // Guest callbacks may yield: no adapter lock is held.
-                payload->menu_material_set(rdram, &call);
+                payload->menu_material_set(rdram, call.get());
                 if (payload->menu_background_cover) {
-                    auto cover = *ctx;
-                    cover.r8 = static_cast<std::int32_t>(background.vertices);
-                    cover.f_odd = cover.mips3_float_mode ? &cover.f1.u32l : &cover.f0.u32h;
+                    dkr::runtime::GuestCallContext cover(*ctx);
+                    cover->r8 = static_cast<std::int32_t>(background.vertices);
                     // The private payload records the existing background-cover
                     // event. Local aspect settings NEVER mutate shared RAM.
-                    payload->menu_background_cover(rdram, &cover);
+                    payload->menu_background_cover(rdram, cover.get());
                 }
                 // Original F3DDKR vertex/polygon commands, original orthographic
                 // camera and double buffer. Continue the caller-owned CURRENT
@@ -1393,10 +1390,10 @@ extern "C" int dkr_legacy_track_menu(std::uint8_t* rdram, recomp_context* ctx, u
             // Match stock trackmenu_input: SOUND_MENU_PICK2 (0xEB), no handle.
             // Guest audio can yield: call only after releasing the host lock,
             // and preserve the original hook's register context.
-            auto sound = *ctx;
-            sound.r4 = 0xEB;
-            sound.r5 = 0;
-            payload->menu_sound_play(rdram, &sound);
+            dkr::runtime::GuestCallContext sound(*ctx);
+            sound->r4 = 0xEB;
+            sound->r5 = 0;
+            payload->menu_sound_play(rdram, sound.get());
         }
 #if DKR_LEGACY_QUALIFICATION
         legacy::qualify_native_menu(rdram, ctx, event, fields, true);
