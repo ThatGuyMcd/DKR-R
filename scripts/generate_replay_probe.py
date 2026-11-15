@@ -592,10 +592,12 @@ INPUT_NATIVE_HASH = {
     # Nov 16: the two payload query helpers copy their context through
     # GuestCallContext (f_odd repaired in place). Their callees use no odd
     # float registers or doubles, so behaviour is identical.
-    "runtime-recomp/src/game/runtime_netplay.cpp": "5428da9f26f503c81685283184d211d95480c8b7f15e0bb0a3a977979858a2b5",
+    # Nov 17: reads the selected revision through revision_addresses::current(); same addresses, no new store, call or hook.
+    "runtime-recomp/src/game/runtime_netplay.cpp": "8c2a5e1a8f12f3b2c00a3561635b7acc027c46486555bdf66b2827e22ad19fb7",
     # v1.0.15: an offline session with session content off starts with no
     # codes. A supplied online mask is used unchanged.
-    "runtime-recomp/src/game/runtime_magic_codes.cpp": "9c01516778a1c9516219f639ee8ccf7bb4c2f919f7118c906adbe81a310da180",
+    # Nov 17: reads the selected revision through revision_addresses::current(); same addresses, no new store, call or hook.
+    "runtime-recomp/src/game/runtime_magic_codes.cpp": "7df059c924bc67a0b761f2b25a29842c74e6673011b9979eee31a9ca2d608d24",
     # Frozen online course sizing/ID routing bypasses the offline catalogue.
     # The no-session path remains the prior offline/vanilla implementation.
     # Oct 11: aligned, RAM-bounded scans/copies; frozen online tables still
@@ -604,7 +606,8 @@ INPUT_NATIVE_HASH = {
     # use no odd float registers or doubles) and the display-list, character
     # select and memory pool addresses come from generated symbol tables with
     # the same values (scripts/tests/test_revision_literals.py).
-    "runtime-recomp/src/game/custom_tracks_hooks.cpp": "2827dfb3caa8be798890a47b5a0fd1babc01481fad8858258752af609670a811",
+    # Nov 17: reads the selected revision through revision_addresses::current(); same addresses, no new store, call or hook.
+    "runtime-recomp/src/game/custom_tracks_hooks.cpp": "18346ba130fb2a3d313d180fcccd97fdcf3c079511ac77d702cc17eb4e7f8977",
     # Online mod owner: same no-session returns, explicit TLS namespace and
     # closed private guest callback table; no live/default dispatch fallback.
     # Oct 6: bounded sparse model-slot scan and pre-dereference allocation
@@ -676,12 +679,14 @@ FULL_SCENE_NATIVE_HASH = {
     # Nov 16: ResumeNativeSequence copies its context through GuestCallContext
     # and reads __CSPPostNextSeqEvent from the generated decomp table (same
     # two addresses); the callee uses no odd float registers or doubles.
-    "runtime-recomp/src/game/runtime_stubs.cpp": "ca4124ef57fedd57b4b96ac38c40a0191dfb2d3d903da324644bbbc14df1a976",
+    # Nov 17: reads the selected revision through revision_addresses::current(); same addresses, no new store, call or hook.
+    "runtime-recomp/src/game/runtime_stubs.cpp": "c21640e7139e344408c3f7c9f6c4b3dd199ee12e837139ffae55c35d91feb205",
     "runtime-recomp/src/game/track_select_draw_guest.h": "053e11b284c433b88b19470534003519ad3d16bc3e625ce4bcc2b5f4f172041e",
     "runtime-recomp/src/game/audio_event_queue.h": "7899cd55f01c95221a71eac64857611a929bc19ff2d1603ca4c3e56a1a4ebf18",
     "runtime-recomp/src/game/audio_event_queue_state.h": "7e479c5c99dc4ab0d43c9ddfc1a082437d631adc688b14e86c7d5a3edf0f7ecf",
     "runtime-recomp/src/game/intro_tail_policy.hpp": "5433ebb8ad644d4c4ff1d4b539494dbd8488225740008343415f5c87af50428f",
-    "runtime-recomp/src/game/water_profile.cpp": "e674ca4e4464e00a00eb1e77af9c926adbac4e86fb6911ac1da58ccd4ee8f04d",
+    # Nov 17: reads the selected revision through revision_addresses::current(); same addresses, no new store, call or hook.
+    "runtime-recomp/src/game/water_profile.cpp": "59f64e3b878e63f276f7cc4a6f670b724b827c4f94c55bc6c2de346b407e797e",
     # Both revisions keep the water UV masks and append PR46's music globals.
     # Nov 16: AddressTable and the kUsV77/kUsV80 tables are generated from
     # symbols/revision_addresses.toml (revision_symbols.hpp); the mutable
@@ -692,7 +697,8 @@ FULL_SCENE_NATIVE_HASH = {
     "runtime-recomp/src/game/revision_addresses.hpp": "14a133a37a114ee3dd86d837e8db1ea6f86958ac112fdb6cf083ef4893565525",
     # Frozen online binding diverts before offline decoder/global song reads.
     # Without a ModWorld the private hooks retain their prior identity branch.
-    "runtime-recomp/src/game/custom_music.cpp": "09953f14e30fa72c5161801b3eafebeff7c5c2a04b5d63f912367e87bfa7421b",
+    # Nov 17: reads the selected revision through revision_addresses::current(); same addresses, no new store, call or hook.
+    "runtime-recomp/src/game/custom_music.cpp": "c6c1603962a3c36c16191e6eaa018f391e39fa65349a11156822292e41e3fccd",
     "runtime-recomp/src/game/online_roster_policy.hpp": "125cddacb96b2633d96617724898bd0ca1e42c3020b2df4432fd974790b4a153",
     # Re-audited headless SDL guard: RT64 code is unchanged; without a window
     # the frustum hook retains its original no-op after defensive restoration.
@@ -704,7 +710,8 @@ FULL_SCENE_NATIVE_HASH = {
     # instead of the raw window size. Still a per-player presentation input.
     # Nov 16: the scene player and viewport addresses its two reads use come
     # from generated symbol tables with the same values; no new access.
-    "runtime-recomp/src/game/runtime_enhancements.cpp": "133123433a896ac1b5d6b159d0aeb8beb79c441b6953473026c048ac1fbfad3a",
+    # Nov 17: reads the selected revision through revision_addresses::current(); same addresses, no new store, call or hook.
+    "runtime-recomp/src/game/runtime_enhancements.cpp": "7b3acc85c49691ea47db91d78026755ddf0e9d00362a517f8bd3a86336b08011",
     "runtime-recomp/src/game/character_select_animation_policy.hpp": "03e0f77cd2969926a48ca434964e4a2b813efa93a0dc31e4b779eb7037a547b1",
     "runtime-recomp/src/game/character_select_music_policy.hpp": "0a762402cc3308eb5197dd97eaac81778079bfdfa0f81a2f4aeb98cbc0ec7c22",
 }

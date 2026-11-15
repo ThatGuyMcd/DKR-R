@@ -33,17 +33,7 @@ PIN_TABLES = (
 )
 
 # File -> number of alias reads it may still contain (a ceiling, never a target).
-REMAINING = {
-    "runtime-recomp/src/game/custom_music.cpp": 10,
-    "runtime-recomp/src/game/custom_tracks_hooks.cpp": 7,
-    "runtime-recomp/src/game/presentation_identity.cpp": 21,
-    "runtime-recomp/src/game/runtime_enhancements.cpp": 14,
-    "runtime-recomp/src/game/runtime_hud_layout.cpp": 19,
-    "runtime-recomp/src/game/runtime_magic_codes.cpp": 2,
-    "runtime-recomp/src/game/runtime_netplay.cpp": 27,
-    "runtime-recomp/src/game/runtime_stubs.cpp": 28,
-    "runtime-recomp/src/game/water_profile.cpp": 1,
-}
+REMAINING: dict[str, int] = {}
 
 # Files that read aliases on purpose.
 EXEMPT = {

@@ -576,7 +576,8 @@ class InstrumentationTests(unittest.TestCase):
             "runtime-recomp/src/game/track_select_draw_guest.h":"053e11b284c433b88b19470534003519ad3d16bc3e625ce4bcc2b5f4f172041e",
             "runtime-recomp/src/game/audio_event_queue.h":"7899cd55f01c95221a71eac64857611a929bc19ff2d1603ca4c3e56a1a4ebf18",
             "runtime-recomp/src/game/audio_event_queue_state.h":"7e479c5c99dc4ab0d43c9ddfc1a082437d631adc688b14e86c7d5a3edf0f7ecf",
-            "runtime-recomp/src/game/runtime_hud_layout.cpp":"9b886277fd20311a32fa621123a80698163991fc5499f49e1555f1d2c85c5625",
+            # Nov 17: reads the selected revision through revision_addresses::current(); same addresses, no new store, call or hook.
+            "runtime-recomp/src/game/runtime_hud_layout.cpp":"2ae2de9b09ad005af0d28304f18af09574fa6b2b97a342e527c9e4355087ed27",
             # Audited camera-clearance metadata: read-only guest observations
             # and local matrix bindings; no simulation/checkpoint writes.
             # Preserve the already-shipped water camera-root/time metadata.
@@ -602,7 +603,8 @@ class InstrumentationTests(unittest.TestCase):
             # generated symbol tables and its call-site return addresses as the
             # decomp function plus the old offset (same values, recorded in
             # scripts/tests/test_revision_literals.py). Same reads, no new store.
-            "runtime-recomp/src/game/presentation_identity.cpp":"1ad27d1d0bae2a501152e413b99d9982ffb986038e5b2a70a3722180c58750d9",
+            # Nov 17: reads the selected revision through revision_addresses::current(); same addresses, no new store, call or hook.
+            "runtime-recomp/src/game/presentation_identity.cpp":"86661756c55a04b17a78aca1bd3636e0a3abb81a0bbe354dfed8b7182ac29da7",
             "runtime-recomp/src/game/widescreen_policy.hpp":"3c3ff51000c969d6c7a9628364345fe1293e1c26de057197120728e79f975f36",
             "extern/dkr-decomp/src/save_data.c":"898df1a185c17e1d6ba11302fc5c140a1d7bd10ff3d8b86ff937c834bb13a607",
             "extern/dkr-decomp/src/thread3_main.c":"437434837706ee88e91578ce9e1aa2cd960e65e1e3a6f1aa47ae3b6289892d8e",

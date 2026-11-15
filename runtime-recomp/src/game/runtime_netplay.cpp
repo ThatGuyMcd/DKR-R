@@ -402,9 +402,9 @@ bool advance_host_authoritative_frame(std::uint8_t* rdram, recomp_context* conte
     g_rollback_authored_base = 0U;
     g_external_side_effects.store(publish, std::memory_order_release);
     g_rollback_advancing.store(true, std::memory_order_release);
-    MEM_W(0, rdram_address(revision_addresses::LogicUpdateRate)) = kRollbackLogicUpdateRate;
+    MEM_W(0, rdram_address(revision_addresses::current().LogicUpdateRate)) = kRollbackLogicUpdateRate;
     dkr::runtime::invoke_main_game_loop(rdram, context);
-    MEM_W(0, rdram_address(revision_addresses::LogicUpdateRate)) = kRollbackLogicUpdateRate;
+    MEM_W(0, rdram_address(revision_addresses::current().LogicUpdateRate)) = kRollbackLogicUpdateRate;
     // The outer authored thread3 tick owns the simulation-frame cursor.
     // input_update normally advances this cursor from its nested hook, but
     // retail DKR legitimately bypasses input_update on some mode/transition
@@ -550,7 +550,7 @@ gpr rdram_address(std::uint32_t address) {
 int current_level_race_type(std::uint8_t* rdram) {
     constexpr std::uint32_t kLevelHeaderRaceTypeOffset = 0x4CU;
     const std::uint32_t header_address =
-        static_cast<std::uint32_t>(MEM_W(0, rdram_address(revision_addresses::CurrentLevelHeader)));
+        static_cast<std::uint32_t>(MEM_W(0, rdram_address(revision_addresses::current().CurrentLevelHeader)));
     if (header_address < 0x80000000U || header_address >= 0x80800000U) {
         return -1;
     }
@@ -920,18 +920,18 @@ void bootstrap_character_select(std::uint8_t* rdram, const LaunchDescriptor& des
     for (std::size_t slot = 0; slot < occupied.size(); ++slot) {
         occupied[slot] = descriptor.occupied(slot);
     }
-    const gpr character_array = rdram_address(revision_addresses::PlayersCharacterArray);
+    const gpr character_array = rdram_address(revision_addresses::current().PlayersCharacterArray);
     // Never inherit frontend-local character cursors here. A client may have
     // reached this menu from a different local presentation history, and that
     // history is deliberately outside the online determinism contract. Start
     // every occupied network slot from the same descriptor-derived seed.
     const CharacterSelectSeed seed = make_character_select_seed(occupied, existing);
-    MEM_W(0, rdram_address(revision_addresses::NumberOfActivePlayers)) =
+    MEM_W(0, rdram_address(revision_addresses::current().NumberOfActivePlayers)) =
         static_cast<std::int32_t>(seed.active_player_count);
-    MEM_W(0, rdram_address(revision_addresses::NumberOfReadyPlayers)) = 0;
-    const gpr active_array = rdram_address(revision_addresses::ActivePlayersArray);
-    const gpr status_array = rdram_address(revision_addresses::CharacterSelectStatus);
-    const gpr player_id_map = rdram_address(revision_addresses::PlayerIdMap);
+    MEM_W(0, rdram_address(revision_addresses::current().NumberOfReadyPlayers)) = 0;
+    const gpr active_array = rdram_address(revision_addresses::current().ActivePlayersArray);
+    const gpr status_array = rdram_address(revision_addresses::current().CharacterSelectStatus);
+    const gpr player_id_map = rdram_address(revision_addresses::current().PlayerIdMap);
     for (std::size_t slot = 0; slot < seed.active_players.size(); ++slot) {
         MEM_B(slot, active_array) = seed.active_players[slot];
         MEM_B(slot, status_array) = 0;
@@ -947,8 +947,8 @@ void bootstrap_character_select(std::uint8_t* rdram, const LaunchDescriptor& des
 void lock_character_select_membership(std::uint8_t* rdram, const LaunchDescriptor& descriptor) {
     if (rdram == nullptr || !valid_launch_descriptor(descriptor))
         return;
-    const gpr buttons = rdram_address(revision_addresses::MenuButtons);
-    const gpr status = rdram_address(revision_addresses::CharacterSelectStatus);
+    const gpr buttons = rdram_address(revision_addresses::current().MenuButtons);
+    const gpr status = rdram_address(revision_addresses::current().CharacterSelectStatus);
     for (std::size_t slot = 0; slot < kOnlineControllerPorts; ++slot) {
         const std::uint32_t current = static_cast<std::uint32_t>(MEM_W(slot * sizeof(std::uint32_t), buttons));
         const std::int8_t current_status = static_cast<std::int8_t>(MEM_B(slot, status));
@@ -960,12 +960,13 @@ void lock_character_select_membership(std::uint8_t* rdram, const LaunchDescripto
 void refresh_input_vehicle_context(std::uint8_t* rdram, const RuntimeSessionView& view) {
     if (rdram == nullptr)
         return;
-    const gpr vehicles = rdram_address(revision_addresses::PlayerSelectVehicle);
+    const gpr vehicles = rdram_address(revision_addresses::current().PlayerSelectVehicle);
     std::array<int, kOnlineControllerPorts> resolved_vehicles{};
     for (std::size_t slot = 0U; slot < kOnlineControllerPorts; ++slot) {
         const int menu_vehicle = static_cast<std::int8_t>(MEM_B(slot, vehicles));
         const int vehicle = dkr::runtime::vehicle_context::resolve_for_port(
-            rdram, dkr::runtime::vehicle_context::kRdramBytes, revision_addresses::RacersByPort, slot, menu_vehicle);
+            rdram, dkr::runtime::vehicle_context::kRdramBytes, revision_addresses::current().RacersByPort, slot,
+            menu_vehicle);
         resolved_vehicles[slot] = vehicle;
         dkr::runtime::input::set_active_vehicle(slot, vehicle);
     }
@@ -1295,8 +1296,8 @@ void seed_character_select_ai(std::uint8_t* rdram, recomp_context* context) {
     std::uint32_t seed = static_cast<std::uint32_t>(mixed ^ (mixed >> 32U));
     if (seed == 0U)
         seed = 0x43505552U;
-    MEM_W(0, rdram_address(revision_addresses::CurrentRngSeed)) = static_cast<std::int32_t>(seed);
-    MEM_W(0, rdram_address(revision_addresses::PreviousRngSeed)) = static_cast<std::int32_t>(seed);
+    MEM_W(0, rdram_address(revision_addresses::current().CurrentRngSeed)) = static_cast<std::int32_t>(seed);
+    MEM_W(0, rdram_address(revision_addresses::current().PreviousRngSeed)) = static_cast<std::int32_t>(seed);
 }
 
 std::uint32_t authored_frame() {
@@ -1355,8 +1356,8 @@ void begin_gameplay_level(std::uint8_t* rdram, recomp_context* context) {
     std::uint32_t seed = static_cast<std::uint32_t>(mixed ^ (mixed >> 32U));
     if (seed == 0U)
         seed = 0x444B5252U; // "DKRR"
-    MEM_W(0, rdram_address(revision_addresses::CurrentRngSeed)) = static_cast<std::int32_t>(seed);
-    MEM_W(0, rdram_address(revision_addresses::PreviousRngSeed)) = static_cast<std::int32_t>(seed);
+    MEM_W(0, rdram_address(revision_addresses::current().CurrentRngSeed)) = static_cast<std::int32_t>(seed);
+    MEM_W(0, rdram_address(revision_addresses::current().PreviousRngSeed)) = static_cast<std::int32_t>(seed);
 }
 
 void complete_gameplay_level(std::uint8_t* rdram, recomp_context* context) {
@@ -1371,9 +1372,9 @@ void complete_gameplay_level(std::uint8_t* rdram, recomp_context* context) {
         return;
     }
     const std::uint32_t active_players =
-        static_cast<std::uint32_t>(MEM_W(0, rdram_address(revision_addresses::NumberOfActivePlayers)));
+        static_cast<std::uint32_t>(MEM_W(0, rdram_address(revision_addresses::current().NumberOfActivePlayers)));
     const std::uint32_t racer_count =
-        static_cast<std::uint32_t>(MEM_W(0, rdram_address(revision_addresses::NumberOfRacers)));
+        static_cast<std::uint32_t>(MEM_W(0, rdram_address(revision_addresses::current().NumberOfRacers)));
     const int race_type = current_level_race_type(rdram);
     const bool ordinary_gameplay_ready = determinism_race_ready(active_players, racer_count, descriptor->player_count);
     bool two_player_adventure = false;
@@ -1407,7 +1408,7 @@ void complete_gameplay_level(std::uint8_t* rdram, recomp_context* context) {
                 }
                 verified_boss_introduction = boss_introduction_redirect_matches(
                     pairs, *g_gameplay_start.requested_map,
-                    static_cast<std::uint32_t>(MEM_W(0, rdram_address(revision_addresses::CurrentMapId))));
+                    static_cast<std::uint32_t>(MEM_W(0, rdram_address(revision_addresses::current().CurrentMapId))));
             }
         }
     }
@@ -1430,7 +1431,7 @@ void complete_gameplay_level(std::uint8_t* rdram, recomp_context* context) {
         stderr,
         "[netplay][level-ready] frame=%u requested=%u resolved=%u requested_type=%d resolved_type=%d racers=%u empty_cutscene=%d boss_redirect=%d\n",
         authored_frame(), g_gameplay_start.requested_map.value_or(~0U),
-        static_cast<std::uint32_t>(MEM_W(0, rdram_address(revision_addresses::CurrentMapId))),
+        static_cast<std::uint32_t>(MEM_W(0, rdram_address(revision_addresses::current().CurrentMapId))),
         g_gameplay_start.requested_race_type.value_or(-1), race_type, racer_count, empty_cutscene_ready ? 1 : 0,
         verified_boss_introduction ? 1 : 0);
     if (!ordinary_gameplay_ready && !shared_hub_ready && !dual_adventure_gameplay_ready && !boss_ready &&
@@ -1446,7 +1447,8 @@ void complete_gameplay_level(std::uint8_t* rdram, recomp_context* context) {
                 ", requested map=" + std::to_string(g_gameplay_start.requested_map.value_or(~0U)) +
                 ", requested type=" + std::to_string(g_gameplay_start.requested_race_type.value_or(-1)) +
                 ", resolved map=" +
-                std::to_string(static_cast<std::uint32_t>(MEM_W(0, rdram_address(revision_addresses::CurrentMapId)))) +
+                std::to_string(
+                    static_cast<std::uint32_t>(MEM_W(0, rdram_address(revision_addresses::current().CurrentMapId)))) +
                 ", active players=" + std::to_string(active_players) + ").");
             halt_failed_simulation();
         }
@@ -1478,7 +1480,7 @@ void complete_gameplay_level(std::uint8_t* rdram, recomp_context* context) {
     g_session.begin_authoritative_phase();
     g_frame_debt_phase.store(FrameDebtPhase::GameplayStartBarrier, std::memory_order_release);
     const std::uint32_t resolved_map =
-        static_cast<std::uint32_t>(MEM_W(0, rdram_address(revision_addresses::CurrentMapId)));
+        static_cast<std::uint32_t>(MEM_W(0, rdram_address(revision_addresses::current().CurrentMapId)));
     constexpr std::uint32_t kGameplayBaselineFrame = 0U;
     std::string error;
     const std::optional<std::uint32_t> requested_map = g_gameplay_start.requested_map;
@@ -2140,8 +2142,8 @@ int drive_authored_tick(std::uint8_t* rdram, recomp_context* context) {
         if (prepared == InputSynchronizationResult::Committed ||
             prepared == InputSynchronizationResult::AlreadyCommitted) {
             if (rdram != nullptr) {
-                MEM_W(0, rdram_address(revision_addresses::LogicUpdateRate)) =
-                    authored_logic_step(true, MEM_W(0, rdram_address(revision_addresses::LogicUpdateRate)));
+                MEM_W(0, rdram_address(revision_addresses::current().LogicUpdateRate)) =
+                    authored_logic_step(true, MEM_W(0, rdram_address(revision_addresses::current().LogicUpdateRate)));
             }
             g_online_wait_state.leave();
             g_prepared_authored_frame.store(frame, std::memory_order_release);
@@ -2648,10 +2650,10 @@ int drive_authored_tick(std::uint8_t* rdram, recomp_context* context) {
             // Pin both sides of the call so original and replayed frames use
             // the same 30 Hz simulation step on every machine, regardless of
             // local GPU load, window state or presentation refresh rate.
-            MEM_W(0, rdram_address(revision_addresses::LogicUpdateRate)) =
+            MEM_W(0, rdram_address(revision_addresses::current().LogicUpdateRate)) =
                 kRollbackLogicUpdateRate;
             dkr::runtime::invoke_main_game_loop(rdram, context);
-            MEM_W(0, rdram_address(revision_addresses::LogicUpdateRate)) =
+            MEM_W(0, rdram_address(revision_addresses::current().LogicUpdateRate)) =
                 kRollbackLogicUpdateRate;
             g_rollback_advancing.store(false, std::memory_order_release);
             g_external_side_effects.store(true, std::memory_order_release);
