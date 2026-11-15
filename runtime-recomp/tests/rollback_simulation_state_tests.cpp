@@ -35,23 +35,23 @@ void write_half(std::vector<std::uint8_t>& memory, std::uint32_t address, std::u
 
 void seed_gameplay(std::vector<std::uint8_t>& memory) {
     using namespace dkr::runtime::revision_addresses;
-    write_word(memory, CurrentMapId, 7U);
-    write_word(memory, IsInRace, 1U);
-    write_word(memory, CurrentRngSeed, 0x12345678U);
-    write_word(memory, PreviousRngSeed, 0x9ABCDEF0U);
-    write_word(memory, RaceStartTimer, 60U);
-    write_word(memory, RaceStartProgress, 0x43960000U);
-    write_word(memory, LogicUpdateRate, 2U);
-    write_word(memory, NumberOfActivePlayers, 2U);
-    write_byte(memory, NumberOfGameplayPlayers, 2U);
-    write_byte(memory, PlayersCharacterArray, 1U);
-    write_byte(memory, PlayersCharacterArray + 1U, 4U);
+    write_word(memory, dkr::runtime::revision_addresses::current().CurrentMapId, 7U);
+    write_word(memory, dkr::runtime::revision_addresses::current().IsInRace, 1U);
+    write_word(memory, dkr::runtime::revision_addresses::current().CurrentRngSeed, 0x12345678U);
+    write_word(memory, dkr::runtime::revision_addresses::current().PreviousRngSeed, 0x9ABCDEF0U);
+    write_word(memory, dkr::runtime::revision_addresses::current().RaceStartTimer, 60U);
+    write_word(memory, dkr::runtime::revision_addresses::current().RaceStartProgress, 0x43960000U);
+    write_word(memory, dkr::runtime::revision_addresses::current().LogicUpdateRate, 2U);
+    write_word(memory, dkr::runtime::revision_addresses::current().NumberOfActivePlayers, 2U);
+    write_byte(memory, dkr::runtime::revision_addresses::current().NumberOfGameplayPlayers, 2U);
+    write_byte(memory, dkr::runtime::revision_addresses::current().PlayersCharacterArray, 1U);
+    write_byte(memory, dkr::runtime::revision_addresses::current().PlayersCharacterArray + 1U, 4U);
 
     constexpr std::uint32_t racer_array = 0x80300000U;
     constexpr std::uint32_t object = 0x80300100U;
     constexpr std::uint32_t racer = 0x80301000U;
-    write_word(memory, NumberOfRacers, 1U);
-    write_word(memory, Racers, racer_array);
+    write_word(memory, dkr::runtime::revision_addresses::current().NumberOfRacers, 1U);
+    write_word(memory, dkr::runtime::revision_addresses::current().Racers, racer_array);
     write_word(memory, racer_array, object);
     write_word(memory, object + 0x64U, racer);
     write_word(memory, object + 0x0CU, 0x41200000U);
@@ -66,13 +66,13 @@ void seed_gameplay(std::vector<std::uint8_t>& memory) {
     constexpr std::uint32_t log_state = 0x80303100U;
     constexpr std::uint32_t egg_creator = 0x80303200U;
     constexpr std::uint32_t level_map = 0x80304000U;
-    write_word(memory, ObjectList, object_list);
-    write_word(memory, ObjectCount, 2U);
-    write_word(memory, ObjectListStart, 0U);
-    write_word(memory, ObjectMapSpawnList + 0U, level_map);
-    write_word(memory, ObjectMapSpawnList + 4U, 0U);
-    write_word(memory, ObjectMapSize + 0U, 0x100U);
-    write_word(memory, ObjectMapSize + 4U, 0U);
+    write_word(memory, dkr::runtime::revision_addresses::current().ObjectList, object_list);
+    write_word(memory, dkr::runtime::revision_addresses::current().ObjectCount, 2U);
+    write_word(memory, dkr::runtime::revision_addresses::current().ObjectListStart, 0U);
+    write_word(memory, dkr::runtime::revision_addresses::current().ObjectMapSpawnList + 0U, level_map);
+    write_word(memory, dkr::runtime::revision_addresses::current().ObjectMapSpawnList + 4U, 0U);
+    write_word(memory, dkr::runtime::revision_addresses::current().ObjectMapSize + 0U, 0x100U);
+    write_word(memory, dkr::runtime::revision_addresses::current().ObjectMapSize + 4U, 0U);
     write_word(memory, object_list, log_object);
     write_word(memory, object_list + 4U, egg_creator);
     write_half(memory, log_object + 0x48U, 67U); // BHV_LOG
@@ -115,7 +115,7 @@ int main() {
     assert(checksum != 0U);
 
     // An authored value must rewind.
-    write_word(memory, CurrentRngSeed, 0xDEADBEEFU);
+    write_word(memory, dkr::runtime::revision_addresses::current().CurrentRngSeed, 0xDEADBEEFU);
     constexpr std::uint32_t log_object = 0x80303000U;
     constexpr std::uint32_t log_state = 0x80303100U;
     constexpr std::uint32_t egg_creator = 0x80303200U;
@@ -133,7 +133,7 @@ int main() {
     constexpr std::uint32_t presentation_sentinel = 0x80200000U;
     write_word(memory, presentation_sentinel, 0xCAFEBABEU);
     assert(restore_rollback_simulation_state(memory.data(), memory.size(), snapshot, 42U, checksum, error));
-    assert(read_word(memory, CurrentRngSeed) == 0x12345678U);
+    assert(read_word(memory, dkr::runtime::revision_addresses::current().CurrentRngSeed) == 0x12345678U);
     assert(read_word(memory, log_object + 0x0CU) == 0x42C80000U);
     assert(read_word(memory, log_object + 0x78U) == 0x00001234U);
     assert(read_word(memory, log_state + 0x08U) == 0x11223344U);
@@ -147,46 +147,46 @@ int main() {
     // and matching actors without writing through a stale actor pointer.
     std::vector<std::uint8_t> authoritative_snapshot;
     assert(capture_authoritative_state(memory.data(), memory.size(), 42U, authoritative_snapshot, error));
-    write_word(memory, CurrentRngSeed, 0x01020304U);
+    write_word(memory, dkr::runtime::revision_addresses::current().CurrentRngSeed, 0x01020304U);
     write_word(memory, log_object + 0x0CU, 0x05060708U);
-    write_word(memory, ObjectCount, 1U);
+    write_word(memory, dkr::runtime::revision_addresses::current().ObjectCount, 1U);
     write_word(memory, object_list, log_object);
     write_word(memory, object_list + 4U, 0U);
     assert(!apply_authoritative_state(memory.data(), memory.size(), authoritative_snapshot, 42U, error));
-    assert(read_word(memory, CurrentRngSeed) == 0x01020304U);
+    assert(read_word(memory, dkr::runtime::revision_addresses::current().CurrentRngSeed) == 0x01020304U);
     assert(read_word(memory, log_object + 0x0CU) == 0x05060708U);
     std::uint32_t unmatched_actors = 0U;
     assert(apply_live_authoritative_state(memory.data(), memory.size(), authoritative_snapshot, 42U, unmatched_actors,
                                           error));
     assert(unmatched_actors == 1U);
-    assert(read_word(memory, CurrentRngSeed) == 0x12345678U);
+    assert(read_word(memory, dkr::runtime::revision_addresses::current().CurrentRngSeed) == 0x12345678U);
     assert(read_word(memory, log_object + 0x0CU) == 0x42C80000U);
-    write_word(memory, ObjectCount, 2U);
+    write_word(memory, dkr::runtime::revision_addresses::current().ObjectCount, 2U);
     write_word(memory, object_list, egg_creator);
     write_word(memory, object_list + 4U, log_object);
 
     // Replacing an actor in the canonical object-list slot invalidates the
     // entire transaction. No global, racer or earlier actor write may leak
     // through before the topology failure is reported.
-    write_word(memory, CurrentRngSeed, 0x13579BDFU);
+    write_word(memory, dkr::runtime::revision_addresses::current().CurrentRngSeed, 0x13579BDFU);
     write_word(memory, log_object + 0x0CU, 0xCAFED00DU);
     write_half(memory, egg_creator + 0x4AU, 0x9999U);
     assert(!restore_rollback_simulation_state(memory.data(), memory.size(), snapshot, 42U, checksum, error));
-    assert(read_word(memory, CurrentRngSeed) == 0x13579BDFU);
+    assert(read_word(memory, dkr::runtime::revision_addresses::current().CurrentRngSeed) == 0x13579BDFU);
     assert(read_word(memory, log_object + 0x0CU) == 0xCAFED00DU);
     write_half(memory, egg_creator + 0x4AU, 0x4321U);
 
     // Frame/token mismatches are rejected before changing live state.
-    write_word(memory, CurrentRngSeed, 0xABCDEF01U);
+    write_word(memory, dkr::runtime::revision_addresses::current().CurrentRngSeed, 0xABCDEF01U);
     assert(!restore_rollback_simulation_state(memory.data(), memory.size(), snapshot, 43U, checksum, error));
-    assert(read_word(memory, CurrentRngSeed) == 0xABCDEF01U);
+    assert(read_word(memory, dkr::runtime::revision_addresses::current().CurrentRngSeed) == 0xABCDEF01U);
     assert(!restore_rollback_simulation_state(memory.data(), memory.size(), snapshot, 42U, checksum + 1U, error));
-    assert(read_word(memory, CurrentRngSeed) == 0xABCDEF01U);
+    assert(read_word(memory, dkr::runtime::revision_addresses::current().CurrentRngSeed) == 0xABCDEF01U);
 
     // Corruption is detected without a partial install.
     snapshot[40] ^= 0x80U;
     assert(!restore_rollback_simulation_state(memory.data(), memory.size(), snapshot, 42U, checksum, error));
-    assert(read_word(memory, CurrentRngSeed) == 0xABCDEF01U);
+    assert(read_word(memory, dkr::runtime::revision_addresses::current().CurrentRngSeed) == 0xABCDEF01U);
 
     // obj_wave_init() legitimately returns NULL when an authored spinning log
     // is not attached to a procedural-water segment. That is the retail
@@ -208,11 +208,12 @@ int main() {
     // transactional so the process-local allocation remains owned locally.
     std::vector<std::uint8_t> wave_log_memory(kRdramSize, 0U);
     seed_gameplay(wave_log_memory);
-    const std::uint32_t wave_seed_before = read_word(wave_log_memory, CurrentRngSeed);
-    write_word(wave_log_memory, CurrentRngSeed, 0xA5A5A5A5U);
+    const std::uint32_t wave_seed_before =
+        read_word(wave_log_memory, dkr::runtime::revision_addresses::current().CurrentRngSeed);
+    write_word(wave_log_memory, dkr::runtime::revision_addresses::current().CurrentRngSeed, 0xA5A5A5A5U);
     assert(!apply_authoritative_state(wave_log_memory.data(), wave_log_memory.size(), static_log_snapshot, 99U, error));
     assert(error == "The host and local moving log disagree about optional wave state.");
-    assert(read_word(wave_log_memory, CurrentRngSeed) == 0xA5A5A5A5U);
+    assert(read_word(wave_log_memory, dkr::runtime::revision_addresses::current().CurrentRngSeed) == 0xA5A5A5A5U);
     assert(read_word(wave_log_memory, log_object + 0x64U) == log_state);
 
     // Live correction is deliberately more tolerant than a lifecycle
@@ -223,7 +224,7 @@ int main() {
     assert(apply_live_authoritative_state(wave_log_memory.data(), wave_log_memory.size(), static_log_snapshot, 99U,
                                           unmatched_actors, error));
     assert(unmatched_actors == 1U);
-    assert(read_word(wave_log_memory, CurrentRngSeed) == wave_seed_before);
+    assert(read_word(wave_log_memory, dkr::runtime::revision_addresses::current().CurrentRngSeed) == wave_seed_before);
     assert(read_word(wave_log_memory, log_object + 0x64U) == log_state);
 
     // A non-null pointer outside emulated RDRAM remains a hard failure. The

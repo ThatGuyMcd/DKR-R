@@ -1251,18 +1251,18 @@ int main() {
         std::memcpy(&value, rdram.data() + offset, 2U);
         return value;
     };
-    write_word(dkr::runtime::revision_addresses::CurrentMapId, 7U);
-    write_word(dkr::runtime::revision_addresses::NumberOfRacers, 1U);
-    write_word(dkr::runtime::revision_addresses::Racers, 0x80001000U);
+    write_word(dkr::runtime::revision_addresses::current().CurrentMapId, 7U);
+    write_word(dkr::runtime::revision_addresses::current().NumberOfRacers, 1U);
+    write_word(dkr::runtime::revision_addresses::current().Racers, 0x80001000U);
     write_word(0x80001000U, 0x80002000U);
     write_word(0x80002064U, 0x80003000U);
     write_word(0x8000200CU, 0x3F800000U);
     write_word(0x8000302CU, 0x41200000U);
     write_word(0x80003160U, 0x01020304U);
-    write_word(dkr::runtime::revision_addresses::CurrentRngSeed, 0x12345678U);
-    write_byte(dkr::runtime::revision_addresses::NumberOfGameplayPlayers, 2U);
-    write_byte(dkr::runtime::revision_addresses::PlayerIdMap, 3U);
-    write_byte(dkr::runtime::revision_addresses::PlayersCharacterArray, 6U);
+    write_word(dkr::runtime::revision_addresses::current().CurrentRngSeed, 0x12345678U);
+    write_byte(dkr::runtime::revision_addresses::current().NumberOfGameplayPlayers, 2U);
+    write_byte(dkr::runtime::revision_addresses::current().PlayerIdMap, 3U);
+    write_byte(dkr::runtime::revision_addresses::current().PlayersCharacterArray, 6U);
     std::vector<std::uint8_t> authority;
     assert(capture_authoritative_state(rdram.data(), rdram.size(), 42U, authority, error));
     assert(!authority.empty());
@@ -1271,10 +1271,10 @@ int main() {
     write_word(0x8000200CU, 0U);
     write_word(0x8000302CU, 0U);
     write_word(0x80003160U, 0U);
-    write_word(dkr::runtime::revision_addresses::CurrentRngSeed, 0U);
-    write_byte(dkr::runtime::revision_addresses::NumberOfGameplayPlayers, 0U);
-    write_byte(dkr::runtime::revision_addresses::PlayerIdMap, 0U);
-    write_byte(dkr::runtime::revision_addresses::PlayersCharacterArray, 0U);
+    write_word(dkr::runtime::revision_addresses::current().CurrentRngSeed, 0U);
+    write_byte(dkr::runtime::revision_addresses::current().NumberOfGameplayPlayers, 0U);
+    write_byte(dkr::runtime::revision_addresses::current().PlayerIdMap, 0U);
+    write_byte(dkr::runtime::revision_addresses::current().PlayersCharacterArray, 0U);
     assert(apply_authoritative_state(rdram.data(), rdram.size(), authority, 42U, error));
     assert(canonical_gameplay_state_hash(rdram.data(), rdram.size()) == authority_hash);
     std::uint32_t restored = 0U;
@@ -1284,11 +1284,12 @@ int main() {
     assert(restored == 0x41200000U);
     std::memcpy(&restored, rdram.data() + 0x3160U, 4U);
     assert(restored == 0x01020304U);
-    std::memcpy(&restored, rdram.data() + (dkr::runtime::revision_addresses::CurrentRngSeed & 0x1FFFFFFFU), 4U);
+    std::memcpy(&restored, rdram.data() + (dkr::runtime::revision_addresses::current().CurrentRngSeed & 0x1FFFFFFFU),
+                4U);
     assert(restored == 0x12345678U);
-    assert(rdram[(dkr::runtime::revision_addresses::NumberOfGameplayPlayers & 0x1FFFFFFFU) ^ 3U] == 2U);
-    assert(rdram[(dkr::runtime::revision_addresses::PlayerIdMap & 0x1FFFFFFFU) ^ 3U] == 3U);
-    assert(rdram[(dkr::runtime::revision_addresses::PlayersCharacterArray & 0x1FFFFFFFU) ^ 3U] == 6U);
+    assert(rdram[(dkr::runtime::revision_addresses::current().NumberOfGameplayPlayers & 0x1FFFFFFFU) ^ 3U] == 2U);
+    assert(rdram[(dkr::runtime::revision_addresses::current().PlayerIdMap & 0x1FFFFFFFU) ^ 3U] == 3U);
+    assert(rdram[(dkr::runtime::revision_addresses::current().PlayersCharacterArray & 0x1FFFFFFFU) ^ 3U] == 6U);
 
     // Plane presentation values are corrected by the host-v-local delta from
     // the same authored frame. This preserves all motion accumulated while a

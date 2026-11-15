@@ -3,12 +3,18 @@
 #include <span>
 #include <vector>
 namespace dkr::runtime::revision_addresses {
-inline constexpr std::uint32_t NumberOfLoadedTextures = 0x100;
-inline std::uint32_t CurrentMenuId = 0x108;
+// The residency header reads the selected table through current(). The stub's
+// table deliberately differs from kUsV80 in CurrentMenuId, so the header takes
+// its non-v80 branch.
 struct Addresses {
+    std::uint32_t NumberOfLoadedTextures;
     std::uint32_t CurrentMenuId;
 };
-inline constexpr Addresses kUsV80{0x10C};
+inline constexpr Addresses kUsV80{0x100, 0x10C};
+inline constexpr Addresses kStubTable{0x100, 0x108};
+inline const Addresses& current() {
+    return kStubTable;
+}
 } // namespace dkr::runtime::revision_addresses
 namespace dkr::runtime::water::enhanced {
 struct Memory {
