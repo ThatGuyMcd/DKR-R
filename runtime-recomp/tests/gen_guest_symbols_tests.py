@@ -18,6 +18,7 @@ sys.modules[SPEC.name] = gen_guest_symbols
 SPEC.loader.exec_module(gen_guest_symbols)
 
 GOLDEN = {
+    "behaviour_site_symbols.hpp": "0e201b44",
     "revision_symbols.hpp": "e93fe4af",
     "audio_queue_symbols.hpp": "069b742c",
     "display_list_symbols.hpp": "833f48e9",

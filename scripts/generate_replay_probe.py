@@ -635,7 +635,10 @@ INPUT_NATIVE_HASH = {
     # Oct 10: closed constant-load components and finite per-instance data;
     # immutable identities only. No memory instructions, new guest globals,
     # filesystem/network operations, or non-checkpointed interpreter state.
-    "runtime-recomp/src/game/mods/legacy_behaviour.cpp": "f5fd6fac497716550c5a40dba59346c0369bf9f28c4fe97c2e7df3f3cdf64d1d",
+    # Nov 16: the 17 patch site addresses are generated (function plus offset,
+    # symbols/behaviour_site_symbols.toml); the audited instruction words and
+    # replacements stay in this file and every address equals its old value.
+    "runtime-recomp/src/game/mods/legacy_behaviour.cpp": "b0e68e722dc9c421e9c1acbc9d27352e047ead6cedcb6a792cd1978eed811ac8",
     "runtime-recomp/src/game/mods/legacy_behaviour.hpp": "b5263d08404731789e779f7acbf627bf0c2f0d3eff49aebb6d32f28080c64614",
     "runtime-recomp/src/game/mods/legacy_runtime_character.cpp": "6c2dc43a80d66ce217a8d66a502282f82262cf8aebc72fd3c68129ec6da85e5b",
     "runtime-recomp/src/game/mods/legacy_character_roster.cpp": "cba46e095827e67e733377a75712af87b5b82bb0970df6db970ddeda61ee060c",
