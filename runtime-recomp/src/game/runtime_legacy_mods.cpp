@@ -1,3 +1,4 @@
+#include "display_list_symbols.hpp"
 #include "legacy_world_symbols.hpp"
 #include "guest_call_context.hpp"
 #include "primary_heap.h"
@@ -239,8 +240,8 @@ void course_budget(std::uint8_t* ram, bool install) {
     mods::CharacterMenuMemory guest({ram, guest_memory_size()}, fields);
     const auto assets = session.load();
     const bool rev80 = assets->boot_bank()->revision() == "us.v80";
-    const auto& world_symbols = dkr::runtime::legacy_world_symbols::for_revision(rev80);
-    const auto table = world_symbols.display_budgets, lists = world_symbols.display_lists;
+    const auto& display_symbols = dkr::runtime::display_list_symbols::for_revision(rev80);
+    const auto table = display_symbols.table, lists = display_symbols.lists;
     const auto wanted = mods::online::course_display_budgets(world.authored.get());
     // Section 22 is read at global initialization AND on every level load,
     // including the first INTRO background after display heaps exist. A

@@ -21,6 +21,7 @@ gen = importlib.util.module_from_spec(SPEC)
 sys.modules[SPEC.name] = gen
 SPEC.loader.exec_module(gen)
 GAME = "runtime-recomp/src/game/"
+DECOMP = ROOT / "extern/dkr-decomp/ver/symbols"
 
 # header -> (sources that must not spell the old literals any more, symbol -> (v77, v80))
 RECORDED = {
@@ -93,7 +94,7 @@ RECORDED = {
         },
     ),
     "capture_symbols.hpp": (
-        ["replay_probe_capture.cpp"],
+        ["replay_probe_capture.cpp", "custom_tracks_hooks.cpp"],
         {
             "gCharacterSelectBytesDefault": (0x800DFDD0, 0x800E0350),
             "gCharacterSelectBytesDrumStick": (0x800DFE40, 0x800E03C0),
@@ -106,8 +107,6 @@ RECORDED = {
     "legacy_world_symbols.hpp": (
         ["runtime_legacy_mods.cpp", "records_guest.inl"],
         {
-            "gNumF3dCmdsPerPlayer": (0x800DD3B0, 0x800DD920),
-            "gDisplayLists": (0x801211F0, 0x80121770),
             "gCharacterIdSlots": (0x801263F0, 0x80126990),
             "gSettingsPtr": (0x80123510, 0x80123A90),
         },
@@ -130,7 +129,21 @@ RECORDED = {
             "gModelCache": (0x8011D624, 0x8011DBA4),
         },
     ),
-    "memory_symbols.hpp": (["mods/legacy_memory_safety.h"], {"gMemoryPools": (0x80123580, 0x80123B00)}),
+    "display_list_symbols.hpp": (
+        ["custom_tracks_hooks.cpp", "runtime_legacy_mods.cpp"],
+        {
+            "gNumF3dCmdsPerPlayer": (0x800DD3B0, 0x800DD920),
+            "gPrevPlayerCount": (0x8012350C, 0x80123A8C),
+            "gCurrNumF3dCmdsPerPlayer": (0x80123528, 0x80123AA8),
+            "gDisplayLists": (0x801211F0, 0x80121770),
+        },
+    ),
+    "memory_symbols.hpp": (
+        ["custom_tracks_hooks.cpp", "mods/legacy_memory_safety.h"],
+        {"gMemoryPools": (0x80123580, 0x80123B00)},
+    ),
+    # The decomp symbol list, so these need extern/dkr-decomp.
+    "audio_queue_symbols.hpp": (["runtime_stubs.cpp"], {"__CSPPostNextSeqEvent": (0x800629CC, 0x80062C0C)}),
 }
 
 # header -> (symbol, offset, old v77, old v80): addresses the sources spelled that no
@@ -151,18 +164,29 @@ class MovedLiteralTests(unittest.TestCase):
         for header, (_, recorded) in RECORDED.items():
             self.assertIn(header, found)
             self.assertEqual(list(found[header].symbols), list(recorded), header)
-            self.assertEqual(found[header].table, "sdk", header)
+            self.assertIn(found[header].table, ("sdk", "decomp"), header)
 
     def test_every_symbol_resolves_to_its_old_value_in_both_revisions(self):
-        tables = {revision: gen.table("sdk", revision, ROOT) for revision in gen.REVISIONS}
+        found = requests()
         for header, (_, recorded) in RECORDED.items():
+            kind = found[header].table
+            if kind == "decomp" and not DECOMP.is_dir():
+                continue  # reported by test_decomp_requests_need_extern
+            tables = {revision: gen.table(kind, revision, ROOT) for revision in gen.REVISIONS}
             for symbol, (v77, v80) in recorded.items():
                 for revision, expected in (("77", v77), ("80", v80)):
                     self.assertEqual(tables[revision].get(symbol), [expected], f"{header} {symbol} v{revision}")
 
+    @unittest.skipUnless(DECOMP.is_dir(), "extern/dkr-decomp is not checked out; decomp requests skipped")
+    def test_decomp_requests_need_extern(self):
+        self.assertTrue(any(found.table == "decomp" for found in requests().values() if found.header in RECORDED))
+
     def test_the_generated_headers_carry_the_recorded_values(self):
-        headers = gen.generate([gen.SPECS / f"{Path(h).stem}.toml" for h in RECORDED])
+        wanted = [h for h in RECORDED if DECOMP.is_dir() or requests()[h].table == "sdk"]
+        headers = gen.generate([gen.SPECS / f"{Path(h).stem}.toml" for h in wanted])
         for header, (_, recorded) in RECORDED.items():
+            if header not in headers:
+                continue
             text = headers[header]
             for symbol, (v77, v80) in recorded.items():
                 for value in (v77, v80):

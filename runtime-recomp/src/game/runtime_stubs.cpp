@@ -1,3 +1,5 @@
+#include "audio_queue_symbols.hpp"
+#include "guest_call_context.hpp"
 #include "diagnostics.hpp"
 #include "recomp.h"
 
@@ -208,13 +210,14 @@ void ResetAudioEventGuards() {
 }
 
 void ResumeNativeSequence(void* user, std::uint8_t* rdram, std::uint32_t player) {
-    recomp_context next = *static_cast<recomp_context*>(user);
-    next.f_odd = next.mips3_float_mode ? &next.f1.u32l : &next.f0.u32h;
-    next.r4 = RdramAddress(player);
-    const std::uint32_t entry = dkr::runtime::revision_addresses::MusicPlayer == 0x800DC630U
-                                    ? 0x800629CCU
-                                    : 0x80062C0CU; // __CSPPostNextSeqEvent, checked retail maps.
-    get_function(static_cast<std::int32_t>(entry))(rdram, &next);
+    dkr::runtime::GuestCallContext next(*static_cast<recomp_context*>(user));
+    next->r4 = RdramAddress(player);
+    // __CSPPostNextSeqEvent, checked retail maps. MusicPlayer is the v77 value only in v77.
+    const std::uint32_t entry =
+        dkr::runtime::audio_queue_symbols::for_revision(dkr::runtime::revision_addresses::MusicPlayer !=
+                                                        dkr::runtime::revision_addresses::kUsV77.MusicPlayer)
+            .post_next_seq_event;
+    get_function(static_cast<std::int32_t>(entry))(rdram, next.get());
 }
 
 } // namespace
