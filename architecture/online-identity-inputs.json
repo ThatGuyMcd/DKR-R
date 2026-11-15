@@ -122,6 +122,9 @@
     "runtime-recomp/symbols/credits_sky_symbols.toml": "251b1726a5ed6851df51b1d792de72f4df0f344ee895e966dfe3457b25cbc70f",
     "runtime-recomp/symbols/detail_symbols.toml": "9f92da38d4e85278325bda85a51d9fa58ec0469da321f49ffbeaac91de52cc83",
     "runtime-recomp/symbols/display_list_symbols.toml": "ca298334140d074d1e40da0c2d9b369b268c96266ed566ce742d668aacf29929",
+    "runtime-recomp/symbols/enhancements_symbols.toml": "1288f1dd49ae5f5bbf966fa8fcba69f67bc8edfb8e1cd28cd5e7db52eec473ea",
+    "runtime-recomp/symbols/hud_layout_code_symbols.toml": "0b4b3b1ca57b14a58dced1a43d96b19308cf53dbe15258863566fd42a1d7756c",
+    "runtime-recomp/symbols/hud_layout_symbols.toml": "4fe06836aa97df68351cdb1db39f3b7bac1d79954be25be0becf5ebb41e2f1ba",
     "runtime-recomp/symbols/memory_symbols.toml": "b2d06573bfed607c9762bdcb0c7fb5a3cb37735965050cb0cc4f222460e7a9f8",
     "runtime-recomp/symbols/polish_symbols.toml": "ad5c563f3cc0e0bd44e4d2043563bd84ca294f6883b565c4613d3c1036b5d42a",
     "runtime-recomp/symbols/render_heap_addresses.toml": "0b8d0d2600cc38132800581eeedf8746ae25c1b3bcb37f85a22ec7e02a575230",
@@ -178,7 +181,7 @@
     "scripts/compose_payloads.py": "c662355843564ccd40759cb245de158888abae80baf59c7f309834897626ba68",
     "scripts/gen_guest_symbols.py": "52ac0b14f1893278011f04267858b6f40140e79e8a96e18a552e70f0c3315fbc",
     "scripts/generate_recomp_config.py": "444874a216c9011e6f196aa0a1269594517afcdea5fb3763196e092d99bfc473",
-    "scripts/generate_replay_probe.py": "4b91645fb880649e4639582eb25ff11004293ff787cee5374e7f6d7a27514323",
+    "scripts/generate_replay_probe.py": "3bc36e17f9c0d822091bd9d9a6fe440973dd4d23c897343665a2d737ef3b5036",
     "scripts/generate_revision_policy.py": "bafbefad41542e00b6c5ec13b02acde69dda7f48e34025f46d92d028da6427b9",
     "scripts/guest_hooks.py": "4058af2139c1211c2db79c8748734c2c1f231ec6168e964166d90c83bb48c6cc",
     "scripts/host_task_policy.py": "aa28c9bcd8110d0ef16b2f6dfde7ec51b8767578f46d3bc5371f197efb016f78",
@@ -201,6 +204,6 @@
   },
   "last_update": {
     "identity_changed": false,
-    "reason": "Add revision_addresses::current() and its atomic table pointer; the pinned file only gained an accessor, no address or simulation change. gen_guest_symbols.py typed for pyright, output unchanged"
+    "reason": "HUD layout and enhancement guest addresses moved onto generated symbol tables; values and behaviour unchanged"
   }
 }

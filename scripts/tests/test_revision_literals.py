@@ -104,6 +104,25 @@ RECORDED = {
             "gGameNumPlayers": (0x80123500, 0x80123A80),
         },
     ),
+    "enhancements_symbols.hpp": (
+        ["runtime_enhancements.cpp"],
+        {
+            "gSceneCurrentPlayerID": (0x8011B0B4, 0x8011B634),
+            "gScenePlayerViewports": (0x8011D37C, 0x8011D8FC),
+        },
+    ),
+    "hud_layout_symbols.hpp": (
+        ["runtime_hud_layout.cpp"],
+        {
+            "gViewportLayout": (0x80120CE0, 0x80121260),
+            "gPrevPlayerCount": (0x8012350C, 0x80123A8C),
+            "gCurrDisplayList": (0x801211F8, 0x80121778),
+            "gGameCurrTriList": (0x80121228, 0x801217A8),
+            "gHudOffsetX": (0x80126D24, 0x801272E4),
+            "gDialogueBoxBackground": (0x8012A7E8, 0x8012ADA8),
+            "gTimeTrialEnabled": (0x8011AEF4, 0x8011B474),
+        },
+    ),
     "display_list_symbols.hpp": (
         ["custom_tracks_hooks.cpp"],
         {
@@ -116,6 +135,34 @@ RECORDED = {
     "memory_symbols.hpp": (["custom_tracks_hooks.cpp"], {"gMemoryPools": (0x80123580, 0x80123B00)}),
     # The decomp symbol list, so these need extern/dkr-decomp.
     "audio_queue_symbols.hpp": (["runtime_stubs.cpp"], {"__CSPPostNextSeqEvent": (0x800629CC, 0x80062C0C)}),
+}
+
+
+# Call sites the HUD layout recognises by return address: decomp function symbol
+# -> {revision: [(offset spelled in the source, old absolute address)]}.
+RECORDED_CALL_SITES = {
+    "hud_main_time_trial": {
+        "77": [
+            (0xDD4, 0x800A3550),
+            (0xE10, 0x800A358C),
+            (0xE4C, 0x800A35C8),
+            (0xEA4, 0x800A3620),
+            (0xEDC, 0x800A3658),
+            (0xF14, 0x800A3690),
+        ],
+        "80": [
+            (0xDDC, 0x800A3A98),
+            (0xE18, 0x800A3AD4),
+            (0xE54, 0x800A3B10),
+            (0xEAC, 0x800A3B68),
+            (0xEE4, 0x800A3BA0),
+            (0xF1C, 0x800A3BD8),
+        ],
+    },
+    "hud_finish_position": {
+        "77": [(0x174, 0x800A608C), (0x250, 0x800A6168), (0x32C, 0x800A6244)],
+        "80": [(0x174, 0x800A65D4), (0x250, 0x800A66B0), (0x32C, 0x800A678C)],
+    },
 }
 
 
@@ -164,6 +211,18 @@ class MovedLiteralTests(unittest.TestCase):
                 text = (ROOT / GAME / source).read_text(encoding="utf-8")
                 spelled = {int(m.group(1), 16) for m in re.finditer(r"0[xX](80[0-9A-Fa-f]{6})U?\b", text)}
                 self.assertEqual(spelled & old, set(), f"{source} still carries {header} literals")
+
+    @unittest.skipUnless(DECOMP.is_dir(), "extern/dkr-decomp is not checked out; call site check skipped")
+    def test_hud_call_sites_are_the_function_plus_the_recorded_offset(self):
+        source = (ROOT / GAME / "runtime_hud_layout.cpp").read_text(encoding="utf-8")
+        for symbol, revisions in RECORDED_CALL_SITES.items():
+            for revision, sites in revisions.items():
+                base = gen.table("decomp", revision, ROOT)[symbol]
+                self.assertEqual(len(base), 1, symbol)
+                for offset, absolute in sites:
+                    self.assertEqual(base[0] + offset, absolute, f"{symbol}+{offset:#x} v{revision}")
+                    self.assertIn(f"0x{offset:X}", source, f"{symbol}+{offset:#x}")
+                    self.assertNotIn(f"0x{absolute:08X}", source.upper().replace("0X", "0x"), f"{absolute:#x}")
 
 
 if __name__ == "__main__":
