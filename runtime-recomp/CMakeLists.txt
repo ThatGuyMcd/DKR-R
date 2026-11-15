@@ -3211,6 +3211,7 @@ if(BUILD_TESTING)
                 "${DKR_RT64_SOURCE}/src/contrib"
                 "${DKR_DEPENDENCIES_DIR}/n64-modern-runtime/N64Recomp/include"
         )
+        dkr_guest_symbols(DKRCustomTracksRuntimeTests)
         add_test(NAME DKRCustomTracksRuntime COMMAND DKRCustomTracksRuntimeTests)
         add_executable(
             DKRCustomTracksGuestTests
@@ -3225,6 +3226,7 @@ if(BUILD_TESTING)
             DKRCustomTracksGuestTests
             PRIVATE "${CMAKE_CURRENT_LIST_DIR}/src/game" "${DKR_RT64_SOURCE}/src/contrib" "${DKR_RECOMP_SOURCE}/include"
         )
+        dkr_guest_symbols(DKRCustomTracksGuestTests)
         add_test(NAME DKRCustomTracksGuest COMMAND DKRCustomTracksGuestTests)
         add_executable(
             DKRCustomMusicRuntimeTests
@@ -3251,6 +3253,7 @@ if(BUILD_TESTING)
         )
         find_package(Threads REQUIRED)
         target_link_libraries(DKRCustomMusicRuntimeTests PRIVATE Threads::Threads)
+        dkr_guest_symbols(DKRCustomMusicRuntimeTests)
         add_test(NAME DKRCustomMusicRuntime COMMAND DKRCustomMusicRuntimeTests)
     endif()
     add_executable(DKRPresentationMarkerPolicyTests tests/presentation_marker_policy_tests.cpp)

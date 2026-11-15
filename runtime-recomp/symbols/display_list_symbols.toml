@@ -1,0 +1,21 @@
+# thread3_main.c's display list globals the track budget reads
+# (custom_tracks_hooks.cpp).
+schema = 1
+header = "display_list_symbols.hpp"
+table = "sdk"
+hex = "upper"
+symbols = [
+  "gNumF3dCmdsPerPlayer",
+  "gPrevPlayerCount",
+  "gCurrNumF3dCmdsPerPlayer",
+  "gDisplayLists",
+]
+template = '''#pragma once
+#include <cstdint>
+namespace dkr::runtime::display_list_symbols {
+struct Symbols {std::uint32_t table;std::uint32_t previous_players;std::uint32_t current_commands;std::uint32_t lists;};
+inline constexpr Symbols symbols77{@ALL:77@};
+inline constexpr Symbols symbols80{@ALL:80@};
+inline constexpr const Symbols& for_revision(bool us_v80) { return us_v80 ? symbols80 : symbols77; }
+}
+'''
