@@ -1,3 +1,4 @@
+#include "guest_call_context.hpp"
 #include "rollback_policy.hpp"
 #include "runtime_netplay.hpp"
 #if defined(DKR_REPLAY_QUALIFICATION) || defined(DKR_EXPERIMENTAL_RACE_TEST)
@@ -980,19 +981,19 @@ void refresh_input_vehicle_context(std::uint8_t* rdram, const RuntimeSessionView
 gpr call_payload_query(RecompiledEntrypoint function, std::uint8_t* rdram, const recomp_context& source) {
     if (function == nullptr || rdram == nullptr)
         return 0;
-    recomp_context call = source;
-    function(rdram, &call);
-    return call.r2;
+    dkr::runtime::GuestCallContext call(source);
+    function(rdram, call.get());
+    return call->r2;
 }
 
 gpr call_payload_query_with_argument(RecompiledEntrypoint function, std::uint8_t* rdram, const recomp_context& source,
                                      gpr argument) {
     if (function == nullptr || rdram == nullptr)
         return 0;
-    recomp_context call = source;
-    call.r4 = argument;
-    function(rdram, &call);
-    return call.r2;
+    dkr::runtime::GuestCallContext call(source);
+    call->r4 = argument;
+    function(rdram, call.get());
+    return call->r2;
 }
 
 PackedInput poll_authored_local_input(const RuntimeSessionView& view) {
