@@ -71,7 +71,8 @@ void report_mod_error(std::string error);
 void report_online_game_end(std::string message, bool lobby_retained);
 #if defined(DKR_EXPERIMENTAL_RACE_TEST)
 // Isolated diagnostic entry: same manifest/save/host actions as the real UI.
-bool configure_owned_online_check(const rom::Identity& identity, bool host, unsigned players, std::string& error);
+bool configure_owned_online_check(const rom::Identity& identity, const std::filesystem::path& rom, bool host,
+                                  unsigned players, std::string& error);
 #endif
 
 } // namespace dkr::runtime::ui

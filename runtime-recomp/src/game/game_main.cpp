@@ -923,7 +923,7 @@ int DkrMain(int argc, char** argv) {
 #if defined(DKR_EXPERIMENTAL_RACE_TEST)
     if (owned_check) {
         auto& online = dkr::runtime::netplay::session();
-        if (!dkr::runtime::ui::configure_owned_online_check(rom_identity, launch.owned_check_host,
+        if (!dkr::runtime::ui::configure_owned_online_check(rom_identity, rom_path, launch.owned_check_host,
                                                             launch.owned_check_players, rom_error)) {
             std::fprintf(stderr, "[rollback][check] %s\n", rom_error.c_str());
             dkr::runtime::platform::shutdown();
