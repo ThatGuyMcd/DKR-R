@@ -108,7 +108,7 @@ What you will see if the two sides disagree, on every machine in the lobby:
 
 ```text
 [party][desync] epoch=92 frame=1500 local=217D59FBE74B7E2A remote=217D593B18A520C7 peer=3288762986889906221
-[rollback][failure] Rollback determinism failed at simulation frame 1500.
+[party][failure] Rollback determinism failed at simulation frame 1500.
 ```
 
 `local` is this machine's hash and `remote` the other side's, for the first
