@@ -1914,9 +1914,9 @@ bool LoadPlayerBindingSetting(const std::string& key, int number) {
             if (keyboard) {
                 dkr::runtime::input::set_keyboard_binding(player, action, number);
             } else if (controller_secondary) {
-                dkr::runtime::input::set_secondary_controller_binding(player, action, number);
+                dkr::runtime::input::restore_secondary_controller_binding(player, action, number);
             } else {
-                dkr::runtime::input::set_controller_binding(player, action, number);
+                dkr::runtime::input::restore_controller_binding(player, action, number);
             }
             return true;
         }
