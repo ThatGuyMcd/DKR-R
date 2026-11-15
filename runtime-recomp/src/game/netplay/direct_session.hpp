@@ -32,6 +32,10 @@
 #include <unordered_set>
 #include <vector>
 
+namespace dkr::runtime::rollback_check {
+struct Context;
+}
+
 namespace dkr::runtime::netplay {
 
 enum class ConnectionState : std::uint8_t {
@@ -618,6 +622,30 @@ class DirectSession final {
     bool send_join_request();
     void broadcast(protocol::MessageType type, std::span<const std::uint8_t> payload, std::uint32_t frame = 0U);
     void pump_locked();
+    // Lock order for the rollback connection check, as it actually is:
+    //   mutex_ -> PartyLink::mutex                 (rollback_context_locked,
+    //                                               rollback_send_locked)
+    //   mutex_ -> rollback_check state mutex       (request, service, receive)
+    //   rollback_check state mutex -> PartyLink::mutex
+    //       (service and receive call rollback_send_locked as their Send
+    //        callback while holding the check mutex)
+    //   PartyLink::mutex -> rollback_check state mutex
+    //       (rollback_check::active, called with the party lock held from
+    //        approve_join_locked, handle_join_request and the owner pump)
+    // The last two are opposite orders. They cannot deadlock only because every
+    // path that reaches either one already holds mutex_, which serializes them:
+    // pump_locked (network_loop, and disconnect's leave grace loop),
+    // approve_join_locked (approve_join, complete_mod_admission and the pump),
+    // and handle_join_request (the pump). Nothing outside mutex_ takes the party
+    // lock and then calls into rollback_check; the UI thread's
+    // rollback_check::snapshot takes only the check mutex. New callers of
+    // rollback_check that hold PartyLink::mutex, or that run without mutex_,
+    // break this argument.
+    //
+    // Requires mutex_ held by the caller.
+    dkr::runtime::rollback_check::Context rollback_context_locked();
+    // Requires mutex_ held by the caller. Takes PartyLink::mutex.
+    bool rollback_send_locked(std::uint64_t target, protocol::MessageType type, std::span<const std::uint8_t> payload);
     void network_loop();
     void queue_diagnostics_locked(std::string_view reason = {});
     void flush_outbound_locked();
