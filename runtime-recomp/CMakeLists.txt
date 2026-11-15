@@ -59,6 +59,7 @@ endif()
 include(CTest)
 include(cmake/ProjectTests.cmake)
 include(cmake/SourceRoots.cmake)
+include(cmake/SimulationFlags.cmake)
 include(cmake/Localisation.cmake)
 dkr_add_localisation()
 
@@ -1247,7 +1248,7 @@ if(DKR_RUNTIME_BUILD_GENERATED OR DKR_RUNTIME_BUILD_RT64)
         set_property(
             SOURCE src/game/camera_obstruction.cpp tests/replay_probe/probe_native.c
             APPEND
-            PROPERTY COMPILE_OPTIONS -ffp-contract=off
+            PROPERTY COMPILE_OPTIONS -ffp-contract=off ${DKR_SIMULATION_WRAP_OPTIONS}
         )
     endif()
     if(APPLE AND NOT IOS AND DKR_RUNTIME_BUILD_RT64)
@@ -3584,6 +3585,14 @@ if(BUILD_TESTING)
         PRIVATE "${CMAKE_CURRENT_LIST_DIR}/src/game" "${DKR_MODERN_RUNTIME_SOURCE}/N64Recomp/include"
     )
     add_test(NAME DKRLiveFov COMMAND DKRLiveFovTests)
+
+    add_executable(DKRGuestCallContextTests tests/guest_call_context_tests.cpp)
+    target_compile_features(DKRGuestCallContextTests PRIVATE cxx_std_20)
+    target_include_directories(
+        DKRGuestCallContextTests
+        PRIVATE "${CMAKE_CURRENT_LIST_DIR}/src/game" "${DKR_MODERN_RUNTIME_SOURCE}/N64Recomp/include"
+    )
+    add_test(NAME DKRGuestCallContext COMMAND DKRGuestCallContextTests)
 
     add_executable(DKRDirectoryLifecycleTests tests/directory_lifecycle_tests.cpp)
     target_compile_features(DKRDirectoryLifecycleTests PRIVATE cxx_std_20)

@@ -253,6 +253,12 @@ as riscv64 and ppc64le did until an undefined-behaviour bug in a code path
 no other architecture compiles was fixed. Build the probe with
 `-fsanitize=signed-integer-overflow,shift` once and read what it reports.
 
+The simulation sources are built with `-fwrapv` on GCC and Clang
+(`cmake/SimulationFlags.cmake`), so signed overflow wraps instead of being
+undefined. That removes one class of divergence that depends on the
+optimiser; it does not replace the check below. MSVC has no such switch and
+does not get one.
+
 Then check that the promise actually holds on the new hardware, below. It
 takes two machines and about an hour, and it is the only way to find a
 compiler or libm that rounds differently.

@@ -74,6 +74,7 @@ function(dkr_camera_scene_kernel target revision)
                 -ffp-contract=off
                 -fno-fast-math
                 -frounding-math
+                ${DKR_SIMULATION_WRAP_OPTIONS}
                 -Werror=implicit-function-declaration
         )
         target_link_libraries(${target} PRIVATE m)
