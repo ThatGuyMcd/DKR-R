@@ -3340,6 +3340,7 @@ if(BUILD_TESTING)
         DKRStartupFlowGuestTests
         PRIVATE "${CMAKE_CURRENT_LIST_DIR}/src/game" "${DKR_MODERN_RUNTIME_SOURCE}/N64Recomp/include"
     )
+    dkr_guest_symbols(DKRStartupFlowGuestTests)
     add_test(NAME DKRStartupFlowGuest COMMAND DKRStartupFlowGuestTests)
     # Explicit for the current tree, also compatible with main's centralized
     # assertion policy (which covers these new targets automatically).

@@ -1,0 +1,23 @@
+# Character select and player count state the private replay fixture capture
+# sets up (replay_probe_capture.cpp).
+schema = 1
+header = "capture_symbols.hpp"
+table = "sdk"
+hex = "upper"
+symbols = [
+  "gCharacterSelectBytesDefault",
+  "gCharacterSelectBytesDrumStick",
+  "gCharacterSelectBytesTT",
+  "gCharacterSelectBytesComplete",
+  "gCurrCharacterSelectData",
+  "gGameNumPlayers",
+]
+template = '''#pragma once
+#include <cstdint>
+namespace dkr::runtime::capture_symbols {
+struct Symbols {std::uint32_t tables[4];std::uint32_t select_data;std::uint32_t game_players;};
+inline constexpr Symbols symbols77{{@gCharacterSelectBytesDefault:77@,@gCharacterSelectBytesDrumStick:77@,@gCharacterSelectBytesTT:77@,@gCharacterSelectBytesComplete:77@},@gCurrCharacterSelectData:77@,@gGameNumPlayers:77@};
+inline constexpr Symbols symbols80{{@gCharacterSelectBytesDefault:80@,@gCharacterSelectBytesDrumStick:80@,@gCharacterSelectBytesTT:80@,@gCharacterSelectBytesComplete:80@},@gCurrCharacterSelectData:80@,@gGameNumPlayers:80@};
+inline constexpr const Symbols& for_revision(bool us_v80) { return us_v80 ? symbols80 : symbols77; }
+}
+'''

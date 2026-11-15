@@ -75,6 +75,34 @@ RECORDED = {
             "gVoidVertCount": (0x8011D4B6, 0x8011DA36),
         },
     ),
+    "startup_symbols.hpp": (
+        ["startup_flow.cpp"],
+        {
+            "sMusicDelayTimer": (0x80115D38, 0x801162B8),
+            "sMusicDelayLength": (0x80115D3C, 0x801162BC),
+            "sMusicFadeVolume": (0x800DC650, 0x800DCBC0),
+            "sBootScreenTimer": (0x80126450, 0x801269F0),
+        },
+    ),
+    "detail_symbols.hpp": (
+        ["detail_observer.inl"],
+        {
+            "gObjectCurrDisplayList": (0x8011AE8C, 0x8011B40C),
+            "gSceneCurrentPlayerID": (0x8011B0B4, 0x8011B634),
+            "gCurrentLightIntensity": (0x8011AD30, 0x8011B2B0),
+        },
+    ),
+    "capture_symbols.hpp": (
+        ["replay_probe_capture.cpp"],
+        {
+            "gCharacterSelectBytesDefault": (0x800DFDD0, 0x800E0350),
+            "gCharacterSelectBytesDrumStick": (0x800DFE40, 0x800E03C0),
+            "gCharacterSelectBytesTT": (0x800DFEC0, 0x800E0440),
+            "gCharacterSelectBytesComplete": (0x800DFF40, 0x800E04C0),
+            "gCurrCharacterSelectData": (0x801263CC, 0x8012696C),
+            "gGameNumPlayers": (0x80123500, 0x80123A80),
+        },
+    ),
 }
 
 
