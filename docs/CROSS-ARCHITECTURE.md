@@ -198,6 +198,7 @@ state check on. Recorded 15 November 2026. Every hash was equal in every run.
 | 80 ms delay, 15 ms jitter, every 50th packet dropped, 180 s, hash every frame, each machine hosting | 5346 and 5342 |
 | A mod that changes race state on both sides (`DKR_OWNED_CHECK_MODS`), each machine hosting | 118 each |
 | The first track of the other three worlds (`DKR_OWNED_CHECK_TRACK`): hovercraft, plane, hovercraft; v77 and v80 | 108 or 109 each |
+| The Rollback connection check in the full lobby first (`DKR_OWNED_CHECK_CONNECTION_TEST=1`), party and classic lobby, each machine hosting | 147 or 148 each |
 
 A peer told to report a wrong hash (`DKR_OWNED_CHECK_CORRUPT_STATE_AT=1500`)
 stopped both machines at frame 1500, with either machine hosting.
