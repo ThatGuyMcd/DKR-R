@@ -135,6 +135,8 @@ anything in a self-test run.
 | `DKR_OWNED_CHECK_RECEIVE_MS=<n>` | Delay what this peer receives by `n` ms, with 15 ms of jitter. |
 | `DKR_OWNED_CHECK_WATCH=1` | On a joiner: join as a spectator, not a racer. |
 | `DKR_OWNED_CHECK_STATE_EVERY=<n>` | Log `[check][state]` every `n` confirmed frames (1 to 100, default 30). 1 is every frame. |
+| `DKR_OWNED_CHECK_VERIFY=1` | Turn on the live state cross-check (`docs/CROSS-ARCHITECTURE.md`) even though every peer is on one architecture. Set it on every peer, all of which must be builds that have the check. |
+| `DKR_OWNED_CHECK_CORRUPT_STATE_AT=<frame>` | This peer reports a wrong state hash for the first sampled frame at or after `frame`, so the check's stop shows up on every peer. Needs the check on. |
 
 Two peers on one machine have almost no latency between them, so a plain run
 never exercises late inputs. Use the delivery or receive delay when that is

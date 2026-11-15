@@ -57,6 +57,48 @@ launch. The host cancels the start after 30 seconds. Releases cannot join
 each other at all, so this only happens between development builds and the
 release they are based on.
 
+## Live state check
+
+Admission is a promise, so a lobby that spans architectures also checks it
+while it runs. The host puts the architecture-free launch hash in the launch
+only when a peer from another architecture was admitted, and every racer in
+such a lobby then runs the check (`lobby_spans_architectures`,
+`netplay/state_cross_check.hpp`):
+
+- Every 30 confirmed frames each racer takes the hash saved with that
+  frame's retained checkpoint (the value the self-test prints as
+  `[check][state]`, hashed once) and sends `(epoch, frame, hash)` to the host.
+  The host compares every report with its own hash of the same frame.
+- A mismatch stops the race for everyone. The host logs
+  `[party][desync] epoch= frame= local= remote= peer=`, records a
+  `rollback-desync` event (both hashes and the peer are in its detail), tells
+  the racers, and fails with "Rollback determinism failed at simulation frame N."
+  Each racer logs the same line and stops with the same message. There is no
+  resync attempt.
+- A peer that stops reporting is only unverified: the host logs
+  `[party][desync-check] peer=... is not reporting state hashes` once and the
+  race goes on. Nothing waits for a report.
+- Bounds: one 20 byte message per racer per 30 frames; the host keeps at most
+  16 sampled frames; reports that are off the cadence, from anyone who is not
+  a racer, repeat a frame with a different hash, or are older than everything
+  kept are dropped and change nothing.
+
+Nothing new is sent anywhere else. The check is off unless the launch hash is
+the architecture-free form, so a lobby on one architecture sends exactly what
+it always did, including to a build that predates this. `StateHash` and
+`Desync` are new party message types (appended after `InputReceipt`);
+`PartyRuntime::message` ignores a type it does not know, so even a stray one
+would be dropped by an older build. Because only builds with the check can be in a
+lobby launched with the architecture-free hash, neither type reaches one that
+lacks it. A racer that joins a spanning lobby late (its frame count does not
+line up with the 30 frame cadence) is simply not verified.
+
+For testing, `DKR_OWNED_CHECK_VERIFY=1` forces the check on in a one
+architecture self-test lobby (every peer must be a build with the check and set
+it) and `DKR_OWNED_CHECK_CORRUPT_STATE_AT=<frame>` makes that peer report a
+wrong hash for the first sampled frame at or after it. Both only work in
+`--self-test-owned-*` runs.
+
 ## Evidence
 
 The contract is a claim. This is what has been checked so far, and the same
