@@ -46,7 +46,17 @@ PRE_COMMIT_INTEGRATION = "DKR_PRE_COMMIT_INTEGRATION"
 NEEDS_EXTERN = {
     "android_startup_contract_tests.py": ("extern/n64-modern-runtime", "extern/rt64"),
     "live_lod_pipeline_tests.py": ("extern/rt64",),
+    # Also needs the generated v77/v80 sources scripts/prepare_payloads.py leaves in build/generated.
+    "test_generator.py": (
+        "extern/dkr-decomp",
+        "extern/n64-modern-runtime",
+        "build/generated/v77/RecompiledFuncs",
+        "build/generated/v80/RecompiledFuncs",
+    ),
 }
+# The replay probe generator's own tests: they ride in the tooling suite when their inputs exist.
+# CTest runs the same file as ReplayProbePipelineControlFlow.
+REPLAY_PROBE_TEST = "runtime-recomp/tests/replay_probe/test_generator.py"
 
 
 def missing_checkout(test: str) -> str | None:
@@ -95,6 +105,7 @@ def main(argv=None) -> int:
         "tooling": [
             *([sys.executable, f"runtime-recomp/tests/{test}"] for test in TOOLING_TESTS),
             *([sys.executable, f"scripts/tests/{test}"] for test in SCRIPT_TESTS),
+            [sys.executable, REPLAY_PROBE_TEST],
         ],
         "host-tools": [
             [sys.executable, f"runtime-recomp/tests/{test}"]
@@ -108,13 +119,15 @@ def main(argv=None) -> int:
         for command in commands[suite]:
             absent = missing_checkout(Path(command[-1]).name) if suite == "tooling" else None
             if absent:
-                print(f"[{suite}] skip {command[-1]}: {absent} is not checked out", flush=True)
+                print(f"[{suite}] skip {command[-1]}: {absent} is missing", flush=True)
                 continue
             print(f"[{suite}] {' '.join(command[1:])}", flush=True)
             if args.list:
                 continue
             try:
                 environment = {**os.environ, PRE_COMMIT_INTEGRATION: "1"} if suite == "host-tools" else None
+                if command[-1] == REPLAY_PROBE_TEST:
+                    environment = {"DKR_TEST_GENERATED_ROOT": str(ROOT / "build/generated"), **os.environ}
                 result = subprocess.run(command, cwd=ROOT, env=environment)
             except OSError as error:
                 print(f"Could not run {command[1]}: {error}", file=sys.stderr)
