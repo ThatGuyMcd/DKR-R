@@ -1,4 +1,5 @@
 {
+  "schema": 2,
   "globs": [
     "runtime-recomp/dkr.us.v*.recomp-policy.json",
     "runtime-recomp/*.recomp-fragment.json",
@@ -35,172 +36,657 @@
   ],
   "identity": "b99263cde8f62ec6c20d12913a1bed2356d9a789df262a07160ab434f4ddc428",
   "inputs": {
-    "modding/reference-us-v77/game_symbols.inc": "8051c44ebda26973ab921d71e90cd15f44d6b93ce00f0fb2fac80253b20dbcb5",
-    "modding/reference-us-v80/game_symbols.inc": "526dc2ba1e8ac8f9bec051df50171a645895eda6623f4de7f8bad7dbf11e5fdc",
-    "patches/n64recomp/0001-fix-high-vram-entrypoint-comparison.patch": "a3a60874019e1118453cfe9030b071ac22eb1fea41ea7b81b4a8d50e56bd3967",
-    "patches/n64recomp/0002-name-recomp-context-struct.patch": "6cf31eebf6a5f0a9a31c2912f562f8ef977c0a43dfffd76531f3ceb94ae2bee7",
-    "patches/n64recomp/0003-null-statement-before-instruction-hooks.patch": "f864ffd285ff4b09f2a3f4e453e5f0e5b2c39e345bc05dd88f47a46b01d3dac7",
-    "runtime-recomp/dkr.us.v77.recomp-policy.json": "c4deefd55aca1dc1af1391a86d5df366624dabed2827a0fab055e8ffad8cd702",
-    "runtime-recomp/dkr.us.v80.recomp-policy.json": "b8a89ed014f6e6a7f1113adf72fe8c92b1f8cf8323ac4c35de00a258c28adb9b",
-    "runtime-recomp/guest-hooks/hooks.toml": "c4a62b6598c1ab9a01f18bc3dc110c181a72ed97eb59797f3612a92d731e441e",
-    "runtime-recomp/legacy-character-menu.v77.recomp-fragment.json": "82db39e16f1e30eff1851d74eaf443cd962a2b65517d95f531f4cc0924357ce0",
-    "runtime-recomp/legacy-character-menu.v80.recomp-fragment.json": "36a304eca1e8e889216e931b52a1838b993261bb16e39c2372731b8dad6afb90",
-    "runtime-recomp/legacy-characters.v77.recomp-fragment.json": "bf7c193ef8c7c3737720da9bec4c8c9fe4e2eb13b92d2b8b50e68ebba7f93274",
-    "runtime-recomp/legacy-characters.v80.recomp-fragment.json": "cb5e12f5a5efd7fa57e247bb6fa71ab96c7216a0bfbf4ae42442d128b7b83ec6",
-    "runtime-recomp/legacy-mods.v77.recomp-fragment.json": "c944638839037068d2f7ab228a7b06831bbe6013e1826f15c25ffab99e6cde34",
-    "runtime-recomp/legacy-mods.v80.recomp-fragment.json": "22016347ac1015facc050ae6942fd5420f36069a03dbed7dedcf1282a19b0da9",
-    "runtime-recomp/legacy-track-menu.v77.recomp-fragment.json": "1caeb1d0073c8a23c135410aa00966b40040afdbe19a8addd58903c70ed73ac3",
-    "runtime-recomp/legacy-track-menu.v80.recomp-fragment.json": "12771f47ad1089df8eeac92bb030109a48ea08da061f4563298802ab7e19a196",
-    "runtime-recomp/src/game/camera_clearance_metadata.h": "d875faf298b7be83ffb04e342ef205ad4474f7f3ccdd0d9d01022cfe6dc0626e",
-    "runtime-recomp/src/game/camera_clearance_policy.hpp": "f4694a479b492beb9e329e80e797ae9223943d80b3791f66acaa7664663728a1",
-    "runtime-recomp/src/game/camera_obstruction_guest.h": "8e191e32fc5c12e117d4393182fe53ca094f417dadce68be4f9afaf478f0456b",
-    "runtime-recomp/src/game/camera_obstruction_math.h": "372fde22433d98410bb92910d09172bd2cb5dc65d75b21708eecf548f9f346ce",
-    "runtime-recomp/src/game/netplay/experimental_admission_contract.hpp": "4cde5e43fc3307fac753453c65061dbdf434e61d76b5991b530547103470a601",
-    "runtime-recomp/src/game/netplay/experimental_arguments.hpp": "e8a612f50285e00c31b65137014a7d64189b9c58af4a1cce353beedec18550ab",
-    "runtime-recomp/src/game/netplay/experimental_checkpoint_hash.cpp": "7ea4b52af28b400534cc8f3389daaa394ab0fc52bda3ebed9171be44e87d51e0",
-    "runtime-recomp/src/game/netplay/experimental_checkpoint_hash.hpp": "0fc25164c756f4e3a992412e8f6ede4d0ad6480754ac86caa59f5570b5e02220",
-    "runtime-recomp/src/game/netplay/experimental_confirmed_output.hpp": "9ba83e1300662bb4b27076c8d1d031a7410c6a96bfdac78e8807ea3b3fd5b271",
-    "runtime-recomp/src/game/netplay/experimental_draw_events.h": "6bb3ad6213c323084e27a95022443614b603f6e67d55113e08b789b066bc6b1b",
-    "runtime-recomp/src/game/netplay/experimental_eeprom.cpp": "8d63623c2e36726da9bbc5c1fcd73da47a85b6fc461b9e7f4c479e89caec27a2",
-    "runtime-recomp/src/game/netplay/experimental_eeprom.hpp": "61bf3654d994b11f57e12488e95ecf3e686dd49ef90a13f23a55947c0142a40c",
-    "runtime-recomp/src/game/netplay/experimental_effect_envelope.hpp": "bb0c8090bf6e76bf371a316e8a9a093431acec0e2767872a6a2c682cc3877a0b",
-    "runtime-recomp/src/game/netplay/experimental_epoch.cpp": "09746eb29a448551bb0e11add43e89fe3b4c98ae2ec151c99e2306aac3224d99",
-    "runtime-recomp/src/game/netplay/experimental_epoch.hpp": "b7a27bd2f58de94426d1a2606edaf8de966f8477c7b2d235edbf2acd4b09bfd1",
-    "runtime-recomp/src/game/netplay/experimental_guest_memory.h": "220a8bc6ded1ee071cac40c62704a2c48fc1735b3d73c2127f81ee35bb25eea6",
-    "runtime-recomp/src/game/netplay/experimental_latency.hpp": "7dcb6ca80b23a4cf0443733aa1458820076e46b49ceb38e12b0c41235d8fb309",
-    "runtime-recomp/src/game/netplay/experimental_launch.cpp": "cc7b897716753c81c01c36e7c1537b3c47a2bca8b8daedb047dbcd813bdf924c",
-    "runtime-recomp/src/game/netplay/experimental_launch.hpp": "df8fa9b3f7cc26ede16f96f3773a36c43b3c0b7496f3c89eb496e8d8bbae521b",
-    "runtime-recomp/src/game/netplay/experimental_lobby_admission.cpp": "edfab6ff205f5197577003a41fc582e63970cff61f135e67b2e8e39dd7f87ed0",
-    "runtime-recomp/src/game/netplay/experimental_lobby_admission.hpp": "b7aefa33684c133c54a843a7687844f91d44b8d7450b839544d05f4fa19acc24",
-    "runtime-recomp/src/game/netplay/experimental_magic_codes.cpp": "08c266a82d163b38b920e640e77a5a7eab32a30f2603d87f894b917995b40fa2",
-    "runtime-recomp/src/game/netplay/experimental_magic_codes.hpp": "77d96c9e6b8efcb6ae50248ed81dc7769a5f41c035bed452b7ca5c7a0f03fd9f",
-    "runtime-recomp/src/game/netplay/experimental_network.cpp": "c4878043f3318ce48031a47e6a1f641135d917d71387b1ce20f533b1c5dfa191",
-    "runtime-recomp/src/game/netplay/experimental_network.hpp": "c69ec0d1b714f14a10a51fdd8c56483556e1ee616ca225158ce171796b6c312d",
-    "runtime-recomp/src/game/netplay/experimental_owned_registry.cpp": "5a31f41e2547a6dd9cc96baf5baf8c10804937d4241e967cf6401a8a105aed72",
-    "runtime-recomp/src/game/netplay/experimental_owner_inputs.cpp": "e29ee01e4a21e82449368a9ed4a4534296d8124e6181f9f46f814c73d8523985",
-    "runtime-recomp/src/game/netplay/experimental_owner_inputs.hpp": "d190904dc4c24a8285ed6dfd24216021c61eb7367c3c39b077cc822260fde264",
-    "runtime-recomp/src/game/netplay/experimental_pak.cpp": "bcffebf84be4f18560a3aae80a52b888ad426e1e267906fe4871f01e96e23c20",
-    "runtime-recomp/src/game/netplay/experimental_pak.hpp": "9870fb648e60c00634f67dc216458d3bbf226f85f70d0b943f62468c2ac6d228",
-    "runtime-recomp/src/game/netplay/experimental_pcm.hpp": "fa4b59ab11a64c0ea7194c1b2c69009d07c95300b27c823b2b4b2cc66f3c6b37",
-    "runtime-recomp/src/game/netplay/experimental_performance.hpp": "0f802347c393412e7a99003f60625f52de3ec62fd3f88c6e4601185c9c597bfa",
-    "runtime-recomp/src/game/netplay/experimental_present_gate.cpp": "11fff06bd17bc8069274e090de7f6a005972bd5c909f09d75b121e8c109f98bf",
-    "runtime-recomp/src/game/netplay/experimental_present_gate.hpp": "11ef80fb42f85f6d95601273352014bb123ba6cd6e122e3adbc6a9e6cf0edc46",
-    "runtime-recomp/src/game/netplay/experimental_presentation.cpp": "66c93e26eedbea8826cb15c063b72f5bc507cfe3686736ff4e0c7cec27f4438e",
-    "runtime-recomp/src/game/netplay/experimental_presentation.hpp": "dbd26ed84319448054da4be0f49c277391dee838b40e67f5654f54eb9066c955",
-    "runtime-recomp/src/game/netplay/experimental_process.cpp": "ebbfba4aa3f500c843dcedacb2f15bf605b8c8abe4e9f83224ab5aff6b549a31",
-    "runtime-recomp/src/game/netplay/experimental_process.hpp": "5db5d2d4b04db0c08d3f102d41d0843866d6171ca3c76b7dcf95a841a9b44da9",
-    "runtime-recomp/src/game/netplay/experimental_pump.cpp": "6bda29d224d5030344475a8127b9061d4801e125a5f2c1dde99d86748e716130",
-    "runtime-recomp/src/game/netplay/experimental_pump.hpp": "cc0854af90a8bd12005b1dc37f76d8dfa25a6dab9ce2cf3ab56bdccfccbdebaa",
-    "runtime-recomp/src/game/netplay/experimental_race_frontend.cpp": "6223a033bcbbc51417d850e6d1acb359d2d987b172daf32de28b615e44228b61",
-    "runtime-recomp/src/game/netplay/experimental_rollback.cpp": "b429eb1fc93a3e2b0454790cdec3c81f8ed29572f57cb4b56abf0e78c96ca738",
-    "runtime-recomp/src/game/netplay/experimental_rollback.hpp": "23656d21cb5cde5cd336e69e9a7c9569799b06756f70bbde15c8078bef4809fe",
-    "runtime-recomp/src/game/netplay/experimental_runtime.cpp": "7784b8e94652c749fa3f0762a4e4c513ca0e773b8508802e65879caa713ccb00",
-    "runtime-recomp/src/game/netplay/experimental_runtime.hpp": "e2bd584098e45af7e67b6198f650d18a204d3b57be6bbe3214639e3abe73598c",
-    "runtime-recomp/src/game/netplay/experimental_runtime_admission.hpp": "6e2e1b60086bebaccdb50089ea5dce8c40b572fab6912b2562acc7e81211f527",
-    "runtime-recomp/src/game/netplay/experimental_runtime_presence.hpp": "0c14e186cd618998e0902f28a1e88be53d4601bd2ffee1cbc5ba19cc5bb851ba",
-    "runtime-recomp/src/game/netplay/experimental_session.cpp": "b722c7aa8f4593c7132a4a4b81244f593eff233763b17c581b1fc05d905e24ca",
-    "runtime-recomp/src/game/netplay/experimental_session.hpp": "c85249ea74c27b11de84fec3959e9873b95a5d890bdc8d6852751d7e05aa74df",
-    "runtime-recomp/src/game/netplay/experimental_timeline.cpp": "0bd3d98d2e1163763c675ea02b1bd96780aca3cf4fb2a3ce7ea00aeaea566ec1",
-    "runtime-recomp/src/game/netplay/experimental_timeline.hpp": "f481dcb0f20a8197a0a3ff1ee4603a316b7aef7e7714671636696500531d4030",
-    "runtime-recomp/src/game/netplay/owned_menu_policy.h": "745468f00416d280be1a23e42668c15d117c7b0740a805afd9a6479195455572",
-    "runtime-recomp/src/game/netplay/runtime_state.hpp": "9d54de461b5220b246763d5f0b044cfc7ed845da4c8ad1ba521eb6f3cb905b07",
-    "runtime-recomp/src/game/netplay/setup_policy.hpp": "c2630dbc6a3950e947d0ce380d1be42c71568a864bb7dbef42703df5f1cf31fc",
-    "runtime-recomp/src/game/party_release.hpp": "0f364dfe23f991223547679858ca894056974d891040527a2c6e0ea6065e3676",
-    "runtime-recomp/src/game/party_runtime.cpp": "0eb45b3483dabebd0e0ae6b98e6fed67ae8593dd5bfdaa40ed899db38893a8fc",
-    "runtime-recomp/src/game/party_runtime.hpp": "f71d5b873f71fd24000c43833171967fa40860468f2ee6f50367ac1c1c60b404",
-    "runtime-recomp/src/game/runtime_save_routing.cpp": "837917b9ede8d0f9cadd86edaa325da50c7e88a6c34242758f18228112737890",
-    "runtime-recomp/src/game/runtime_save_routing.hpp": "cb3ae802050f29e38def0d42c60c01345be2cc46a515a95e9c50d49a06cf6879",
-    "runtime-recomp/src/game/save_manager.cpp": "e9f129814e79576fd2369c19734d83aeff04c979068ce2cf204998f3e278f662",
-    "runtime-recomp/src/game/save_manager.hpp": "c004fb91343bebc9afb2361f4d4988cd28603ff94830d98daf2f01542053801c",
-    "runtime-recomp/src/game/save_storage.hpp": "ca3a5457b5f7a6341473661e10a662fa590f64bf240053648a4a120a7838bc78",
-    "runtime-recomp/src/game/track_select_draw_guest.h": "053e11b284c433b88b19470534003519ad3d16bc3e625ce4bcc2b5f4f172041e",
-    "runtime-recomp/symbols/achievement_symbols.toml": "565d8e8c96549fc69e47d741753766e535187241275b87d54b546cd133df69f2",
-    "runtime-recomp/symbols/audio_queue_symbols.toml": "6f0a404ec4901866bb680d02c37f19ecabf81b2e3079e046eac7d52b345bee8e",
-    "runtime-recomp/symbols/autopilot_symbols.toml": "0d3f7f89ae01d1d4d3974cf7687484649e7934f25c3fe1ba85393dd10845fec6",
-    "runtime-recomp/symbols/camera_symbols.toml": "f58d94f8691f36ad215872f79e5167caf4b67292451fcbbb506bc915cbd1c005",
-    "runtime-recomp/symbols/capture_symbols.toml": "69db87e0e04eb3c6259140bf4d78e6b1c6deaa4795d5f178b464b93fa00c6102",
-    "runtime-recomp/symbols/credits_sky_symbols.toml": "251b1726a5ed6851df51b1d792de72f4df0f344ee895e966dfe3457b25cbc70f",
-    "runtime-recomp/symbols/detail_symbols.toml": "9f92da38d4e85278325bda85a51d9fa58ec0469da321f49ffbeaac91de52cc83",
-    "runtime-recomp/symbols/display_list_symbols.toml": "ca298334140d074d1e40da0c2d9b369b268c96266ed566ce742d668aacf29929",
-    "runtime-recomp/symbols/memory_symbols.toml": "b2d06573bfed607c9762bdcb0c7fb5a3cb37735965050cb0cc4f222460e7a9f8",
-    "runtime-recomp/symbols/polish_symbols.toml": "ad5c563f3cc0e0bd44e4d2043563bd84ca294f6883b565c4613d3c1036b5d42a",
-    "runtime-recomp/symbols/render_heap_addresses.toml": "0b8d0d2600cc38132800581eeedf8746ae25c1b3bcb37f85a22ec7e02a575230",
-    "runtime-recomp/symbols/revision_addresses.toml": "f86967949aaa21cae2a2ef804968e7d6341c6d771ff8a4afd197dfbebf872d97",
-    "runtime-recomp/symbols/scenery_symbols.toml": "d291719ffa176a7073de3e6c48fa4cff73584cedb8e0d8a2ceda2be72dbe4f14",
-    "runtime-recomp/symbols/startup_symbols.toml": "e4bf2f3fc699742f73ad2ac84445e0651b480bef53f26675454a7090d91ef7d2",
-    "runtime-recomp/symbols/title_text_symbols.toml": "e0ae1ea2c67d97949bfc3b51776fa7b874b1fac2d63d5351d2897a8a5103b354",
-    "runtime-recomp/symbols/vehicle_symbols.toml": "2582392e1618d17eaebfb721ea046918acb524fe025dcba94aa5d6ab5886992f",
-    "runtime-recomp/symbols/water_symbols.toml": "dcfb86d7645abda20caa1fea159db4b064f32246589979e6c10653ac91ce4484",
-    "runtime-recomp/tests/replay_probe/owned_game.hpp": "81439b1cd7fb292ba3e7e70dfe09cc6bc2efef800757195d9c26e333a2061d0a",
-    "runtime-recomp/tests/replay_probe/probe_audio.c": "51793a68a6f51bbf82f5bf4319ceb60a8a39bc02b0976470e5e22a8d42152ef1",
-    "runtime-recomp/tests/replay_probe/probe_audio.cpp": "c3484526760f84084ac0ed2131079b1c780e59d7f58c1a8817c08e5562cfb149",
-    "runtime-recomp/tests/replay_probe/probe_audio.h": "e5fb17fadf1c8b46af5284fab215ca754713faf1438c9be4a4c8aa3a8ab19235",
-    "runtime-recomp/tests/replay_probe/probe_audio_events.c": "ba93edd415f4256eac72d8fd092ddf6bfdfcbc53afb1994ba032528bb2e496a9",
-    "runtime-recomp/tests/replay_probe/probe_audio_link_canary.cpp": "46ef296d74db3987681ae3ba0686050686b2a5a5201b7a2417cfb66e08468f72",
-    "runtime-recomp/tests/replay_probe/probe_audio_rsp.cpp": "8b7dadee0c2cd4505e56aaa0a666fa5c41e7b1f1b968ff66975fe5528c0f5548",
-    "runtime-recomp/tests/replay_probe/probe_bridge.c": "ace48ebfc464d6d04a21c315aaeda83f6909ebffcf6261f7bec5c767dafdfc2f",
-    "runtime-recomp/tests/replay_probe/probe_bridge.h": "893652acb1858fd5a93e17f1a8dd720e6634b532212096b123b87ddd34f91c03",
-    "runtime-recomp/tests/replay_probe/probe_component.c": "022cc844ac8a5879168e82dd79035c98ebe2203eadabf4268cff0559c58979c3",
-    "runtime-recomp/tests/replay_probe/probe_component.h": "bd1919c9701e6aeba909af45e17d89e7e4275d846f66a9df806857b7e2460009",
-    "runtime-recomp/tests/replay_probe/probe_driver.cpp": "bc027b5aa7fbe082d863be3ace06fc7e89fac76639919abe6d2b546565fabeaa",
-    "runtime-recomp/tests/replay_probe/probe_driver.hpp": "630fb96603ea6f9d3abc2a6554c63d1acbaa43b5dc741e767df06a2d154660f6",
-    "runtime-recomp/tests/replay_probe/probe_eeprom.cpp": "b3596a6727f899508d111e5a73acf755822d42e6901b7d89a95c546ae708d89b",
-    "runtime-recomp/tests/replay_probe/probe_input.c": "40eef7c9fdd82da5e1247711b9cca1ef38852176681b5e3addb819eca1d7ced7",
-    "runtime-recomp/tests/replay_probe/probe_input.cpp": "745c252843a2d6bf8f3ceb393c183813b2e61990dca2deaf45b42e1d0853e0bf",
-    "runtime-recomp/tests/replay_probe/probe_input.h": "4792fa733f9e5e0185058d8df91a984f050bb7faa4e62fbdb9cc43e8bb75faf3",
-    "runtime-recomp/tests/replay_probe/probe_link_canary.c": "4b901f1455f3fb3c1a32a8e1ed153f3b2db777dcc56fb7e14a246e7021a78287",
-    "runtime-recomp/tests/replay_probe/probe_magic.c": "a8a5bd7ea5e875c0fe42d8137ca6710a8fcba45f179c4459416f4669c934701b",
-    "runtime-recomp/tests/replay_probe/probe_magic.cpp": "de312a6185b86ccded9312b5ae4da798a3da430d699b3de7fbfd1ff6bbaeb47e",
-    "runtime-recomp/tests/replay_probe/probe_magic.h": "8d5b035d9525e97dffb3cd6d398d1a22fcb98b3dfa14f844eadd86bc1d161c50",
-    "runtime-recomp/tests/replay_probe/probe_magic_tests.cpp": "0705b23790fa9aa00052be6eb54103b68a4eda222df7e08da29d3f0ec4a3784c",
-    "runtime-recomp/tests/replay_probe/probe_main.cpp": "74cc6760c458f016fba1a156e87bf830cac403b85ae2232d53083f9c0bf8547c",
-    "runtime-recomp/tests/replay_probe/probe_memory_inline.h": "bb9e045b74973eb2184150d1dcc511bd8a920c14dc5dab42236e9afbafd845b0",
-    "runtime-recomp/tests/replay_probe/probe_native.c": "f3217799affdf4b7ae6ad0721a3749b062160e3036e02222a30da14e3f6e2eb0",
-    "runtime-recomp/tests/replay_probe/probe_native_entry.h": "a568110526ac68de5a9a1056c82c4fab67c92eb1d5a3c954999b2e8b6940749d",
-    "runtime-recomp/tests/replay_probe/probe_native_fields.h": "7e427c85afc8147cd52f46862bc2aba6811f6c18fd1acca47696310d5cdc6ea3",
-    "runtime-recomp/tests/replay_probe/probe_pak.c": "c6c048c7bfdfb20862f4651ad8f64bfd45142e2e1645b9f4746379aca122c981",
-    "runtime-recomp/tests/replay_probe/probe_pak.cpp": "4720c7a648e166d056d4b542379c3ec613281e75507cc0c8e5adccfe54e893c2",
-    "runtime-recomp/tests/replay_probe/probe_pak.h": "089b6740656f47f2c7bd313a564bd413510ccb89535cbe6bdeadb7313ca95e86",
-    "runtime-recomp/tests/replay_probe/probe_pak_retail.c": "298af0512d37ba6d7ce782ce4bfec49e396d1eb80a987c3d62bbaa1efe9b4b9b",
-    "runtime-recomp/tests/replay_probe/probe_pak_retail.cpp": "f92e7c45bd7830bc42d08180363ce9cd5c6983ca9b0457419a3b81700daef2e0",
-    "runtime-recomp/tests/replay_probe/probe_pak_tests.cpp": "9b481d220960f7c7e3cfaeb69d90e923fb591caf84869e7c1c82faf4a26ed5f1",
-    "runtime-recomp/tests/replay_probe/probe_policies.cpp": "b61b1792acf9a277166e52b8c0d466fcc600304b30937c90d349c900e531427f",
-    "runtime-recomp/tests/replay_probe/probe_presentation.c": "4bbb145f1a52d0dd79cf118a0d8cb7cddbf7dbcb9c778d35f4c7b9675b53d809",
-    "runtime-recomp/tests/replay_probe/probe_presentation.h": "9674bba2c935ed53e52102f38ecd57317f0059ddb5344628506efa63d13d9dd5",
-    "runtime-recomp/tests/replay_probe/probe_save.c": "f42a69f93fc95136015431bc2729e3d2db8c613142aa01e213801779ac855133",
-    "runtime-recomp/tests/replay_probe/probe_save.cpp": "6a0ae01e386a9f6cff56023869b145f311322b6123c38d202dd6e314a76660fc",
-    "runtime-recomp/tests/replay_probe/probe_save.h": "fec7087ca191944522d48dd72e5822ffe5c9209c1f532a856944d4dd0436d3f9",
-    "runtime-recomp/tests/replay_probe/probe_service_shims.cpp": "31e3ee096f4ea16f5189298852854aa2ae1f77d4e48393ee3062aa9cd48f4639",
-    "scripts/audio_queue_policy.py": "9f0594b0493d953280510389249fb9eb528f195fe51c55368f7d8d662b6a4733",
-    "scripts/camera_obstruction_policy.py": "f359fa320137e366312f873174763db7fdaa5dbe8bb49b5302359f6b9102c302",
-    "scripts/character_portrait_pipeline.py": "4cc7f51d062a6b36f1a6a9db1259501693d6e03da963522a3390b46d8ab2ebae",
-    "scripts/compose_legacy_mod_policy.py": "07dbea02c2f55fabd65ae89e3159d5327b221ca5eb152751e7a566cb96ad6eb4",
-    "scripts/compose_payloads.py": "c662355843564ccd40759cb245de158888abae80baf59c7f309834897626ba68",
-    "scripts/gen_guest_symbols.py": "52ac0b14f1893278011f04267858b6f40140e79e8a96e18a552e70f0c3315fbc",
-    "scripts/generate_recomp_config.py": "444874a216c9011e6f196aa0a1269594517afcdea5fb3763196e092d99bfc473",
-    "scripts/generate_replay_probe.py": "1b45d4324809bbc0a7be3d5dd4b058538e95d24361be9dc92946e2b15714ac8b",
-    "scripts/generate_revision_policy.py": "bafbefad41542e00b6c5ec13b02acde69dda7f48e34025f46d92d028da6427b9",
-    "scripts/guest_hooks.py": "4058af2139c1211c2db79c8748734c2c1f231ec6168e964166d90c83bb48c6cc",
-    "scripts/host_task_policy.py": "aa28c9bcd8110d0ef16b2f6dfde7ec51b8767578f46d3bc5371f197efb016f78",
-    "scripts/legacy_asset_capacity_policy.py": "c67065366a5c4e8c1075e6e127fec67394358cf3402577243fe3908fde71b27a",
-    "scripts/legacy_behaviour_policy.py": "940cf7b39db752d5268972aba52a70ac2d2b8d638aabd8455145facfffacd4f8",
-    "scripts/legacy_character_ai_policy.py": "132745b55d5869f53db8b527d73d9dbb41e9afa72dd6bfc5ecd26ede4570743a",
-    "scripts/legacy_character_presentation_policy.py": "4edf389d07af6e323d3932b211a3423d96ef11134f10f22b05cb0632dc6833f2",
-    "scripts/legacy_memory_safety_policy.py": "5ce3cd32e58cd5fe2935049ee3e15050daaef366fbcb49a9d96ddf7580d36a8f",
-    "scripts/legacy_model_cache_policy.py": "337fcbbd95f60cb8dfc5b1c02dac03386c379b7d70026a186ba833e3496e1a73",
-    "scripts/legacy_model_reference_policy.py": "d58c7036a6056b3660d67710c8dd503a23a2af7d78cea8c3b46d2d63732b668c",
-    "scripts/legacy_spawn_asset_type_policy.py": "a5aefadc28ccf44806161c0902e54464631da6a1c3c30a6e60fc7a935a2d6e51",
-    "scripts/prepare_legacy_character_fragment.py": "4dadc0868b1fe2f4b78f3ce7d5a3a47b80a8b28171e261f0f0cb9cd090aa222b",
-    "scripts/prepare_legacy_character_menu_fragment.py": "e712a8f010881713d94e865b3aedeee80fea382103321866854d2b69e3ad4f63",
-    "scripts/prepare_legacy_menu_fragment.py": "5dc03054a6911b4bb3b632f23abc1f4046b1cae8447dec43d557c4b22627c250",
-    "scripts/prepare_payloads.py": "a2e0e2835e5f172334265d7c33904a094a97bf0dfb69d99a5490a8a8c0002d36",
-    "scripts/save_layout_pipeline.py": "7a042379c088b5294058586a5e8debefc7f3d13b5334ee855526530d23a7b65e",
-    "scripts/startup_flow_policy.py": "4957a7856663c74ebc5ff31e39334288fa7b46656a59aba23093b8dc449338fb",
-    "scripts/track_select_draw_policy.py": "08d32224fca9b3b684813bcd69450ce283ef70ae8ae06acbcc5d9cdc8999c532",
-    "scripts/water_profile_policy.py": "f02374ea65262da79767ccf9fab76b8cf8ecc8afeb7915d95692476df6bc9c28"
-  },
-  "last_update": {
-    "identity_changed": false,
-    "reason": "Type the names default in gen_guest_symbols.py for pyright; generated headers are byte-identical (golden hashes unchanged)"
+    "modding/reference-us-v77/game_symbols.inc": {
+      "sha256": "8051c44ebda26973ab921d71e90cd15f44d6b93ce00f0fb2fac80253b20dbcb5",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "modding/reference-us-v80/game_symbols.inc": {
+      "sha256": "526dc2ba1e8ac8f9bec051df50171a645895eda6623f4de7f8bad7dbf11e5fdc",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "patches/n64recomp/0001-fix-high-vram-entrypoint-comparison.patch": {
+      "sha256": "a3a60874019e1118453cfe9030b071ac22eb1fea41ea7b81b4a8d50e56bd3967",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "patches/n64recomp/0002-name-recomp-context-struct.patch": {
+      "sha256": "6cf31eebf6a5f0a9a31c2912f562f8ef977c0a43dfffd76531f3ceb94ae2bee7",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "patches/n64recomp/0003-null-statement-before-instruction-hooks.patch": {
+      "sha256": "f864ffd285ff4b09f2a3f4e453e5f0e5b2c39e345bc05dd88f47a46b01d3dac7",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/dkr.us.v77.recomp-policy.json": {
+      "sha256": "c4deefd55aca1dc1af1391a86d5df366624dabed2827a0fab055e8ffad8cd702",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/dkr.us.v80.recomp-policy.json": {
+      "sha256": "b8a89ed014f6e6a7f1113adf72fe8c92b1f8cf8323ac4c35de00a258c28adb9b",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/guest-hooks/hooks.toml": {
+      "sha256": "c4a62b6598c1ab9a01f18bc3dc110c181a72ed97eb59797f3612a92d731e441e",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/legacy-character-menu.v77.recomp-fragment.json": {
+      "sha256": "82db39e16f1e30eff1851d74eaf443cd962a2b65517d95f531f4cc0924357ce0",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/legacy-character-menu.v80.recomp-fragment.json": {
+      "sha256": "36a304eca1e8e889216e931b52a1838b993261bb16e39c2372731b8dad6afb90",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/legacy-characters.v77.recomp-fragment.json": {
+      "sha256": "bf7c193ef8c7c3737720da9bec4c8c9fe4e2eb13b92d2b8b50e68ebba7f93274",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/legacy-characters.v80.recomp-fragment.json": {
+      "sha256": "cb5e12f5a5efd7fa57e247bb6fa71ab96c7216a0bfbf4ae42442d128b7b83ec6",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/legacy-mods.v77.recomp-fragment.json": {
+      "sha256": "c944638839037068d2f7ab228a7b06831bbe6013e1826f15c25ffab99e6cde34",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/legacy-mods.v80.recomp-fragment.json": {
+      "sha256": "22016347ac1015facc050ae6942fd5420f36069a03dbed7dedcf1282a19b0da9",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/legacy-track-menu.v77.recomp-fragment.json": {
+      "sha256": "1caeb1d0073c8a23c135410aa00966b40040afdbe19a8addd58903c70ed73ac3",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/legacy-track-menu.v80.recomp-fragment.json": {
+      "sha256": "12771f47ad1089df8eeac92bb030109a48ea08da061f4563298802ab7e19a196",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/src/game/camera_clearance_metadata.h": {
+      "sha256": "d875faf298b7be83ffb04e342ef205ad4474f7f3ccdd0d9d01022cfe6dc0626e",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/src/game/camera_clearance_policy.hpp": {
+      "sha256": "f4694a479b492beb9e329e80e797ae9223943d80b3791f66acaa7664663728a1",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/src/game/camera_obstruction_guest.h": {
+      "sha256": "8e191e32fc5c12e117d4393182fe53ca094f417dadce68be4f9afaf478f0456b",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/src/game/camera_obstruction_math.h": {
+      "sha256": "372fde22433d98410bb92910d09172bd2cb5dc65d75b21708eecf548f9f346ce",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/src/game/netplay/experimental_admission_contract.hpp": {
+      "sha256": "4cde5e43fc3307fac753453c65061dbdf434e61d76b5991b530547103470a601",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/src/game/netplay/experimental_arguments.hpp": {
+      "sha256": "e8a612f50285e00c31b65137014a7d64189b9c58af4a1cce353beedec18550ab",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/src/game/netplay/experimental_checkpoint_hash.cpp": {
+      "sha256": "7ea4b52af28b400534cc8f3389daaa394ab0fc52bda3ebed9171be44e87d51e0",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/src/game/netplay/experimental_checkpoint_hash.hpp": {
+      "sha256": "0fc25164c756f4e3a992412e8f6ede4d0ad6480754ac86caa59f5570b5e02220",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/src/game/netplay/experimental_confirmed_output.hpp": {
+      "sha256": "9ba83e1300662bb4b27076c8d1d031a7410c6a96bfdac78e8807ea3b3fd5b271",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/src/game/netplay/experimental_draw_events.h": {
+      "sha256": "6bb3ad6213c323084e27a95022443614b603f6e67d55113e08b789b066bc6b1b",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/src/game/netplay/experimental_eeprom.cpp": {
+      "sha256": "8d63623c2e36726da9bbc5c1fcd73da47a85b6fc461b9e7f4c479e89caec27a2",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/src/game/netplay/experimental_eeprom.hpp": {
+      "sha256": "61bf3654d994b11f57e12488e95ecf3e686dd49ef90a13f23a55947c0142a40c",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/src/game/netplay/experimental_effect_envelope.hpp": {
+      "sha256": "bb0c8090bf6e76bf371a316e8a9a093431acec0e2767872a6a2c682cc3877a0b",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/src/game/netplay/experimental_epoch.cpp": {
+      "sha256": "09746eb29a448551bb0e11add43e89fe3b4c98ae2ec151c99e2306aac3224d99",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/src/game/netplay/experimental_epoch.hpp": {
+      "sha256": "b7a27bd2f58de94426d1a2606edaf8de966f8477c7b2d235edbf2acd4b09bfd1",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/src/game/netplay/experimental_guest_memory.h": {
+      "sha256": "220a8bc6ded1ee071cac40c62704a2c48fc1735b3d73c2127f81ee35bb25eea6",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/src/game/netplay/experimental_latency.hpp": {
+      "sha256": "7dcb6ca80b23a4cf0443733aa1458820076e46b49ceb38e12b0c41235d8fb309",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/src/game/netplay/experimental_launch.cpp": {
+      "sha256": "cc7b897716753c81c01c36e7c1537b3c47a2bca8b8daedb047dbcd813bdf924c",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/src/game/netplay/experimental_launch.hpp": {
+      "sha256": "df8fa9b3f7cc26ede16f96f3773a36c43b3c0b7496f3c89eb496e8d8bbae521b",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/src/game/netplay/experimental_lobby_admission.cpp": {
+      "sha256": "edfab6ff205f5197577003a41fc582e63970cff61f135e67b2e8e39dd7f87ed0",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/src/game/netplay/experimental_lobby_admission.hpp": {
+      "sha256": "b7aefa33684c133c54a843a7687844f91d44b8d7450b839544d05f4fa19acc24",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/src/game/netplay/experimental_magic_codes.cpp": {
+      "sha256": "08c266a82d163b38b920e640e77a5a7eab32a30f2603d87f894b917995b40fa2",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/src/game/netplay/experimental_magic_codes.hpp": {
+      "sha256": "77d96c9e6b8efcb6ae50248ed81dc7769a5f41c035bed452b7ca5c7a0f03fd9f",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/src/game/netplay/experimental_network.cpp": {
+      "sha256": "c4878043f3318ce48031a47e6a1f641135d917d71387b1ce20f533b1c5dfa191",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/src/game/netplay/experimental_network.hpp": {
+      "sha256": "c69ec0d1b714f14a10a51fdd8c56483556e1ee616ca225158ce171796b6c312d",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/src/game/netplay/experimental_owned_registry.cpp": {
+      "sha256": "5a31f41e2547a6dd9cc96baf5baf8c10804937d4241e967cf6401a8a105aed72",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/src/game/netplay/experimental_owner_inputs.cpp": {
+      "sha256": "e29ee01e4a21e82449368a9ed4a4534296d8124e6181f9f46f814c73d8523985",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/src/game/netplay/experimental_owner_inputs.hpp": {
+      "sha256": "d190904dc4c24a8285ed6dfd24216021c61eb7367c3c39b077cc822260fde264",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/src/game/netplay/experimental_pak.cpp": {
+      "sha256": "bcffebf84be4f18560a3aae80a52b888ad426e1e267906fe4871f01e96e23c20",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/src/game/netplay/experimental_pak.hpp": {
+      "sha256": "9870fb648e60c00634f67dc216458d3bbf226f85f70d0b943f62468c2ac6d228",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/src/game/netplay/experimental_pcm.hpp": {
+      "sha256": "fa4b59ab11a64c0ea7194c1b2c69009d07c95300b27c823b2b4b2cc66f3c6b37",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/src/game/netplay/experimental_performance.hpp": {
+      "sha256": "0f802347c393412e7a99003f60625f52de3ec62fd3f88c6e4601185c9c597bfa",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/src/game/netplay/experimental_present_gate.cpp": {
+      "sha256": "11fff06bd17bc8069274e090de7f6a005972bd5c909f09d75b121e8c109f98bf",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/src/game/netplay/experimental_present_gate.hpp": {
+      "sha256": "11ef80fb42f85f6d95601273352014bb123ba6cd6e122e3adbc6a9e6cf0edc46",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/src/game/netplay/experimental_presentation.cpp": {
+      "sha256": "66c93e26eedbea8826cb15c063b72f5bc507cfe3686736ff4e0c7cec27f4438e",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/src/game/netplay/experimental_presentation.hpp": {
+      "sha256": "dbd26ed84319448054da4be0f49c277391dee838b40e67f5654f54eb9066c955",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/src/game/netplay/experimental_process.cpp": {
+      "sha256": "ebbfba4aa3f500c843dcedacb2f15bf605b8c8abe4e9f83224ab5aff6b549a31",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/src/game/netplay/experimental_process.hpp": {
+      "sha256": "5db5d2d4b04db0c08d3f102d41d0843866d6171ca3c76b7dcf95a841a9b44da9",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/src/game/netplay/experimental_pump.cpp": {
+      "sha256": "6bda29d224d5030344475a8127b9061d4801e125a5f2c1dde99d86748e716130",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/src/game/netplay/experimental_pump.hpp": {
+      "sha256": "cc0854af90a8bd12005b1dc37f76d8dfa25a6dab9ce2cf3ab56bdccfccbdebaa",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/src/game/netplay/experimental_race_frontend.cpp": {
+      "sha256": "6223a033bcbbc51417d850e6d1acb359d2d987b172daf32de28b615e44228b61",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/src/game/netplay/experimental_rollback.cpp": {
+      "sha256": "b429eb1fc93a3e2b0454790cdec3c81f8ed29572f57cb4b56abf0e78c96ca738",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/src/game/netplay/experimental_rollback.hpp": {
+      "sha256": "23656d21cb5cde5cd336e69e9a7c9569799b06756f70bbde15c8078bef4809fe",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/src/game/netplay/experimental_runtime.cpp": {
+      "sha256": "7784b8e94652c749fa3f0762a4e4c513ca0e773b8508802e65879caa713ccb00",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/src/game/netplay/experimental_runtime.hpp": {
+      "sha256": "e2bd584098e45af7e67b6198f650d18a204d3b57be6bbe3214639e3abe73598c",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/src/game/netplay/experimental_runtime_admission.hpp": {
+      "sha256": "6e2e1b60086bebaccdb50089ea5dce8c40b572fab6912b2562acc7e81211f527",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/src/game/netplay/experimental_runtime_presence.hpp": {
+      "sha256": "0c14e186cd618998e0902f28a1e88be53d4601bd2ffee1cbc5ba19cc5bb851ba",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/src/game/netplay/experimental_session.cpp": {
+      "sha256": "b722c7aa8f4593c7132a4a4b81244f593eff233763b17c581b1fc05d905e24ca",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/src/game/netplay/experimental_session.hpp": {
+      "sha256": "c85249ea74c27b11de84fec3959e9873b95a5d890bdc8d6852751d7e05aa74df",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/src/game/netplay/experimental_timeline.cpp": {
+      "sha256": "0bd3d98d2e1163763c675ea02b1bd96780aca3cf4fb2a3ce7ea00aeaea566ec1",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/src/game/netplay/experimental_timeline.hpp": {
+      "sha256": "f481dcb0f20a8197a0a3ff1ee4603a316b7aef7e7714671636696500531d4030",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/src/game/netplay/owned_menu_policy.h": {
+      "sha256": "745468f00416d280be1a23e42668c15d117c7b0740a805afd9a6479195455572",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/src/game/netplay/runtime_state.hpp": {
+      "sha256": "9d54de461b5220b246763d5f0b044cfc7ed845da4c8ad1ba521eb6f3cb905b07",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/src/game/netplay/setup_policy.hpp": {
+      "sha256": "c2630dbc6a3950e947d0ce380d1be42c71568a864bb7dbef42703df5f1cf31fc",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/src/game/party_release.hpp": {
+      "sha256": "0f364dfe23f991223547679858ca894056974d891040527a2c6e0ea6065e3676",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/src/game/party_runtime.cpp": {
+      "sha256": "0eb45b3483dabebd0e0ae6b98e6fed67ae8593dd5bfdaa40ed899db38893a8fc",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/src/game/party_runtime.hpp": {
+      "sha256": "f71d5b873f71fd24000c43833171967fa40860468f2ee6f50367ac1c1c60b404",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/src/game/runtime_save_routing.cpp": {
+      "sha256": "837917b9ede8d0f9cadd86edaa325da50c7e88a6c34242758f18228112737890",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/src/game/runtime_save_routing.hpp": {
+      "sha256": "cb3ae802050f29e38def0d42c60c01345be2cc46a515a95e9c50d49a06cf6879",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/src/game/save_manager.cpp": {
+      "sha256": "e9f129814e79576fd2369c19734d83aeff04c979068ce2cf204998f3e278f662",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/src/game/save_manager.hpp": {
+      "sha256": "c004fb91343bebc9afb2361f4d4988cd28603ff94830d98daf2f01542053801c",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/src/game/save_storage.hpp": {
+      "sha256": "ca3a5457b5f7a6341473661e10a662fa590f64bf240053648a4a120a7838bc78",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/src/game/track_select_draw_guest.h": {
+      "sha256": "053e11b284c433b88b19470534003519ad3d16bc3e625ce4bcc2b5f4f172041e",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/symbols/achievement_symbols.toml": {
+      "sha256": "565d8e8c96549fc69e47d741753766e535187241275b87d54b546cd133df69f2",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/symbols/audio_queue_symbols.toml": {
+      "sha256": "6f0a404ec4901866bb680d02c37f19ecabf81b2e3079e046eac7d52b345bee8e",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/symbols/autopilot_symbols.toml": {
+      "sha256": "0d3f7f89ae01d1d4d3974cf7687484649e7934f25c3fe1ba85393dd10845fec6",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/symbols/camera_symbols.toml": {
+      "sha256": "f58d94f8691f36ad215872f79e5167caf4b67292451fcbbb506bc915cbd1c005",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/symbols/capture_symbols.toml": {
+      "sha256": "69db87e0e04eb3c6259140bf4d78e6b1c6deaa4795d5f178b464b93fa00c6102",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/symbols/credits_sky_symbols.toml": {
+      "sha256": "251b1726a5ed6851df51b1d792de72f4df0f344ee895e966dfe3457b25cbc70f",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/symbols/detail_symbols.toml": {
+      "sha256": "9f92da38d4e85278325bda85a51d9fa58ec0469da321f49ffbeaac91de52cc83",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/symbols/display_list_symbols.toml": {
+      "sha256": "ca298334140d074d1e40da0c2d9b369b268c96266ed566ce742d668aacf29929",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/symbols/memory_symbols.toml": {
+      "sha256": "b2d06573bfed607c9762bdcb0c7fb5a3cb37735965050cb0cc4f222460e7a9f8",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/symbols/polish_symbols.toml": {
+      "sha256": "ad5c563f3cc0e0bd44e4d2043563bd84ca294f6883b565c4613d3c1036b5d42a",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/symbols/render_heap_addresses.toml": {
+      "sha256": "0b8d0d2600cc38132800581eeedf8746ae25c1b3bcb37f85a22ec7e02a575230",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/symbols/revision_addresses.toml": {
+      "sha256": "f86967949aaa21cae2a2ef804968e7d6341c6d771ff8a4afd197dfbebf872d97",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/symbols/scenery_symbols.toml": {
+      "sha256": "d291719ffa176a7073de3e6c48fa4cff73584cedb8e0d8a2ceda2be72dbe4f14",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/symbols/startup_symbols.toml": {
+      "sha256": "e4bf2f3fc699742f73ad2ac84445e0651b480bef53f26675454a7090d91ef7d2",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/symbols/title_text_symbols.toml": {
+      "sha256": "e0ae1ea2c67d97949bfc3b51776fa7b874b1fac2d63d5351d2897a8a5103b354",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/symbols/vehicle_symbols.toml": {
+      "sha256": "2582392e1618d17eaebfb721ea046918acb524fe025dcba94aa5d6ab5886992f",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/symbols/water_symbols.toml": {
+      "sha256": "dcfb86d7645abda20caa1fea159db4b064f32246589979e6c10653ac91ce4484",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/tests/replay_probe/owned_game.hpp": {
+      "sha256": "81439b1cd7fb292ba3e7e70dfe09cc6bc2efef800757195d9c26e333a2061d0a",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/tests/replay_probe/probe_audio.c": {
+      "sha256": "51793a68a6f51bbf82f5bf4319ceb60a8a39bc02b0976470e5e22a8d42152ef1",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/tests/replay_probe/probe_audio.cpp": {
+      "sha256": "c3484526760f84084ac0ed2131079b1c780e59d7f58c1a8817c08e5562cfb149",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/tests/replay_probe/probe_audio.h": {
+      "sha256": "e5fb17fadf1c8b46af5284fab215ca754713faf1438c9be4a4c8aa3a8ab19235",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/tests/replay_probe/probe_audio_events.c": {
+      "sha256": "ba93edd415f4256eac72d8fd092ddf6bfdfcbc53afb1994ba032528bb2e496a9",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/tests/replay_probe/probe_audio_link_canary.cpp": {
+      "sha256": "46ef296d74db3987681ae3ba0686050686b2a5a5201b7a2417cfb66e08468f72",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/tests/replay_probe/probe_audio_rsp.cpp": {
+      "sha256": "8b7dadee0c2cd4505e56aaa0a666fa5c41e7b1f1b968ff66975fe5528c0f5548",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/tests/replay_probe/probe_bridge.c": {
+      "sha256": "ace48ebfc464d6d04a21c315aaeda83f6909ebffcf6261f7bec5c767dafdfc2f",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/tests/replay_probe/probe_bridge.h": {
+      "sha256": "893652acb1858fd5a93e17f1a8dd720e6634b532212096b123b87ddd34f91c03",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/tests/replay_probe/probe_component.c": {
+      "sha256": "022cc844ac8a5879168e82dd79035c98ebe2203eadabf4268cff0559c58979c3",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/tests/replay_probe/probe_component.h": {
+      "sha256": "bd1919c9701e6aeba909af45e17d89e7e4275d846f66a9df806857b7e2460009",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/tests/replay_probe/probe_driver.cpp": {
+      "sha256": "bc027b5aa7fbe082d863be3ace06fc7e89fac76639919abe6d2b546565fabeaa",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/tests/replay_probe/probe_driver.hpp": {
+      "sha256": "630fb96603ea6f9d3abc2a6554c63d1acbaa43b5dc741e767df06a2d154660f6",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/tests/replay_probe/probe_eeprom.cpp": {
+      "sha256": "b3596a6727f899508d111e5a73acf755822d42e6901b7d89a95c546ae708d89b",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/tests/replay_probe/probe_input.c": {
+      "sha256": "40eef7c9fdd82da5e1247711b9cca1ef38852176681b5e3addb819eca1d7ced7",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/tests/replay_probe/probe_input.cpp": {
+      "sha256": "745c252843a2d6bf8f3ceb393c183813b2e61990dca2deaf45b42e1d0853e0bf",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/tests/replay_probe/probe_input.h": {
+      "sha256": "4792fa733f9e5e0185058d8df91a984f050bb7faa4e62fbdb9cc43e8bb75faf3",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/tests/replay_probe/probe_link_canary.c": {
+      "sha256": "4b901f1455f3fb3c1a32a8e1ed153f3b2db777dcc56fb7e14a246e7021a78287",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/tests/replay_probe/probe_magic.c": {
+      "sha256": "a8a5bd7ea5e875c0fe42d8137ca6710a8fcba45f179c4459416f4669c934701b",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/tests/replay_probe/probe_magic.cpp": {
+      "sha256": "de312a6185b86ccded9312b5ae4da798a3da430d699b3de7fbfd1ff6bbaeb47e",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/tests/replay_probe/probe_magic.h": {
+      "sha256": "8d5b035d9525e97dffb3cd6d398d1a22fcb98b3dfa14f844eadd86bc1d161c50",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/tests/replay_probe/probe_magic_tests.cpp": {
+      "sha256": "0705b23790fa9aa00052be6eb54103b68a4eda222df7e08da29d3f0ec4a3784c",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/tests/replay_probe/probe_main.cpp": {
+      "sha256": "74cc6760c458f016fba1a156e87bf830cac403b85ae2232d53083f9c0bf8547c",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/tests/replay_probe/probe_memory_inline.h": {
+      "sha256": "bb9e045b74973eb2184150d1dcc511bd8a920c14dc5dab42236e9afbafd845b0",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/tests/replay_probe/probe_native.c": {
+      "sha256": "f3217799affdf4b7ae6ad0721a3749b062160e3036e02222a30da14e3f6e2eb0",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/tests/replay_probe/probe_native_entry.h": {
+      "sha256": "a568110526ac68de5a9a1056c82c4fab67c92eb1d5a3c954999b2e8b6940749d",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/tests/replay_probe/probe_native_fields.h": {
+      "sha256": "7e427c85afc8147cd52f46862bc2aba6811f6c18fd1acca47696310d5cdc6ea3",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/tests/replay_probe/probe_pak.c": {
+      "sha256": "c6c048c7bfdfb20862f4651ad8f64bfd45142e2e1645b9f4746379aca122c981",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/tests/replay_probe/probe_pak.cpp": {
+      "sha256": "4720c7a648e166d056d4b542379c3ec613281e75507cc0c8e5adccfe54e893c2",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/tests/replay_probe/probe_pak.h": {
+      "sha256": "089b6740656f47f2c7bd313a564bd413510ccb89535cbe6bdeadb7313ca95e86",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/tests/replay_probe/probe_pak_retail.c": {
+      "sha256": "298af0512d37ba6d7ce782ce4bfec49e396d1eb80a987c3d62bbaa1efe9b4b9b",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/tests/replay_probe/probe_pak_retail.cpp": {
+      "sha256": "f92e7c45bd7830bc42d08180363ce9cd5c6983ca9b0457419a3b81700daef2e0",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/tests/replay_probe/probe_pak_tests.cpp": {
+      "sha256": "9b481d220960f7c7e3cfaeb69d90e923fb591caf84869e7c1c82faf4a26ed5f1",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/tests/replay_probe/probe_policies.cpp": {
+      "sha256": "b61b1792acf9a277166e52b8c0d466fcc600304b30937c90d349c900e531427f",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/tests/replay_probe/probe_presentation.c": {
+      "sha256": "4bbb145f1a52d0dd79cf118a0d8cb7cddbf7dbcb9c778d35f4c7b9675b53d809",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/tests/replay_probe/probe_presentation.h": {
+      "sha256": "9674bba2c935ed53e52102f38ecd57317f0059ddb5344628506efa63d13d9dd5",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/tests/replay_probe/probe_save.c": {
+      "sha256": "f42a69f93fc95136015431bc2729e3d2db8c613142aa01e213801779ac855133",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/tests/replay_probe/probe_save.cpp": {
+      "sha256": "6a0ae01e386a9f6cff56023869b145f311322b6123c38d202dd6e314a76660fc",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/tests/replay_probe/probe_save.h": {
+      "sha256": "fec7087ca191944522d48dd72e5822ffe5c9209c1f532a856944d4dd0436d3f9",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "runtime-recomp/tests/replay_probe/probe_service_shims.cpp": {
+      "sha256": "31e3ee096f4ea16f5189298852854aa2ae1f77d4e48393ee3062aa9cd48f4639",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "scripts/audio_queue_policy.py": {
+      "sha256": "9f0594b0493d953280510389249fb9eb528f195fe51c55368f7d8d662b6a4733",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "scripts/camera_obstruction_policy.py": {
+      "sha256": "f359fa320137e366312f873174763db7fdaa5dbe8bb49b5302359f6b9102c302",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "scripts/character_portrait_pipeline.py": {
+      "sha256": "4cc7f51d062a6b36f1a6a9db1259501693d6e03da963522a3390b46d8ab2ebae",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "scripts/compose_legacy_mod_policy.py": {
+      "sha256": "07dbea02c2f55fabd65ae89e3159d5327b221ca5eb152751e7a566cb96ad6eb4",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "scripts/compose_payloads.py": {
+      "sha256": "c662355843564ccd40759cb245de158888abae80baf59c7f309834897626ba68",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "scripts/gen_guest_symbols.py": {
+      "sha256": "52ac0b14f1893278011f04267858b6f40140e79e8a96e18a552e70f0c3315fbc",
+      "reason": "Type the names default in gen_guest_symbols.py for pyright; generated headers are byte-identical (golden hashes unchanged)"
+    },
+    "scripts/generate_recomp_config.py": {
+      "sha256": "444874a216c9011e6f196aa0a1269594517afcdea5fb3763196e092d99bfc473",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "scripts/generate_replay_probe.py": {
+      "sha256": "1b45d4324809bbc0a7be3d5dd4b058538e95d24361be9dc92946e2b15714ac8b",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "scripts/generate_revision_policy.py": {
+      "sha256": "bafbefad41542e00b6c5ec13b02acde69dda7f48e34025f46d92d028da6427b9",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "scripts/guest_hooks.py": {
+      "sha256": "4058af2139c1211c2db79c8748734c2c1f231ec6168e964166d90c83bb48c6cc",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "scripts/host_task_policy.py": {
+      "sha256": "aa28c9bcd8110d0ef16b2f6dfde7ec51b8767578f46d3bc5371f197efb016f78",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "scripts/legacy_asset_capacity_policy.py": {
+      "sha256": "c67065366a5c4e8c1075e6e127fec67394358cf3402577243fe3908fde71b27a",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "scripts/legacy_behaviour_policy.py": {
+      "sha256": "940cf7b39db752d5268972aba52a70ac2d2b8d638aabd8455145facfffacd4f8",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "scripts/legacy_character_ai_policy.py": {
+      "sha256": "132745b55d5869f53db8b527d73d9dbb41e9afa72dd6bfc5ecd26ede4570743a",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "scripts/legacy_character_presentation_policy.py": {
+      "sha256": "4edf389d07af6e323d3932b211a3423d96ef11134f10f22b05cb0632dc6833f2",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "scripts/legacy_memory_safety_policy.py": {
+      "sha256": "5ce3cd32e58cd5fe2935049ee3e15050daaef366fbcb49a9d96ddf7580d36a8f",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "scripts/legacy_model_cache_policy.py": {
+      "sha256": "337fcbbd95f60cb8dfc5b1c02dac03386c379b7d70026a186ba833e3496e1a73",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "scripts/legacy_model_reference_policy.py": {
+      "sha256": "d58c7036a6056b3660d67710c8dd503a23a2af7d78cea8c3b46d2d63732b668c",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "scripts/legacy_spawn_asset_type_policy.py": {
+      "sha256": "a5aefadc28ccf44806161c0902e54464631da6a1c3c30a6e60fc7a935a2d6e51",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "scripts/prepare_legacy_character_fragment.py": {
+      "sha256": "4dadc0868b1fe2f4b78f3ce7d5a3a47b80a8b28171e261f0f0cb9cd090aa222b",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "scripts/prepare_legacy_character_menu_fragment.py": {
+      "sha256": "e712a8f010881713d94e865b3aedeee80fea382103321866854d2b69e3ad4f63",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "scripts/prepare_legacy_menu_fragment.py": {
+      "sha256": "5dc03054a6911b4bb3b632f23abc1f4046b1cae8447dec43d557c4b22627c250",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "scripts/prepare_payloads.py": {
+      "sha256": "a2e0e2835e5f172334265d7c33904a094a97bf0dfb69d99a5490a8a8c0002d36",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "scripts/save_layout_pipeline.py": {
+      "sha256": "7a042379c088b5294058586a5e8debefc7f3d13b5334ee855526530d23a7b65e",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "scripts/startup_flow_policy.py": {
+      "sha256": "4957a7856663c74ebc5ff31e39334288fa7b46656a59aba23093b8dc449338fb",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "scripts/track_select_draw_policy.py": {
+      "sha256": "08d32224fca9b3b684813bcd69450ce283ef70ae8ae06acbcc5d9cdc8999c532",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    },
+    "scripts/water_profile_policy.py": {
+      "sha256": "f02374ea65262da79767ccf9fab76b8cf8ecc8afeb7915d95692476df6bc9c28",
+      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+    }
   }
 }
