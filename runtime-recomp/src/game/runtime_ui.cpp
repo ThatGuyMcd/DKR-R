@@ -129,6 +129,7 @@
 #if defined(DKR_EXPERIMENTAL_RACE_TEST)
 #include "netplay/check_names.hpp"
 #include "netplay/experimental_rollback.hpp"
+#include "netplay/check_course.hpp"
 #include "netplay/experimental_runtime.hpp"
 #include "netplay/experimental_performance.hpp"
 #include "netplay/secure_channel.hpp"
@@ -10085,6 +10086,16 @@ bool dkr::runtime::ui::configure_owned_online_check(const rom::Identity& identit
         g_owned_check_mods = true;
         // Mod preparation checks the lobby against the Game Pak this run was started with.
         g_online_mod_selected_rom = rom;
+    }
+    if (const char* track = std::getenv("DKR_OWNED_CHECK_TRACK"); track && *track) {
+        const std::string_view text(track);
+        const int world = text.size() == 1 && text[0] >= '0' && text[0] <= '3' ? text[0] - '0' : -1;
+        if (world < 0) {
+            error = "DKR_OWNED_CHECK_TRACK must be a world index 0 to 3 (a fresh save unlocks one track per world).";
+            return false;
+        }
+        dkr::runtime::netplay::experimental::set_check_course_world(world);
+        std::fprintf(stderr, "[check][course] steering to world %d (first track, default vehicle)\n", world);
     }
     if (const char* missing = std::getenv("DKR_OWNED_CHECK_MISSING_TARGET");
         missing && std::string_view(missing) == "1")

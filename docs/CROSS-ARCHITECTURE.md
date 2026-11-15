@@ -197,6 +197,7 @@ state check on. Recorded 15 November 2026. Every hash was equal in every run.
 | Packaged macOS release app, v77 and v80 | 117 and 118 |
 | 80 ms delay, 15 ms jitter, every 50th packet dropped, 180 s, hash every frame, each machine hosting | 5346 and 5342 |
 | A mod that changes race state on both sides (`DKR_OWNED_CHECK_MODS`), each machine hosting | 118 each |
+| The first track of the other three worlds (`DKR_OWNED_CHECK_TRACK`): hovercraft, plane, hovercraft; v77 and v80 | 108 or 109 each |
 
 A peer told to report a wrong hash (`DKR_OWNED_CHECK_CORRUPT_STATE_AT=1500`)
 stopped both machines at frame 1500, with either machine hosting.
@@ -206,8 +207,9 @@ architecture, not in a per-architecture recompiler, so a mod adds no new
 architecture-specific code path. The mod run above differs from the no-mod
 run from its first sampled frame, so the mod was in effect.
 
-What this does not cover: tracks and vehicles beyond the ones the self-test
-reaches, more than one mod, Linux or Android on arm64 against anything live,
+What this does not cover: tracks beyond the first of each world (the self-test
+races on a fresh save), a vehicle other than each track's default, more than
+one mod, Linux or Android on arm64 against anything live,
 an x86_64 Mac, and human input.
 
 ## Porting to a new platform
