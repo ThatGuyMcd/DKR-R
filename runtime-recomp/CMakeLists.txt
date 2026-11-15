@@ -3581,6 +3581,14 @@ if(BUILD_TESTING)
     )
     add_test(NAME DKRLiveFov COMMAND DKRLiveFovTests)
 
+    add_executable(DKRGuestCallContextTests tests/guest_call_context_tests.cpp)
+    target_compile_features(DKRGuestCallContextTests PRIVATE cxx_std_20)
+    target_include_directories(
+        DKRGuestCallContextTests
+        PRIVATE "${CMAKE_CURRENT_LIST_DIR}/src/game" "${DKR_MODERN_RUNTIME_SOURCE}/N64Recomp/include"
+    )
+    add_test(NAME DKRGuestCallContext COMMAND DKRGuestCallContextTests)
+
     add_executable(DKRDirectoryLifecycleTests tests/directory_lifecycle_tests.cpp)
     target_compile_features(DKRDirectoryLifecycleTests PRIVATE cxx_std_20)
     target_include_directories(
