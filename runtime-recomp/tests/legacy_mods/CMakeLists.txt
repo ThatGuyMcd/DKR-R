@@ -5,6 +5,37 @@ set(CMAKE_C_STANDARD 17)
 set(CMAKE_CXX_STANDARD 20)
 get_filename_component(DKRPORT_ROOT "${CMAKE_CURRENT_LIST_DIR}/../../.." ABSOLUTE)
 include("${DKRPORT_ROOT}/runtime-recomp/cmake/LegacyMods.cmake")
+# These four link code that only the full runtime provides (achievements, saves, road wheels,
+# the launcher UI). The rest of this project builds without it.
+option(DKR_LEGACY_FULL_RUNTIME_TESTS "Also build the legacy tests that need full-runtime sources" OFF)
+if(NOT DKR_LEGACY_FULL_RUNTIME_TESTS)
+    message(
+        STATUS
+        "Skipping DKRNativeModWorldTests, DKRLegacyModBrowserUiTests, DKRLegacyModLibraryTests and DKRLegacyDkrmapArtworkTests: they need full-runtime sources (DKR_LEGACY_FULL_RUNTIME_TESTS=ON)"
+    )
+endif()
+# The code-mod library and the release version come from the full runtime's
+# CMakeLists; the mod launch library needs both.
+file(STRINGS "${DKRPORT_ROOT}/VERSION" DKR_RELEASE_VERSION LIMIT_COUNT 1)
+set(DKR_RECOMP_SOURCE "${DKR_DEPENDENCIES_DIR}/n64-modern-runtime/N64Recomp")
+add_subdirectory("${DKR_RECOMP_SOURCE}" "${CMAKE_BINARY_DIR}/N64Recomp" EXCLUDE_FROM_ALL)
+include("${DKRPORT_ROOT}/runtime-recomp/cmake/CustomMagicCodes.cmake")
+include("${DKRPORT_ROOT}/runtime-recomp/cmake/CustomVehicles.cmake")
+# The mod preparation code reads the online stability control and memory policy,
+# which the full runtime gets from DKRNetplayCore.
+add_library(
+    DKRLegacyOnlineStability
+    STATIC
+    "${DKRPORT_ROOT}/runtime-recomp/src/game/online_stability/control.cpp"
+    "${DKRPORT_ROOT}/runtime-recomp/src/game/online_stability/preparation_policy.cpp"
+)
+target_include_directories(
+    DKRLegacyOnlineStability
+    PUBLIC "${DKRPORT_ROOT}/runtime-recomp/src/game" "${DKRPORT_ROOT}/runtime-recomp/src/game/mods"
+)
+target_compile_features(DKRLegacyOnlineStability PUBLIC cxx_std_20)
+target_link_libraries(DKRLegacyImportLibrary PRIVATE DKRLegacyOnlineStability)
+target_link_libraries(DKRLegacyModLaunch PRIVATE DKRLegacyOnlineStability)
 enable_testing()
 add_executable(DKRLegacyCacheCapacityTests ../legacy_cache_capacity_tests.cpp)
 target_link_libraries(DKRLegacyCacheCapacityTests PRIVATE DKRLegacyModCore)
@@ -17,23 +48,25 @@ add_test(NAME DKROnlineGamePakTests COMMAND DKROnlineGamePakTests)
 add_executable(DKROnlineModMusicTests ../online_mod_music_tests.cpp)
 target_link_libraries(DKROnlineModMusicTests PRIVATE DKRLegacyModLaunch)
 add_test(NAME DKROnlineModMusicTests COMMAND DKROnlineModMusicTests)
-add_executable(
-    DKRNativeModWorldTests
-    ../native_mod_world_tests.cpp
-    ../native_mod_world_test_boundaries.cpp
-    ../../src/game/runtime_legacy_mods.cpp
-)
-target_link_libraries(DKRNativeModWorldTests PRIVATE DKRLegacyGuestIO DKRLegacyModLaunch)
-target_include_directories(
-    DKRNativeModWorldTests
-    PRIVATE
-        ../../src/game
-        "${DKRPORT_ROOT}/extern/n64-modern-runtime/librecomp/include"
-        "${DKRPORT_ROOT}/extern/n64-modern-runtime/ultramodern/include"
-        "${DKRPORT_ROOT}/extern/n64-modern-runtime/thirdparty/concurrentqueue"
-)
-if(MSVC)
-    target_compile_options(DKRNativeModWorldTests PRIVATE /EHs /EHc-)
+if(DKR_LEGACY_FULL_RUNTIME_TESTS)
+    add_executable(
+        DKRNativeModWorldTests
+        ../native_mod_world_tests.cpp
+        ../native_mod_world_test_boundaries.cpp
+        ../../src/game/runtime_legacy_mods.cpp
+    )
+    target_link_libraries(DKRNativeModWorldTests PRIVATE DKRLegacyGuestIO DKRLegacyModLaunch)
+    target_include_directories(
+        DKRNativeModWorldTests
+        PRIVATE
+            ../../src/game
+            "${DKRPORT_ROOT}/extern/n64-modern-runtime/librecomp/include"
+            "${DKRPORT_ROOT}/extern/n64-modern-runtime/ultramodern/include"
+            "${DKRPORT_ROOT}/extern/n64-modern-runtime/thirdparty/concurrentqueue"
+    )
+    if(MSVC)
+        target_compile_options(DKRNativeModWorldTests PRIVATE /EHs /EHc-)
+    endif()
 endif()
 add_executable(
     DKROwnedModBoundaryTests
@@ -82,43 +115,49 @@ add_executable(DKRLegacyModManagementTests ../legacy_mod_management_tests.cpp)
 target_link_libraries(DKRLegacyModManagementTests PRIVATE DKRLegacyImportLibrary)
 add_test(NAME DKRLegacyModManagementTests COMMAND DKRLegacyModManagementTests)
 set_tests_properties(DKRLegacyModManagementTests PROPERTIES TIMEOUT 90)
-set(_mod_imgui "${DKRPORT_ROOT}/extern/rt64/src/contrib/imgui")
-add_executable(
-    DKRLegacyModBrowserUiTests
-    ../legacy_mod_browser_ui_tests.cpp
-    "${_mod_imgui}/imgui.cpp"
-    "${_mod_imgui}/imgui_draw.cpp"
-    "${_mod_imgui}/imgui_widgets.cpp"
-    "${_mod_imgui}/imgui_tables.cpp"
-    ../../src/game/generated/racing_banana_font.c
-    ../../src/game/generated/jumpman_font.c
-    ../../src/game/generated/selawik_font.c
-)
-target_include_directories(DKRLegacyModBrowserUiTests PRIVATE "${_mod_imgui}" ../../src/game)
-target_link_libraries(DKRLegacyModBrowserUiTests PRIVATE DKRLegacyImportLibrary)
-if(MSVC)
-    target_compile_options(DKRLegacyModBrowserUiTests PRIVATE /UNDEBUG)
-else()
-    target_compile_options(DKRLegacyModBrowserUiTests PRIVATE -UNDEBUG)
+if(DKR_LEGACY_FULL_RUNTIME_TESTS)
+    set(_mod_imgui "${DKRPORT_ROOT}/extern/rt64/src/contrib/imgui")
+    add_executable(
+        DKRLegacyModBrowserUiTests
+        ../legacy_mod_browser_ui_tests.cpp
+        "${_mod_imgui}/imgui.cpp"
+        "${_mod_imgui}/imgui_draw.cpp"
+        "${_mod_imgui}/imgui_widgets.cpp"
+        "${_mod_imgui}/imgui_tables.cpp"
+        ../../src/game/generated/racing_banana_font.c
+        ../../src/game/generated/jumpman_font.c
+        ../../src/game/generated/selawik_font.c
+    )
+    target_include_directories(DKRLegacyModBrowserUiTests PRIVATE "${_mod_imgui}" ../../src/game)
+    target_link_libraries(DKRLegacyModBrowserUiTests PRIVATE DKRLegacyImportLibrary)
+    if(MSVC)
+        target_compile_options(DKRLegacyModBrowserUiTests PRIVATE /UNDEBUG)
+    else()
+        target_compile_options(DKRLegacyModBrowserUiTests PRIVATE -UNDEBUG)
+    endif()
+    add_test(NAME DKRLegacyModBrowserUiTests COMMAND DKRLegacyModBrowserUiTests)
+    set_tests_properties(DKRLegacyModBrowserUiTests PROPERTIES TIMEOUT 90)
 endif()
-add_test(NAME DKRLegacyModBrowserUiTests COMMAND DKRLegacyModBrowserUiTests)
-set_tests_properties(DKRLegacyModBrowserUiTests PROPERTIES TIMEOUT 90)
-add_executable(DKRLegacyModLibraryTests ../legacy_mod_library_tests.cpp ../../src/game/dkr_save_codec.cpp)
-target_link_libraries(DKRLegacyModLibraryTests PRIVATE DKRLegacyModLaunch)
-add_test(NAME DKRLegacyModLibraryTests COMMAND DKRLegacyModLibraryTests "$<TARGET_FILE:DKRLegacyModWorker>")
-set_tests_properties(DKRLegacyModLibraryTests PROPERTIES TIMEOUT 60)
+if(DKR_LEGACY_FULL_RUNTIME_TESTS)
+    add_executable(DKRLegacyModLibraryTests ../legacy_mod_library_tests.cpp ../../src/game/dkr_save_codec.cpp)
+    target_link_libraries(DKRLegacyModLibraryTests PRIVATE DKRLegacyModLaunch)
+    add_test(NAME DKRLegacyModLibraryTests COMMAND DKRLegacyModLibraryTests "$<TARGET_FILE:DKRLegacyModWorker>")
+    set_tests_properties(DKRLegacyModLibraryTests PROPERTIES TIMEOUT 60)
+endif()
 find_package(Python3 COMPONENTS Interpreter REQUIRED)
 add_test(
     NAME DKRLegacyModPipelineGuards
     COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_LIST_DIR}/../legacy_mod_pipeline_tests.py"
 )
-add_executable(DKRLegacyDkrmapArtworkTests ../legacy_dkrmap_artwork_tests.cpp ../../src/game/dkr_save_codec.cpp)
-target_link_libraries(DKRLegacyDkrmapArtworkTests PRIVATE DKRLegacyModLaunch)
-add_test(NAME DKRLegacyDkrmapArtworkTests COMMAND DKRLegacyDkrmapArtworkTests)
-# The bank checks need an owned ROM; it is never part of a public fixture.
-set(DKR_LEGACY_TEST_ROM "" CACHE FILEPATH "Owned US v1.0/v1.1 ROM for ROM-backed legacy checks")
-if(NOT DKR_LEGACY_TEST_ROM STREQUAL "")
-    add_test(NAME DKRLegacyDkrmapArtworkRomTests COMMAND DKRLegacyDkrmapArtworkTests "${DKR_LEGACY_TEST_ROM}")
+if(DKR_LEGACY_FULL_RUNTIME_TESTS)
+    add_executable(DKRLegacyDkrmapArtworkTests ../legacy_dkrmap_artwork_tests.cpp ../../src/game/dkr_save_codec.cpp)
+    target_link_libraries(DKRLegacyDkrmapArtworkTests PRIVATE DKRLegacyModLaunch)
+    add_test(NAME DKRLegacyDkrmapArtworkTests COMMAND DKRLegacyDkrmapArtworkTests)
+    # The bank checks need an owned ROM; it is never part of a public fixture.
+    set(DKR_LEGACY_TEST_ROM "" CACHE FILEPATH "Owned US v1.0/v1.1 ROM for ROM-backed legacy checks")
+    if(NOT DKR_LEGACY_TEST_ROM STREQUAL "")
+        add_test(NAME DKRLegacyDkrmapArtworkRomTests COMMAND DKRLegacyDkrmapArtworkTests "${DKR_LEGACY_TEST_ROM}")
+    endif()
 endif()
 add_executable(DKRLegacyModTests ../legacy_mod_tests.cpp)
 target_link_libraries(DKRLegacyModTests PRIVATE DKRLegacyModCore DKRLegacyModProcess)
@@ -155,9 +194,6 @@ add_test(NAME DKRLegacyCharacterAudioTests COMMAND DKRLegacyCharacterAudioTests)
 add_executable(DKRLegacyCharacterCatalogTests ../legacy_character_catalog_tests.cpp)
 target_link_libraries(DKRLegacyCharacterCatalogTests PRIVATE DKRLegacyImportLibrary)
 add_test(NAME DKRLegacyCharacterCatalogTests COMMAND DKRLegacyCharacterCatalogTests "$<TARGET_FILE:DKRLegacyModWorker>")
-add_executable(DKRLegacyCharacterMenuTests ../legacy_character_menu_tests.cpp)
-target_link_libraries(DKRLegacyCharacterMenuTests PRIVATE DKRLegacyGuestIO)
-add_test(NAME DKRLegacyCharacterMenuTests COMMAND DKRLegacyCharacterMenuTests)
 
 set(DKR_LEGACY_MENU_PIPELINE_ROOT "" CACHE PATH "Private regenerated native-menu qualification sources")
 if(NOT DKR_LEGACY_MENU_PIPELINE_ROOT STREQUAL "")
@@ -180,6 +216,11 @@ if(NOT DKR_LEGACY_MENU_PIPELINE_ROOT STREQUAL "")
         endif()
         add_test(NAME ${target} COMMAND ${target})
     endforeach()
+else()
+    message(
+        STATUS
+        "Skipping the native-menu guest tests: set DKR_LEGACY_MENU_PIPELINE_ROOT to a private regenerated source directory"
+    )
 endif()
 
 # Optional regenerated character function; input remains read-only.
@@ -381,6 +422,11 @@ if(NOT DKR_LEGACY_CHARACTER_MENU_PIPELINE_ROOT STREQUAL "")
         endif()
         add_test(NAME ${target} COMMAND ${target})
     endforeach()
+else()
+    message(
+        STATUS
+        "Skipping the character, presentation, menu and spawn guest tests: set DKR_LEGACY_CHARACTER_MENU_PIPELINE_ROOT to a private regenerated source directory"
+    )
 endif()
 
 # Optional regenerated character function; input remains read-only.
@@ -435,6 +481,11 @@ if(NOT DKR_LEGACY_CHARACTER_PIPELINE_ROOT STREQUAL "")
         endif()
         add_test(NAME ${target} COMMAND ${target})
     endforeach()
+else()
+    message(
+        STATUS
+        "Skipping the character guest tests: set DKR_LEGACY_CHARACTER_PIPELINE_ROOT to a private regenerated source directory"
+    )
 endif()
 
 # Optional private-fixture qualification: consume Patch Pipeline output, never
@@ -482,4 +533,9 @@ if(NOT DKR_LEGACY_PIPELINE_ROOT STREQUAL "")
             target_compile_options(${target} PRIVATE "$<$<COMPILE_LANGUAGE:C>:-fno-sanitize=shift-base>")
         endif()
     endforeach()
+else()
+    message(
+        STATUS
+        "Skipping the regenerated pipeline guest tests: set DKR_LEGACY_PIPELINE_ROOT to a private regenerated source directory"
+    )
 endif()
