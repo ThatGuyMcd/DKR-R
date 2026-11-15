@@ -26,6 +26,7 @@
 #include "netplay/session_chat/settings.hpp"
 #include "netplay/session_chat/input_policy.hpp"
 #include "netplay/peer_relay/settings.hpp"
+#include "online_stability/wait_notice.hpp"
 #include "online_stability/control.hpp"
 #include "online_profile/display_name_save.hpp"
 #include "online_profile/profile_bridge.hpp"
@@ -6256,25 +6257,19 @@ void DrawOnlineWaitingNotification(const dkr::runtime::netplay::SessionView& vie
             }
     }
 #endif
-    static auto pending_since = std::chrono::steady_clock::time_point{};
-    static dkr::runtime::netplay::OnlineWaitReason observed_reason = dkr::runtime::netplay::OnlineWaitReason::None;
+    // The text outlives the wait it describes while the notice lingers.
+    static dkr::online_stability::WaitNotice notice;
+    static const char* shown_reason = nullptr;
     static std::uint64_t observed_generation = 0U;
-    const auto now = std::chrono::steady_clock::now();
-    if (reason == nullptr) {
-        pending_since = {};
-        observed_reason = dkr::runtime::netplay::OnlineWaitReason::None;
-        observed_generation = runtime_generation;
+    const bool restart = observed_generation != runtime_generation;
+    observed_generation = runtime_generation;
+    if (reason != nullptr)
+        shown_reason = reason;
+    if (!notice.visible(reason != nullptr, reason != nullptr && launch_wait, restart,
+                        std::chrono::steady_clock::now()) ||
+        shown_reason == nullptr)
         return;
-    }
-    if (!launch_wait && (pending_since.time_since_epoch().count() == 0 || observed_generation != runtime_generation)) {
-        observed_reason = runtime_reason;
-        observed_generation = runtime_generation;
-        pending_since = now;
-    }
-    if (!launch_wait && pending_since.time_since_epoch().count() != 0 &&
-        now - pending_since < std::chrono::milliseconds(300)) {
-        return;
-    }
+    reason = shown_reason;
 
     const ImVec2 display = ImGui::GetIO().DisplaySize;
     const float width = std::min(std::clamp(display.x * 0.46F, 360.0F, 680.0F), std::max(280.0F, display.x - 32.0F));
