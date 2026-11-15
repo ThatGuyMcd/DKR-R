@@ -246,6 +246,7 @@ runtime-recomp/tests/owned_mod_boundary_tests.cpp
 runtime-recomp/tests/owned_revision_registry_tests.cpp
 runtime-recomp/tests/peer_relay_native_tests.cpp
 runtime-recomp/tests/replay_probe/checked_memory_tests.cpp
+runtime-recomp/tests/replay_probe/contract_report.cpp
 runtime-recomp/tests/replay_probe/probe_audio.c
 runtime-recomp/tests/replay_probe/probe_audio.cpp
 runtime-recomp/tests/replay_probe/probe_audio_events.c
