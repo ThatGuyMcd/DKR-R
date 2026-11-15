@@ -53,6 +53,8 @@ import save_layout_pipeline
 ROOT = Path(__file__).resolve().parents[1]
 HEADER = ROOT / "extern/n64-modern-runtime/N64Recomp/include/recomp.h"
 MARKER = "prepared.json"
+# Present from the first write until the bundle is complete.
+IN_PROGRESS = "preparing"
 REVISIONS = (77, 80)
 # The owned engine's options, read back from a manifest for the next stage.
 OWNED_OPTIONS = {
@@ -183,14 +185,55 @@ def prepare_revision(out: Path, revision: int, raw: Path, config: Path, elf: Pat
     generate_visual_model_kernel.generate(raw, HEADER, elf, revision, out / f"model-v{revision}")
 
 
+def previous_output(out: Path) -> Path:
+    return out.with_name(out.name + ".previous")
+
+
+def ours(directory: Path) -> bool:
+    return (directory / MARKER).is_file() or (directory / IN_PROGRESS).is_file()
+
+
 def fresh_output(out: Path) -> None:
+    """Start an empty OUT, keeping the last complete bundle beside it.
+
+    The bundle is generated in place because its files record their own
+    absolute paths. The previous one waits in OUT.previous until publish()
+    or restore() settles which of the two survives.
+    """
     if (ROOT / "build").resolve() not in out.parents:
         raise PrepareError(f"{out} must lie inside {ROOT / 'build'}")
-    if out.exists():
-        if not (out / MARKER).is_file():
-            raise PrepareError(f"{out} exists and was not made by prepare_payloads.py; remove it yourself")
+    previous = previous_output(out)
+    if out.exists() and not ours(out):
+        raise PrepareError(f"{out} exists and was not made by prepare_payloads.py; remove it yourself")
+    if previous.exists() and not ours(previous):
+        raise PrepareError(f"{previous} exists and was not made by prepare_payloads.py; remove it yourself")
+    if out.exists() and (out / MARKER).is_file():
+        # A complete bundle is the one worth keeping; an older one set aside
+        # by an interrupted run is not.
+        if previous.exists():
+            shutil.rmtree(previous)
+        out.rename(previous)
+    elif out.exists():
         shutil.rmtree(out)
     out.mkdir(parents=True)
+    (out / IN_PROGRESS).write_text("prepare_payloads.py is writing this directory\n", encoding="utf-8")
+
+
+def restore(out: Path) -> None:
+    """Drop a failed OUT and put the last complete bundle back."""
+    previous = previous_output(out)
+    if out.exists() and ours(out):
+        shutil.rmtree(out)
+    if previous.exists() and not out.exists():
+        previous.rename(out)
+
+
+def publish(out: Path, revisions: Sequence[int]) -> None:
+    (out / MARKER).write_text(json.dumps({"schema": 1, "revisions": list(revisions)}) + "\n", encoding="utf-8")
+    (out / IN_PROGRESS).unlink()
+    previous = previous_output(out)
+    if previous.exists():
+        shutil.rmtree(previous)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -215,13 +258,22 @@ def main(argv: Sequence[str] | None = None) -> int:
     revisions = sorted(inputs)
     try:
         fresh_output(out)
+    except PrepareError as error:
+        print(f"prepare_payloads: {error}", file=sys.stderr)
+        return 1
+    try:
         for revision in revisions:
             prepare_revision(out, revision, *inputs[revision])
             print(f"prepare_payloads: US v{revision} prepared in {out}")
+        publish(out, revisions)
     except (PrepareError, ValueError) as error:
+        restore(out)
         print(f"prepare_payloads: {error}", file=sys.stderr)
         return 1
-    (out / MARKER).write_text(json.dumps({"schema": 1, "revisions": revisions}) + "\n", encoding="utf-8")
+    except BaseException:
+        # Interrupts and stage crashes must not cost the last good bundle.
+        restore(out)
+        raise
     return 0
 
 

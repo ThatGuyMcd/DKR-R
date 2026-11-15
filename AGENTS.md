@@ -35,6 +35,7 @@ strict version.
 1. Pick or create a module directory under `runtime-recomp/src/game/<module>/` (see `docs/ARCHITECTURE.md`).
 2. Register settings, pages and owned services in the registries instead of patching literals.
 3. Add tests next to the existing ones in `runtime-recomp/tests/` (flat, named `*_tests.py` for tooling tests).
+   A script's own unit tests go in `scripts/tests/test_*.py`; the tooling suite runs both.
 4. Run the checks below before opening a PR. CI runs the same.
 
 ## Verification you must run
