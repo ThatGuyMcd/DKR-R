@@ -1,0 +1,461 @@
+# The per-revision guest address tables (revision_addresses.hpp). Entries are named by the symbol
+# they must sit at; scripts/tests/test_revision_addresses.py proves each against the recorded
+# values the hand-written tables had.
+schema = 1
+header = "revision_symbols.hpp"
+table = "sdk"
+hex = "upper"
+symbols = [
+  "entrypointThreadStack",
+  "aspMainTextStart",
+  "gMusicPlayer",
+  "gMusicBaseVolume",
+  "gBlockMusicChange",
+  "gMusicNextSeqID",
+  "FrustumReference",
+  "gScreenViewports",
+  "gOrthoMatrixF",
+  "gIsInRace",
+  "gLevelLoadTimer",
+  "gCurrentRNGSeed",
+  "gPrevRNGSeed",
+  "sLogicUpdateRate",
+  "gIsInTracksMode",
+  "gNumberOfReadyPlayers",
+  "gNumberOfActivePlayers",
+  "gCurrentMenuId",
+  "gActiveMagicCodes",
+  "gUnlockedMagicCodes",
+  "gTrophyRaceWorldId",
+  "WaveSelectionMap",
+  "gWaveModel",
+  "gWaveHeightIndices",
+  "gWaveGenCount",
+  "gWaveGenList",
+  "gWaveGenObjs",
+  "sMusicTempo",
+  "gDynamicMusicChannelMask",
+  "gObjectCount",
+  "gObjPtrList",
+  "gObjectListStart",
+  "gObjectMapSpawnList",
+  "gObjectMapSize",
+  "gRaceEndTimer",
+  "gRaceEndStage",
+  "gPathUpdateOff",
+  "gRaceFinishTriggered",
+  "gNumFinishedRacers",
+  "gObjectCurrMatrix",
+  "gRacers",
+  "gRacersByPort",
+  "gNumRacers",
+  "gTrackDL",
+  "gSceneActiveCamera",
+  "gShadowHeapFlip",
+  "gShadowHeapTris",
+  "gShadowHeapVerts",
+  "gShadowHeapData",
+  "VoidLateralX",
+  "VoidLateralZ",
+  "VoidCentreX",
+  "VoidCentreZ",
+  "gRaceStartTimer",
+  "RaceStartProgress",
+  "gCameras",
+  "sPlayerID",
+  "gViewportLayout",
+  "gActiveCameraID",
+  "gCurCamFOV",
+  "gCutsceneCameraActive",
+  "gViewProjMatrixF",
+  "gMapId",
+  "gCurrentLevelHeader",
+  "gSPTaskNum",
+  "gIsPaused",
+  "gPostRaceViewPort",
+  "gTextureCache",
+  "gNumberOfLoadedTextures",
+  "gMenuSelectedCharacter",
+  "gMenuCurrentCharacter",
+  "gActivePlayersArray",
+  "gCharselectStatus",
+  "gPlayersCharacterArray",
+  "gCharacterIdSlots",
+  "gPlayerSelectVehicle",
+  "gMenuButtons",
+  "gNumActivePlayers",
+  "gCurrentHud",
+  "gPlayerHud",
+  "gHUDNumPlayers",
+  "gHudDL",
+  "gHudColour",
+  "gRumblePresent",
+  "gTitleDemoIndex",
+  "gTitleRevealTimer",
+  "gWaveController",
+  "gNumberOfLevelSegments",
+  "gWavePowerBase",
+  "gWaveMagnitude",
+  "gWavePowerDivisor",
+  "gIsInTracksMenu",
+  "gGameMode",
+  "gMenuStage",
+  "gMenuDelay",
+  "gPostraceFinishState",
+  "gWaveTexUVMaskX",
+  "gWaveTexUVMaskY",
+  "gCurrentSequenceID",
+  "gSequenceTable",
+  "gSeqLengthTable",
+  "gSeqSoundTable",
+]
+decomp = ["aspMainTextStart"]
+template = '''#pragma once
+#include <cstdint>
+namespace dkr::runtime::revision_addresses {
+
+struct AddressTable {
+    std::uint32_t EntrypointStackTop;
+    std::uint32_t AspMainTextStart;
+    std::uint32_t MusicPlayer;
+    std::uint32_t MusicBaseVolume;
+    std::uint32_t BlockMusicChange;
+    std::uint32_t MusicNextSequence;
+    std::uint32_t FrustumReference;
+    std::uint32_t ScreenViewports;
+    std::uint32_t OrthoMatrix;
+    std::uint32_t IsInRace;
+    std::uint32_t LevelLoadTimer;
+    std::uint32_t CurrentRngSeed;
+    std::uint32_t PreviousRngSeed;
+    std::uint32_t LogicUpdateRate;
+    std::uint32_t TracksMode;
+    std::uint32_t NumberOfReadyPlayers;
+    std::uint32_t NumberOfActivePlayers;
+    std::uint32_t CurrentMenuId;
+    std::uint32_t ActiveMagicCodes;
+    std::uint32_t UnlockedMagicCodes;
+    std::uint32_t TrophyRaceWorldId;
+    std::uint32_t WaveSelectionMap;
+    std::uint32_t WaveModel;
+    std::uint32_t WaveHeightIndices;
+    std::uint32_t WaveGenCount;
+    std::uint32_t WaveGenList;
+    std::uint32_t WaveGenObjects;
+    std::uint32_t MusicTempo;
+    std::uint32_t DynamicMusicChannelMask;
+    std::uint32_t ObjectCount;
+    std::uint32_t ObjectList;
+    std::uint32_t ObjectListStart;
+    std::uint32_t ObjectMapSpawnList;
+    std::uint32_t ObjectMapSize;
+    std::uint32_t RaceEndTimer;
+    std::uint32_t RaceEndStage;
+    std::uint32_t PathUpdateOff;
+    std::uint32_t RaceFinishTriggered;
+    std::uint32_t NumberOfFinishedRacers;
+    std::uint32_t ObjectCurrentMatrix;
+    std::uint32_t Racers;
+    std::uint32_t RacersByPort;
+    std::uint32_t NumberOfRacers;
+    std::uint32_t TrackDisplayList;
+    std::uint32_t SceneActiveCamera;
+    std::uint32_t ShadowHeapFlip;
+    std::uint32_t ShadowHeapTriangles;
+    std::uint32_t ShadowHeapVertices;
+    std::uint32_t ShadowHeapData;
+    std::uint32_t VoidLateralX;
+    std::uint32_t VoidLateralZ;
+    std::uint32_t VoidCentreX;
+    std::uint32_t VoidCentreZ;
+    std::uint32_t RaceStartTimer;
+    std::uint32_t RaceStartProgress;
+    std::uint32_t Cameras;
+    std::uint32_t PlayerIdMap;
+    std::uint32_t ViewportLayout;
+    std::uint32_t ActiveCameraId;
+    std::uint32_t CurrentCameraFov;
+    std::uint32_t CutsceneCameraActive;
+    std::uint32_t ViewProjectionMatrix;
+    std::uint32_t CurrentMapId;
+    std::uint32_t CurrentLevelHeader;
+    std::uint32_t SpTaskNumber;
+    std::uint32_t IsPaused;
+    std::uint32_t PostRaceViewport;
+    std::uint32_t TextureCache;
+    std::uint32_t NumberOfLoadedTextures;
+    std::uint32_t MenuSelectedCharacter;
+    std::uint32_t MenuCurrentCharacter;
+    std::uint32_t ActivePlayersArray;
+    std::uint32_t CharacterSelectStatus;
+    std::uint32_t PlayersCharacterArray;
+    std::uint32_t CharacterIdSlots;
+    std::uint32_t PlayerSelectVehicle;
+    std::uint32_t MenuButtons;
+    std::uint32_t NumberOfGameplayPlayers;
+    std::uint32_t CurrentHud;
+    std::uint32_t PlayerHud;
+    std::uint32_t HudNumPlayers;
+    std::uint32_t HudDisplayList;
+    std::uint32_t HudColour;
+    std::uint32_t RumblePresent;
+    std::uint32_t TitleDemoIndex;
+    std::uint32_t TitleRevealTimer;
+    std::uint32_t WaveController;
+    std::uint32_t NumberOfLevelSegments;
+    std::uint32_t WavePowerBase;
+    std::uint32_t WaveMagnitude;
+    std::uint32_t WavePowerDivisor;
+    std::uint32_t IsInTracksMenu;
+    std::uint32_t GameMode;
+    std::uint32_t MenuStage;
+    std::uint32_t MenuDelay;
+    std::uint32_t PostraceFinishState;
+    std::uint32_t WaveTexUVMaskX;
+    std::uint32_t WaveTexUVMaskY;
+    std::uint32_t CurrentSequence;
+    std::uint32_t SequenceTable;      // gSequenceTable (ALSeqFile *)
+    std::uint32_t SequenceLengths;    // gSeqLengthTable (u32 *)
+    std::uint32_t SequenceSoundTable; // gSeqSoundTable (MusicData *)
+};
+
+inline constexpr AddressTable kUsV77{
+    .EntrypointStackTop = @entrypointThreadStack:77@ + 0x1000U,
+    .AspMainTextStart = @aspMainTextStart:77@,
+    .MusicPlayer = @gMusicPlayer:77@,
+    .MusicBaseVolume = @gMusicBaseVolume:77@,
+    .BlockMusicChange = @gBlockMusicChange:77@,
+    .MusicNextSequence = @gMusicNextSeqID:77@,
+    .FrustumReference = @FrustumReference:77@,
+    .ScreenViewports = @gScreenViewports:77@,
+    .OrthoMatrix = @gOrthoMatrixF:77@,
+    .IsInRace = @gIsInRace:77@,
+    .LevelLoadTimer = @gLevelLoadTimer:77@,
+    .CurrentRngSeed = @gCurrentRNGSeed:77@,
+    .PreviousRngSeed = @gPrevRNGSeed:77@,
+    .LogicUpdateRate = @sLogicUpdateRate:77@,
+    .TracksMode = @gIsInTracksMode:77@,
+    .NumberOfReadyPlayers = @gNumberOfReadyPlayers:77@,
+    .NumberOfActivePlayers = @gNumberOfActivePlayers:77@,
+    .CurrentMenuId = @gCurrentMenuId:77@,
+    .ActiveMagicCodes = @gActiveMagicCodes:77@,
+    .UnlockedMagicCodes = @gUnlockedMagicCodes:77@,
+    .TrophyRaceWorldId = @gTrophyRaceWorldId:77@,
+    .WaveSelectionMap = @WaveSelectionMap:77@,
+    .WaveModel = @gWaveModel:77@,
+    .WaveHeightIndices = @gWaveHeightIndices:77@,
+    .WaveGenCount = @gWaveGenCount:77@,
+    .WaveGenList = @gWaveGenList:77@,
+    .WaveGenObjects = @gWaveGenObjs:77@,
+    .MusicTempo = @sMusicTempo:77@,
+    .DynamicMusicChannelMask = @gDynamicMusicChannelMask:77@,
+    .ObjectCount = @gObjectCount:77@,
+    .ObjectList = @gObjPtrList:77@,
+    .ObjectListStart = @gObjectListStart:77@,
+    .ObjectMapSpawnList = @gObjectMapSpawnList:77@,
+    .ObjectMapSize = @gObjectMapSize:77@,
+    .RaceEndTimer = @gRaceEndTimer:77@,
+    .RaceEndStage = @gRaceEndStage:77@,
+    .PathUpdateOff = @gPathUpdateOff:77@,
+    .RaceFinishTriggered = @gRaceFinishTriggered:77@,
+    .NumberOfFinishedRacers = @gNumFinishedRacers:77@,
+    .ObjectCurrentMatrix = @gObjectCurrMatrix:77@,
+    .Racers = @gRacers:77@,
+    .RacersByPort = @gRacersByPort:77@,
+    .NumberOfRacers = @gNumRacers:77@,
+    .TrackDisplayList = @gTrackDL:77@,
+    .SceneActiveCamera = @gSceneActiveCamera:77@,
+    .ShadowHeapFlip = @gShadowHeapFlip:77@,
+    .ShadowHeapTriangles = @gShadowHeapTris:77@,
+    .ShadowHeapVertices = @gShadowHeapVerts:77@,
+    .ShadowHeapData = @gShadowHeapData:77@,
+    .VoidLateralX = @VoidLateralX:77@,
+    .VoidLateralZ = @VoidLateralZ:77@,
+    .VoidCentreX = @VoidCentreX:77@,
+    .VoidCentreZ = @VoidCentreZ:77@,
+    .RaceStartTimer = @gRaceStartTimer:77@,
+    .RaceStartProgress = @RaceStartProgress:77@,
+    .Cameras = @gCameras:77@,
+    .PlayerIdMap = @sPlayerID:77@,
+    .ViewportLayout = @gViewportLayout:77@,
+    .ActiveCameraId = @gActiveCameraID:77@,
+    .CurrentCameraFov = @gCurCamFOV:77@,
+    .CutsceneCameraActive = @gCutsceneCameraActive:77@,
+    .ViewProjectionMatrix = @gViewProjMatrixF:77@,
+    .CurrentMapId = @gMapId:77@,
+    .CurrentLevelHeader = @gCurrentLevelHeader:77@,
+    .SpTaskNumber = @gSPTaskNum:77@,
+    .IsPaused = @gIsPaused:77@,
+    .PostRaceViewport = @gPostRaceViewPort:77@,
+    .TextureCache = @gTextureCache:77@,
+    .NumberOfLoadedTextures = @gNumberOfLoadedTextures:77@,
+    .MenuSelectedCharacter = @gMenuSelectedCharacter:77@,
+    .MenuCurrentCharacter = @gMenuCurrentCharacter:77@,
+    .ActivePlayersArray = @gActivePlayersArray:77@,
+    .CharacterSelectStatus = @gCharselectStatus:77@,
+    .PlayersCharacterArray = @gPlayersCharacterArray:77@,
+    .CharacterIdSlots = @gCharacterIdSlots:77@,
+    .PlayerSelectVehicle = @gPlayerSelectVehicle:77@,
+    .MenuButtons = @gMenuButtons:77@,
+    .NumberOfGameplayPlayers = @gNumActivePlayers:77@,
+    .CurrentHud = @gCurrentHud:77@,
+    .PlayerHud = @gPlayerHud:77@,
+    .HudNumPlayers = @gHUDNumPlayers:77@,
+    .HudDisplayList = @gHudDL:77@,
+    .HudColour = @gHudColour:77@,
+    .RumblePresent = @gRumblePresent:77@,
+    .TitleDemoIndex = @gTitleDemoIndex:77@,
+    .TitleRevealTimer = @gTitleRevealTimer:77@,
+    .WaveController = @gWaveController:77@,
+    .NumberOfLevelSegments = @gNumberOfLevelSegments:77@,
+    .WavePowerBase = @gWavePowerBase:77@,
+    .WaveMagnitude = @gWaveMagnitude:77@,
+    .WavePowerDivisor = @gWavePowerDivisor:77@,
+    .IsInTracksMenu = @gIsInTracksMenu:77@,
+    .GameMode = @gGameMode:77@,
+    .MenuStage = @gMenuStage:77@,
+    .MenuDelay = @gMenuDelay:77@,
+    .PostraceFinishState = @gPostraceFinishState:77@,
+    .WaveTexUVMaskX = @gWaveTexUVMaskX:77@,
+    .WaveTexUVMaskY = @gWaveTexUVMaskY:77@,
+    .CurrentSequence = @gCurrentSequenceID:77@,
+    .SequenceTable = @gSequenceTable:77@,
+    .SequenceLengths = @gSeqLengthTable:77@,
+    .SequenceSoundTable = @gSeqSoundTable:77@,
+};
+
+inline constexpr AddressTable kUsV80{
+    .EntrypointStackTop = @entrypointThreadStack:80@ + 0x1000U,
+    .AspMainTextStart = @aspMainTextStart:80@,
+    .MusicPlayer = @gMusicPlayer:80@,
+    .MusicBaseVolume = @gMusicBaseVolume:80@,
+    .BlockMusicChange = @gBlockMusicChange:80@,
+    .MusicNextSequence = @gMusicNextSeqID:80@,
+    .FrustumReference = @FrustumReference:80@,
+    .ScreenViewports = @gScreenViewports:80@,
+    .OrthoMatrix = @gOrthoMatrixF:80@,
+    .IsInRace = @gIsInRace:80@,
+    .LevelLoadTimer = @gLevelLoadTimer:80@,
+    .CurrentRngSeed = @gCurrentRNGSeed:80@,
+    .PreviousRngSeed = @gPrevRNGSeed:80@,
+    .LogicUpdateRate = @sLogicUpdateRate:80@,
+    .TracksMode = @gIsInTracksMode:80@,
+    .NumberOfReadyPlayers = @gNumberOfReadyPlayers:80@,
+    .NumberOfActivePlayers = @gNumberOfActivePlayers:80@,
+    .CurrentMenuId = @gCurrentMenuId:80@,
+    .ActiveMagicCodes = @gActiveMagicCodes:80@,
+    .UnlockedMagicCodes = @gUnlockedMagicCodes:80@,
+    .TrophyRaceWorldId = @gTrophyRaceWorldId:80@,
+    .WaveSelectionMap = @WaveSelectionMap:80@,
+    .WaveModel = @gWaveModel:80@,
+    .WaveHeightIndices = @gWaveHeightIndices:80@,
+    .WaveGenCount = @gWaveGenCount:80@,
+    .WaveGenList = @gWaveGenList:80@,
+    .WaveGenObjects = @gWaveGenObjs:80@,
+    .MusicTempo = @sMusicTempo:80@,
+    .DynamicMusicChannelMask = @gDynamicMusicChannelMask:80@,
+    .ObjectCount = @gObjectCount:80@,
+    .ObjectList = @gObjPtrList:80@,
+    .ObjectListStart = @gObjectListStart:80@,
+    .ObjectMapSpawnList = @gObjectMapSpawnList:80@,
+    .ObjectMapSize = @gObjectMapSize:80@,
+    .RaceEndTimer = @gRaceEndTimer:80@,
+    .RaceEndStage = @gRaceEndStage:80@,
+    .PathUpdateOff = @gPathUpdateOff:80@,
+    .RaceFinishTriggered = @gRaceFinishTriggered:80@,
+    .NumberOfFinishedRacers = @gNumFinishedRacers:80@,
+    .ObjectCurrentMatrix = @gObjectCurrMatrix:80@,
+    .Racers = @gRacers:80@,
+    .RacersByPort = @gRacersByPort:80@,
+    .NumberOfRacers = @gNumRacers:80@,
+    .TrackDisplayList = @gTrackDL:80@,
+    .SceneActiveCamera = @gSceneActiveCamera:80@,
+    .ShadowHeapFlip = @gShadowHeapFlip:80@,
+    .ShadowHeapTriangles = @gShadowHeapTris:80@,
+    .ShadowHeapVertices = @gShadowHeapVerts:80@,
+    .ShadowHeapData = @gShadowHeapData:80@,
+    .VoidLateralX = @VoidLateralX:80@,
+    .VoidLateralZ = @VoidLateralZ:80@,
+    .VoidCentreX = @VoidCentreX:80@,
+    .VoidCentreZ = @VoidCentreZ:80@,
+    .RaceStartTimer = @gRaceStartTimer:80@,
+    .RaceStartProgress = @RaceStartProgress:80@,
+    .Cameras = @gCameras:80@,
+    .PlayerIdMap = @sPlayerID:80@,
+    .ViewportLayout = @gViewportLayout:80@,
+    .ActiveCameraId = @gActiveCameraID:80@,
+    .CurrentCameraFov = @gCurCamFOV:80@,
+    .CutsceneCameraActive = @gCutsceneCameraActive:80@,
+    .ViewProjectionMatrix = @gViewProjMatrixF:80@,
+    .CurrentMapId = @gMapId:80@,
+    .CurrentLevelHeader = @gCurrentLevelHeader:80@,
+    .SpTaskNumber = @gSPTaskNum:80@,
+    .IsPaused = @gIsPaused:80@,
+    .PostRaceViewport = @gPostRaceViewPort:80@,
+    .TextureCache = @gTextureCache:80@,
+    .NumberOfLoadedTextures = @gNumberOfLoadedTextures:80@,
+    .MenuSelectedCharacter = @gMenuSelectedCharacter:80@,
+    .MenuCurrentCharacter = @gMenuCurrentCharacter:80@,
+    .ActivePlayersArray = @gActivePlayersArray:80@,
+    .CharacterSelectStatus = @gCharselectStatus:80@,
+    .PlayersCharacterArray = @gPlayersCharacterArray:80@,
+    .CharacterIdSlots = @gCharacterIdSlots:80@,
+    .PlayerSelectVehicle = @gPlayerSelectVehicle:80@,
+    .MenuButtons = @gMenuButtons:80@,
+    .NumberOfGameplayPlayers = @gNumActivePlayers:80@,
+    .CurrentHud = @gCurrentHud:80@,
+    .PlayerHud = @gPlayerHud:80@,
+    .HudNumPlayers = @gHUDNumPlayers:80@,
+    .HudDisplayList = @gHudDL:80@,
+    .HudColour = @gHudColour:80@,
+    .RumblePresent = @gRumblePresent:80@,
+    .TitleDemoIndex = @gTitleDemoIndex:80@,
+    .TitleRevealTimer = @gTitleRevealTimer:80@,
+    .WaveController = @gWaveController:80@,
+    .NumberOfLevelSegments = @gNumberOfLevelSegments:80@,
+    .WavePowerBase = @gWavePowerBase:80@,
+    .WaveMagnitude = @gWaveMagnitude:80@,
+    .WavePowerDivisor = @gWavePowerDivisor:80@,
+    .IsInTracksMenu = @gIsInTracksMenu:80@,
+    .GameMode = @gGameMode:80@,
+    .MenuStage = @gMenuStage:80@,
+    .MenuDelay = @gMenuDelay:80@,
+    .PostraceFinishState = @gPostraceFinishState:80@,
+    .WaveTexUVMaskX = @gWaveTexUVMaskX:80@,
+    .WaveTexUVMaskY = @gWaveTexUVMaskY:80@,
+    .CurrentSequence = @gCurrentSequenceID:80@,
+    .SequenceTable = @gSequenceTable:80@,
+    .SequenceLengths = @gSeqLengthTable:80@,
+    .SequenceSoundTable = @gSeqSoundTable:80@,
+};
+
+}
+'''
+
+[names.FrustumReference]
+"77" = "D_800DC8AC"
+"80" = "D_800DC8AC"
+
+[names.WaveSelectionMap]
+"77" = "D_800E30D4"
+"80" = "D_800E30D4"
+
+[names.VoidLateralX]
+"77" = "D_8011D4A0"
+"80" = "D_8011D4A0"
+
+[names.VoidLateralZ]
+"77" = "D_8011D4A4"
+"80" = "D_8011D4A4"
+
+[names.VoidCentreX]
+"77" = "D_8011D4AC"
+"80" = "D_8011D4AC"
+
+[names.VoidCentreZ]
+"77" = "D_8011D4B0"
+"80" = "D_8011D4B0"
+
+[names.RaceStartProgress]
+"77" = "D_8011D544"
+"80" = "D_8011D544"
