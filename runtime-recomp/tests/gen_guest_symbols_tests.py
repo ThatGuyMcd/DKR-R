@@ -19,9 +19,12 @@ SPEC.loader.exec_module(gen_guest_symbols)
 
 GOLDEN = {
     "revision_symbols.hpp": "e93fe4af",
+    "enhancements_symbols.hpp": "99c824ec",
+    "hud_layout_code_symbols.hpp": "2cc7e3df",
+    "hud_layout_symbols.hpp": "fa371568",
     "audio_queue_symbols.hpp": "069b742c",
     "display_list_symbols.hpp": "833f48e9",
-    "memory_symbols.hpp": "61d8ed7d",
+    "memory_symbols.hpp": "e4995134",
     "camera_symbols.hpp": "1e0b6071",
     "capture_symbols.hpp": "b465bddf",
     "credits_sky_symbols.hpp": "bddb1255",
@@ -36,6 +39,8 @@ GOLDEN = {
     "render_heap_addresses.hpp": "0cbe828b",
     # v1.0.15 added the light intensity, inverse view and viewport layout symbols.
     "vehicle_symbols.hpp": "fd41fa2d",
+    "legacy_world_symbols.hpp": "c72fb949",
+    "resident_assets_symbols.hpp": "bdd2b7fa",
 }
 DECOMP = ROOT / "extern/dkr-decomp/ver/symbols"
 
