@@ -89,14 +89,12 @@ def main() -> int:
             difference = compare(golden, written)
             if difference:
                 failures.append(f"{name}: save(load(golden)) differs from the golden\n{difference}")
-        # No file at all: the second save of a fresh install is the defaults
-        # golden. The first save is not a fixed point: the default analogue
-        # bindings share a source with Z and Accelerate, and loading them in
-        # file order unbinds the earlier action.
+        # No file at all: a fresh install writes the defaults golden at once,
+        # and reloading that settles on the same bytes. (The shared default
+        # controller sources used to be unbound by the reload.)
         first = run_round_trip(executable, None, scratch_path / "fresh")
-        second = run_round_trip(executable, first, scratch_path / "fresh-again")
-        if compare(fixtures / "defaults.ini", second):
-            failures.append("a fresh install no longer settles on defaults.ini after two saves")
+        if compare(fixtures / "defaults.ini", first):
+            failures.append("a fresh install no longer saves defaults.ini on the first save")
     defaults = read(fixtures / "defaults.ini")
     other = read(fixtures / "non-default.ini")
     for key in sorted((defaults.keys() ^ other.keys()) - CONDITIONAL_KEYS):
