@@ -52,6 +52,29 @@ RECORDED = {
         },
     ),
     "scenery_symbols.hpp": (["local_scenery_rt64.cpp"], {"dRenderSettingsCommon": (0x800DE8E8, 0x800DEE68)}),
+    "title_text_symbols.hpp": (
+        ["title_text_rt64.hpp"],
+        {
+            "dDialogueBoxBegin": (0x800E3690, 0x800E3C20),
+            "dDialogueBoxDrawModes": (0x800E36C8, 0x800E3C58),
+            "gFonts": (0x8012A7E4, 0x8012ADA4),
+            "gNumberOfFonts": (0x8012A7E0, 0x8012ADA0),
+            "gCompactKerning": (0x8012A7F0, 0x8012ADB0),
+            "gTitleCinematicText": (0x800DF83C, 0x800DFDBC),
+            "gTitleCinematicTextColours": (0x800DF9F8, 0x800DFF78),
+            "gCreditsMenuElements": (0x800E1B50, 0x800E20D0),
+        },
+    ),
+    "credits_sky_symbols.hpp": (
+        ["credits_sky_rt64.hpp"],
+        {
+            "gVoidData": (0x800DC924, 0x800DCE94),
+            "gVoidVerts": (0x8011D480, 0x8011DA00),
+            "gVoidCurrVerts": (0x8011D488, 0x8011DA08),
+            "gVoidVertexFlip": (0x8011D4B4, 0x8011DA34),
+            "gVoidVertCount": (0x8011D4B6, 0x8011DA36),
+        },
+    ),
 }
 
 
