@@ -59,45 +59,72 @@ release they are based on.
 
 ## Live state check
 
-Admission is a promise, so a lobby that spans architectures also checks it
-while it runs. The host puts the architecture-free launch hash in the launch
-only when a peer from another architecture was admitted, and every racer in
-such a lobby then runs the check (`lobby_spans_architectures`,
-`netplay/state_cross_check.hpp`):
+Rollback netplay only sends controller inputs. Every machine then works out
+the game for itself, so if two machines ever compute something different (a
+compiler that rounds differently, a port that quietly breaks the contract)
+nothing in the game would notice: the racers would just drift apart. For a
+lobby that spans architectures the game therefore checks it while it runs, so a
+divergence becomes a clear message instead of a silent desync.
 
-- Every 30 confirmed frames each racer takes the hash saved with that
-  frame's retained checkpoint (the value the self-test prints as
-  `[check][state]`, hashed once) and sends `(epoch, frame, hash)` to the host.
-  The host compares every report with its own hash of the same frame.
-- A mismatch stops the race for everyone. The host logs
-  `[party][desync] epoch= frame= local= remote= peer=`, records a
-  `rollback-desync` event (both hashes and the peer are in its detail), tells
-  the racers, and fails with "Rollback determinism failed at simulation frame N."
-  Each racer logs the same line and stops with the same message. There is no
-  resync attempt.
-- A peer that stops reporting is only unverified: the host logs
-  `[party][desync-check] peer=... is not reporting state hashes` once and the
-  race goes on. Nothing waits for a report.
-- Bounds: one 20 byte message per racer per 30 frames; the host keeps at most
-  16 sampled frames; reports that are off the cadence, from anyone who is not
-  a racer, repeat a frame with a different hash, or are older than everything
-  kept are dropped and change nothing.
+When does it run? The host uses the architecture-free launch hash only when a
+peer from another architecture was admitted into the lobby (spectators count:
+they have to accept the launch hash too). Every racer in such a lobby runs the
+check (`lobby_spans_architectures`, `netplay/state_cross_check.hpp`). Look for
+this line at the start of a race:
 
-Nothing new is sent anywhere else. The check is off unless the launch hash is
-the architecture-free form, so a lobby on one architecture sends exactly what
-it always did, including to a build that predates this. `StateHash` and
-`Desync` are new party message types (appended after `InputReceipt`);
-`PartyRuntime::message` ignores a type it does not know, so even a stray one
-would be dropped by an older build. Because only builds with the check can be in a
-lobby launched with the architecture-free hash, neither type reaches one that
-lacks it. A racer that joins a spanning lobby late (its frame count does not
-line up with the 30 frame cadence) is simply not verified.
+```text
+[party][desync-check] enabled reason=lobby spans architectures
+```
 
-For testing, `DKR_OWNED_CHECK_VERIFY=1` forces the check on in a one
-architecture self-test lobby (every peer must be a build with the check and set
-it) and `DKR_OWNED_CHECK_CORRUPT_STATE_AT=<frame>` makes that peer report a
-wrong hash for the first sampled frame at or after it. Both only work in
-`--self-test-owned-*` runs.
+No line means the lobby is on one architecture and nothing new is sent.
+
+How it works:
+
+- Every 30 confirmed frames each racer takes the hash saved with that frame's
+  retained checkpoint (the value the self-test prints as `[check][state]`,
+  hashed once) and sends `(epoch, frame, hash)` to the host. The host compares
+  every report with its own hash of the same frame. Frames are numbered from
+  the start of the epoch, so a racer that joins mid-race lines up too.
+- Memory and traffic are bounded: one 20 byte message per racer per 30 frames,
+  at most 16 sampled frames kept on the host, and a report that is off the
+  cadence, from someone who is not a racer, repeats a frame with a different
+  hash, or is older than everything kept is dropped and changes nothing.
+
+What you will see if the two sides disagree, on every machine in the lobby:
+
+```text
+[party][desync] epoch=92 frame=1500 local=217D59FBE74B7E2A remote=217D593B18A520C7 peer=3288762986889906221
+[party][failure] Rollback determinism failed at simulation frame 1500.
+```
+
+`local` is this machine's hash and `remote` the other side's, for the first
+frame that differed, and `peer` is the sender id of the machine that disagreed
+with the host. The race stops for everyone, a `rollback-desync` entry with both
+hashes is written to the flight recorder dump that follows, and the screen says
+"The game lost sync. Return to the lobby and try again." There is no resync.
+Keep both logs: `scripts/compare_state_hashes.py` finds the same frame in the
+`[check][state]` lines of a self-test run.
+
+What it does not do: a peer that stops sending hashes is only unverified. The
+host logs `[party][desync-check] peer=... is not reporting state hashes; not
+verified` once and the race goes on; nothing waits for a report.
+
+Nothing new is sent anywhere else. A lobby on one architecture sends exactly what
+it always did, including to a build of the same release that predates this.
+`StateHash` and `Desync` are new party message types appended after
+`InputReceipt`; `PartyRuntime::message` ignores a type it does not know. Only
+builds with the check can be in a lobby launched with the architecture-free hash,
+so neither type reaches one that lacks it.
+
+Rehearsing it on one machine (self-test only, see `docs/ROLLBACK-SELF-TEST.md`):
+
+- `DKR_OWNED_CHECK_VERIFY=1` turns the check on in a lobby that is all one
+  architecture. Set it on every peer; every peer must be a build with the check.
+- `DKR_OWNED_CHECK_CORRUPT_STATE_AT=<frame>` makes that one peer report a wrong
+  hash for the first sampled frame at or after `frame` (1500 lands in the race,
+  300 in the menus before it). Use it to see the stop above on every peer.
+- `DKR_OWNED_CHECK_STATE_EVERY=<n>` changes how often `[check][state]` is
+  printed (1 to 100, default 30). It does not change the check's cadence.
 
 ## Evidence
 
