@@ -18,6 +18,10 @@ sys.modules[SPEC.name] = gen_guest_symbols
 SPEC.loader.exec_module(gen_guest_symbols)
 
 GOLDEN = {
+    "revision_symbols.hpp": "e93fe4af",
+    "enhancements_symbols.hpp": "99c824ec",
+    "hud_layout_code_symbols.hpp": "2cc7e3df",
+    "hud_layout_symbols.hpp": "fa371568",
     "audio_queue_symbols.hpp": "069b742c",
     "display_list_symbols.hpp": "833f48e9",
     "memory_symbols.hpp": "e4995134",
@@ -46,7 +50,7 @@ class RepositoryRequestTests(unittest.TestCase):
         for spec in sorted(gen_guest_symbols.SPECS.glob("*.toml")):
             request = gen_guest_symbols.load(spec)
             with self.subTest(header=request.header):
-                if request.table == "decomp" and not DECOMP.is_dir():
+                if (request.table == "decomp" or request.decomp) and not DECOMP.is_dir():
                     self.skipTest("needs extern/dkr-decomp")
                 text = gen_guest_symbols.render(request, ROOT)
                 self.assertEqual(hashlib.sha256(text.encode()).hexdigest()[:8], GOLDEN[request.header])
@@ -70,6 +74,7 @@ class GeneratorTests(unittest.TestCase):
                       {{ name = "gOne", vram = 0x{base + 0xAB:08X} }},
                       {{ name = "gTwice", vram = 0x{base:08X} }},
                       {{ name = "gTwice", vram = 0x{base + 4:08X} }},
+                      {{ name = "D_{base + 0x10:08X}", vram = 0x{base + 0x10:08X} }},
                     ]
                     """),
                 encoding="utf-8",
@@ -77,7 +82,8 @@ class GeneratorTests(unittest.TestCase):
             decomp = self.root / "extern/dkr-decomp/ver/symbols"
             decomp.mkdir(parents=True, exist_ok=True)
             (decomp / f"symbol_addrs.us.v{revision}.txt").write_text(
-                f"gOne = 0x{base + 0xAB:08X}; // type:u32\n", encoding="utf-8"
+                f"gOne = 0x{base + 0xAB:08X}; // type:u32\ngDecompOnly = 0x{base + 0x20:08X}; // type:u32\n",
+                encoding="utf-8",
             )
 
     def tearDown(self):
@@ -98,6 +104,32 @@ class GeneratorTests(unittest.TestCase):
         self.assertEqual(gen_guest_symbols.render(request, self.root), "{0x801000abU} 0x802000abU\n")
         request = self.request(["gOne"], "@gOne:77@\n", table="decomp")
         self.assertEqual(gen_guest_symbols.render(request, self.root), "0x801000ABU\n")
+
+    def test_per_revision_names_and_decomp_symbols(self):
+        path = self.root / "request.toml"
+        path.write_text(
+            'schema = 1\nheader = "x.hpp"\ntable = "sdk"\nhex = "upper"\n'
+            'symbols = ["Unnamed", "gDecompOnly", "gOne"]\ndecomp = ["gDecompOnly"]\n'
+            "template = '''@Unnamed:77@ @Unnamed:80@ @gDecompOnly:80@ @ALL:77@'''\n"
+            '[names.Unnamed]\n"77" = "D_80100010"\n"80" = "D_80200010"\n',
+            encoding="utf-8",
+        )
+        request = gen_guest_symbols.load(path)
+        self.assertEqual(
+            gen_guest_symbols.render(request, self.root),
+            "0x80100010U 0x80200010U 0x80200020U 0x80100010U,0x80100020U,0x801000ABU",
+        )
+
+    def test_names_and_decomp_must_be_listed_symbols(self):
+        path = self.root / "request.toml"
+        for extra in ('decomp = ["gTwo"]\n', '[names.gTwo]\n"77" = "x"\n'):
+            path.write_text(
+                'schema = 1\nheader = "x.hpp"\ntable = "sdk"\nhex = "upper"\nsymbols = ["gOne"]\n'
+                "template = '''@gOne:77@'''\n" + extra,
+                encoding="utf-8",
+            )
+            with self.assertRaises(gen_guest_symbols.SymbolError):
+                gen_guest_symbols.load(path)
 
     def test_missing_ambiguous_and_unlisted_symbols_fail(self):
         for symbols, template in ((["gAbsent"], "@ALL:77@"), (["gTwice"], "@ALL:77@"), (["gOne"], "@gTwice:77@")):

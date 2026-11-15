@@ -680,7 +680,13 @@ FULL_SCENE_NATIVE_HASH = {
     "runtime-recomp/src/game/intro_tail_policy.hpp": "5433ebb8ad644d4c4ff1d4b539494dbd8488225740008343415f5c87af50428f",
     "runtime-recomp/src/game/water_profile.cpp": "e674ca4e4464e00a00eb1e77af9c926adbac4e86fb6911ac1da58ccd4ee8f04d",
     # Both revisions keep the water UV masks and append PR46's music globals.
-    "runtime-recomp/src/game/revision_addresses.hpp": "603770010a38b56b95505787a307c610300a2a359ef9ff2399b0df55a8d87735",
+    # Nov 16: AddressTable and the kUsV77/kUsV80 tables are generated from
+    # symbols/revision_addresses.toml (revision_symbols.hpp); the mutable
+    # aliases and select() are unchanged. Every entry equals the old
+    # hand-written value (scripts/tests/test_revision_addresses.py).
+    # Nov 16: adds current() and its atomic table pointer, set last by select();
+    # no address or alias changed (tests/revision_addresses_current_tests.cpp).
+    "runtime-recomp/src/game/revision_addresses.hpp": "14a133a37a114ee3dd86d837e8db1ea6f86958ac112fdb6cf083ef4893565525",
     # Frozen online binding diverts before offline decoder/global song reads.
     # Without a ModWorld the private hooks retain their prior identity branch.
     "runtime-recomp/src/game/custom_music.cpp": "09953f14e30fa72c5161801b3eafebeff7c5c2a04b5d63f912367e87bfa7421b",
@@ -693,7 +699,9 @@ FULL_SCENE_NATIVE_HASH = {
     # in the owned CPU; per-player preferences are consumed by the decoder.
     # v1.0.15: the layout aspect comes from the display settings policy
     # instead of the raw window size. Still a per-player presentation input.
-    "runtime-recomp/src/game/runtime_enhancements.cpp": "6f3ad102692d2951e3de104025bfc1f17b8aa519acc99e44f4d99d0b0675f9f1",
+    # Nov 16: the scene player and viewport addresses its two reads use come
+    # from generated symbol tables with the same values; no new access.
+    "runtime-recomp/src/game/runtime_enhancements.cpp": "133123433a896ac1b5d6b159d0aeb8beb79c441b6953473026c048ac1fbfad3a",
     "runtime-recomp/src/game/character_select_animation_policy.hpp": "03e0f77cd2969926a48ca434964e4a2b813efa93a0dc31e4b779eb7037a547b1",
     "runtime-recomp/src/game/character_select_music_policy.hpp": "0a762402cc3308eb5197dd97eaac81778079bfdfa0f81a2f4aeb98cbc0ec7c22",
 }
