@@ -48,6 +48,10 @@ class SymbolError(Exception):
     pass
 
 
+def _no_names() -> dict[str, dict[str, str]]:
+    return {}
+
+
 @dataclasses.dataclass(frozen=True)
 class Request:
     header: str
@@ -59,7 +63,7 @@ class Request:
     decomp: tuple[str, ...] = ()
     # A listed symbol that has a different name in a revision's table, as
     # {symbol: {"77": name, "80": name}} (the SDK names unnamed data D_<address>).
-    names: dict[str, dict[str, str]] = dataclasses.field(default_factory=dict, hash=False)
+    names: dict[str, dict[str, str]] = dataclasses.field(default_factory=_no_names, hash=False)
 
 
 def load(path: Path) -> Request:

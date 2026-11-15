@@ -176,7 +176,7 @@
     "scripts/character_portrait_pipeline.py": "4cc7f51d062a6b36f1a6a9db1259501693d6e03da963522a3390b46d8ab2ebae",
     "scripts/compose_legacy_mod_policy.py": "07dbea02c2f55fabd65ae89e3159d5327b221ca5eb152751e7a566cb96ad6eb4",
     "scripts/compose_payloads.py": "c662355843564ccd40759cb245de158888abae80baf59c7f309834897626ba68",
-    "scripts/gen_guest_symbols.py": "bf4c9846fd886a0662d3283e55d4ff8e43fbb6237fc510a5c5ae788be059f161",
+    "scripts/gen_guest_symbols.py": "52ac0b14f1893278011f04267858b6f40140e79e8a96e18a552e70f0c3315fbc",
     "scripts/generate_recomp_config.py": "444874a216c9011e6f196aa0a1269594517afcdea5fb3763196e092d99bfc473",
     "scripts/generate_replay_probe.py": "4b91645fb880649e4639582eb25ff11004293ff787cee5374e7f6d7a27514323",
     "scripts/generate_revision_policy.py": "bafbefad41542e00b6c5ec13b02acde69dda7f48e34025f46d92d028da6427b9",
@@ -201,6 +201,6 @@
   },
   "last_update": {
     "identity_changed": false,
-    "reason": "Add revision_addresses::current() and its atomic table pointer; the pinned file only gained an accessor, no address or simulation change"
+    "reason": "Add revision_addresses::current() and its atomic table pointer; the pinned file only gained an accessor, no address or simulation change. gen_guest_symbols.py typed for pyright, output unchanged"
   }
 }
