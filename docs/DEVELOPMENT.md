@@ -36,6 +36,10 @@ To run the Track Lab Python suites, use `--suite track-lab`. Missing private
 fixtures are reported as SKIP, not as successful retail-content tests.
 Tooling tests that need CMake (and Ninja) run in the opt-in `--suite host-tools`
 (CTest runs them too); `--suite all` includes both.
+The tooling suite also runs `runtime-recomp/tests/replay_probe/test_generator.py`
+(the replay probe generator's pins and ABI checks, CTest `ReplayProbePipelineControlFlow`)
+when `build/generated/v77` and `v80` and the `extern/` checkouts exist, and
+prints a skip notice otherwise.
 
 For a single regression, invoke its test file directly, for example:
 
