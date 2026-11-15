@@ -1,3 +1,4 @@
+#include "../guest_call_context.hpp"
 #include "legacy_runtime_character.hpp"
 #include "legacy_character_menu.hpp"
 
@@ -69,14 +70,13 @@ void animate_character_textures(std::span<std::uint8_t> memory, const recomp_con
         }
         const auto offset = sp - 4;
         g.write(offset, g.read(row + 7, 1) << 6);
-        auto call = ctx;
-        call.r29 = static_cast<std::int32_t>(sp - 0x200);
-        call.f_odd = call.mips3_float_mode ? &call.f1.u32l : &call.f0.u32h;
-        call.r4 = static_cast<std::int32_t>(texture);
-        call.r5 = static_cast<std::int32_t>(row + 8);
-        call.r6 = static_cast<std::int32_t>(offset);
-        call.r7 = ctx.r5;
-        animate(memory.data(), &call);
+        dkr::runtime::GuestCallContext call(ctx);
+        call->r29 = static_cast<std::int32_t>(sp - 0x200);
+        call->r4 = static_cast<std::int32_t>(texture);
+        call->r5 = static_cast<std::int32_t>(row + 8);
+        call->r6 = static_cast<std::int32_t>(offset);
+        call->r7 = ctx.r5;
+        animate(memory.data(), call.get());
         g.write(row + 7, (g.read(offset) >> 6) & 255U, 1);
         if (entry)
             *entry = {texture, row};
@@ -153,13 +153,12 @@ void dispatch_character_ai_event(CharacterRoster& roster, CharacterAiState& stat
     g.read(sp - 0x100);
     g.read(sp - 1, 1);
     roster.assign_ai(ids, humans, racers, unlocked, [&](unsigned count) {
-        auto call = ctx;
-        call.r29 = static_cast<std::int32_t>(sp - 0x100);
-        call.f_odd = call.mips3_float_mode ? &call.f1.u32l : &call.f0.u32h;
-        call.r4 = 0;
-        call.r5 = count - 1;
-        random(memory.data(), &call);
-        return unsigned(call.r2);
+        dkr::runtime::GuestCallContext call(ctx);
+        call->r29 = static_cast<std::int32_t>(sp - 0x100);
+        call->r4 = 0;
+        call->r5 = count - 1;
+        random(memory.data(), call.get());
+        return unsigned(call->r2);
     });
     for (unsigned i = humans; i < racers; ++i)
         g.write(settings + 0x59 + 24 * i, ids[i], 1);

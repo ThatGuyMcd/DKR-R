@@ -1,6 +1,7 @@
 #pragma once
 #include <stdint.h>
 #include <stddef.h>
+#include "memory_symbols.hpp"
 
 /* Authored, guest-owned allocator safety. Every persistent byte is in RDRAM,
    so restoring a rollback checkpoint also restores queue/reserve ownership.
@@ -29,7 +30,7 @@ static inline int dkr_memory_range(dkr_memory_view g, uint32_t p, size_t n, unsi
     return (p & 0xe0000000U) == 0x80000000U && !(p & (align - 1U)) && o <= g.bytes && n <= g.bytes - o;
 }
 static inline uint32_t dkr_memory_pools(dkr_memory_view g) {
-    return g.revision == 77 ? 0x80123580U : 0x80123b00U;
+    return dkr_memory_pools_address(g.revision);
 }
 static inline uint32_t dkr_memory_descriptor(dkr_memory_view g) {
     return dkr_memory_pools(g) + 72U;
