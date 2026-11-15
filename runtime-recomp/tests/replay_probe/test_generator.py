@@ -145,13 +145,12 @@ class InstrumentationTests(unittest.TestCase):
                 with self.assertRaises(ValueError): generator.input_native_audit()
 
     def reviewed_dir(self, revision):
-        """The reviewed Patch Pipeline output for one revision (DKR_REVIEWED_GENERATED_V<rev>)."""
-        root=Path("G:/DiddykongWorkFolder" if os.name=="nt" else "/mnt/g/DiddykongWorkFolder")
         configured=os.environ.get(f"DKR_REVIEWED_GENERATED_V{revision}")
-        return (Path(configured) if configured else
-                Path(os.environ["DKR_TEST_GENERATED_ROOT"])/f"v{revision}/RecompiledFuncs"
-                if os.environ.get("DKR_TEST_GENERATED_ROOT") else
-                self.reviewed_dir(revision))
+        if configured:
+            return Path(configured)
+        if os.environ.get("DKR_TEST_GENERATED_ROOT"):
+            return Path(os.environ["DKR_TEST_GENERATED_ROOT"])/f"v{revision}/RecompiledFuncs"
+        self.skipTest(f"Set DKR_REVIEWED_GENERATED_V{revision} or DKR_TEST_GENERATED_ROOT to the generated sources")
 
     def reviewed_bodies(self, revision):
         directory=self.reviewed_dir(revision)
