@@ -19,6 +19,9 @@ SPEC.loader.exec_module(gen_guest_symbols)
 
 GOLDEN = {
     "revision_symbols.hpp": "e93fe4af",
+    "audio_queue_symbols.hpp": "069b742c",
+    "display_list_symbols.hpp": "833f48e9",
+    "memory_symbols.hpp": "61d8ed7d",
     "camera_symbols.hpp": "1e0b6071",
     "capture_symbols.hpp": "b465bddf",
     "credits_sky_symbols.hpp": "bddb1255",
