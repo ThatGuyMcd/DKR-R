@@ -1703,10 +1703,162 @@ void DirectSession::begin_countdown_locked() {
     broadcast_lobby();
 }
 
+// Builds the rollback_check context for this session. Credentials never enter
+// the sidecar or its public snapshot. Requires mutex_ held by the caller; takes
+// party->mutex internally and releases it before returning. Lock order is
+// documented at the declaration in direct_session.hpp.
+dkr::runtime::rollback_check::Context DirectSession::rollback_context_locked() {
+    namespace check = dkr::runtime::rollback_check;
+    namespace watch = dkr::runtime::spectators;
+    check::Context c;
+    c.room = match_id_;
+    c.local = sender_id_;
+    c.host_id = is_host_ ? sender_id_ : host_sender_id_;
+    c.host = is_host_;
+    const auto& room = is_host_ ? lobby_.room() : room_view_;
+    const auto& rules = room.rules;
+    c.window = rules.rollback_window;
+    c.automatic = rules.automatic_input_delay;
+    c.delay = c.automatic ? input_delay_ : rules.manual_input_delay;
+    c.idle = (state_ == ConnectionState::Hosting || state_ == ConnectionState::Lobby) && !pending_invitation_ &&
+             launch_stage_ == LaunchStage::Idle && !launch_countdown_active_ &&
+             rules.synchronization == SynchronizationMode::ExperimentalRollback;
+    auto party = watch::party_link(this);
+    std::scoped_lock party_lock(party->mutex);
+    c.party = party->enabled;
+    if (c.party) {
+        const auto roster = party->party.snapshot();
+        c.roster = roster.generation;
+        c.local_watching = party->local_watching();
+        c.idle = c.idle && party->admitted && !party->launch && !party->running && !party->stopping &&
+                 !party->start_requested && !roster.handover;
+        for (const auto& m : roster.members) {
+            if (m.id == sender_id_ || !m.connected || (!is_host_ && m.id != host_sender_id_))
+                continue;
+            const bool observer = m.role == watch::Role::Spectator;
+            const auto* peer = party->peer(m.id);
+            const auto address = is_host_ && peer ? peer->address : host_address_;
+            bool ready = bool(address) && transport_->traffic_ready(address, TransportTrafficClass::Control);
+            ready = ready && transport_->traffic_ready(address, observer ? TransportTrafficClass::Replica
+                                                                         : TransportTrafficClass::Control);
+            if (observer)
+                ready = ready && transport_->traffic_ready(address, TransportTrafficClass::Checkpoint);
+            c.peers.push_back({m.id, m.name, observer, ready});
+        }
+        c.queued = party->outgoing_bytes;
+    } else if (is_host_) {
+        for (const auto& peer : peers_)
+            if (peer.active) {
+                bool ready = true;
+                for (auto lane : {TransportTrafficClass::Control, TransportTrafficClass::Realtime,
+                                  TransportTrafficClass::Authoritative})
+                    ready = ready && transport_->traffic_ready(peer.address, lane);
+                c.peers.push_back({peer.sender_id, room.players[peer.slot].display_name, false, ready});
+            }
+    } else if (host_address_) {
+        std::string name = "Host";
+        for (const auto& player : room_view_.players)
+            if (player.host)
+                name = player.display_name;
+        c.peers.push_back({host_sender_id_, name, false, true});
+    }
+    // Report identities are authenticated party IDs; ordinary four-port
+    // lobbies use generation-bound port tokens because their Room codec does
+    // not expose other clients' authentication IDs. No port is assigned here.
+    if (c.party) {
+        c.local_member = sender_id_;
+        c.host_member = c.host_id;
+        for (const auto& m : party->party.snapshot().members)
+            if (m.connected)
+                c.members.push_back({m.id, m.name, m.role == watch::Role::Spectator, true, m.id});
+        for (auto& p : c.peers)
+            p.member = p.id;
+    } else {
+        c.roster = room.generation;
+        c.local_member = local_slot_ < 4 ? std::uint64_t(local_slot_) + 1 : 0;
+        c.host_member = 1;
+        for (unsigned i = 0; i < room.players.size(); ++i)
+            if (room.players[i].occupied)
+                c.members.push_back(
+                    {std::uint64_t(i) + 1, room.players[i].display_name, false, true, std::uint64_t(i) + 1});
+        for (auto& p : c.peers) {
+            if (is_host_) {
+                if (const auto* peer = peer_by_sender(p.id))
+                    p.member = std::uint64_t(peer->slot) + 1;
+            } else
+                p.member = 1;
+        }
+    }
+    std::sort(c.members.begin(), c.members.end(), [](const auto& a, const auto& b) { return a.id < b.id; });
+    std::sort(c.peers.begin(), c.peers.end(), [](const auto& a, const auto& b) { return a.id < b.id; });
+    for (const auto* queue :
+         {&critical_outbound_, &repair_outbound_, &authority_outbound_, &normal_priority_outbound_, &bulk_outbound_})
+        for (const auto& packet : *queue)
+            c.queued += packet.bytes.size();
+    for (auto lane :
+         {TransportTrafficClass::Control, TransportTrafficClass::Authoritative, TransportTrafficClass::Realtime,
+          TransportTrafficClass::Replica, TransportTrafficClass::Checkpoint})
+        c.queued += transport_->buffered_bytes(lane);
+    return c;
+}
+
+// Synthetic datagrams share the existing authenticated route and traffic
+// classification, but never enter the game's reliable application queues.
+// Requires mutex_ held by the caller; takes party->mutex internally. This is
+// the rollback_check::Send callback, so it runs with the check mutex held.
+bool DirectSession::rollback_send_locked(std::uint64_t target, protocol::MessageType type,
+                                         std::span<const std::uint8_t> payload) {
+    namespace watch = dkr::runtime::spectators;
+    if (!transport_->is_open())
+        return false;
+    PeerAddress address{};
+    secure::Key peer_key{};
+    auto party = watch::party_link(this);
+    std::scoped_lock party_lock(party->mutex);
+    if (is_host_) {
+        if (party->enabled) {
+            auto* peer = party->peer(target);
+            if (!peer)
+                return false;
+            address = peer->address;
+            peer_key = peer->key;
+        } else {
+            auto* peer = peer_by_sender(target);
+            if (!peer)
+                return false;
+            address = peer->address;
+            peer_key = peer->key;
+        }
+    } else {
+        if (target != host_sender_id_)
+            return false;
+        address = host_address_;
+        peer_key = key_;
+    }
+    TransportTrafficClass lane = TransportTrafficClass::Control;
+    if (type == protocol::MessageType::PreflightRealtimeProbe)
+        lane = TransportTrafficClass::Realtime;
+    else if (type == protocol::MessageType::PreflightAuthorityProbe)
+        lane = TransportTrafficClass::Authoritative;
+    else if (type == protocol::MessageType::PreflightReplicaProbe)
+        lane = TransportTrafficClass::Replica;
+    if (!transport_->traffic_ready(address, lane) || transport_->buffered_bytes(lane) > 64 * 1024)
+        return false;
+    auto& sequence = outbound_sequence(address, peer_key);
+    if (sequence == UINT64_MAX)
+        return false;
+    protocol::Datagram record{{type, match_id_, sequence++, 0}, {payload.begin(), payload.end()}};
+    const auto plain = protocol::encode(record, transport_->maximum_plaintext_datagram_bytes());
+    if (plain.empty())
+        return false;
+    const auto bytes = secure::seal(plain, peer_key, sender_id_, record.header.sequence, match_id_);
+    std::string ignored;
+    return transport_->send_status(address, bytes, lane, ignored) == DatagramSendStatus::Sent;
+}
+
 bool DirectSession::request_connection_test(std::string& error) {
     std::scoped_lock lock(mutex_);
-#include "owner_context.inl"
-    const bool ok = dkr::runtime::rollback_check::request(this, rollback_context(), error);
+    const bool ok = dkr::runtime::rollback_check::request(this, rollback_context_locked(), error);
     if (ok) {
         worker_wake_ = true;
         state_changed_.notify_all();
@@ -5652,8 +5804,10 @@ void DirectSession::broadcast(protocol::MessageType type, std::span<const std::u
 
 void DirectSession::pump_locked() {
 #include "../owner_pump.inl"
-#include "owner_context.inl"
-#include "../owner_send.inl"
+    const auto rollback_send = [this](std::uint64_t target, protocol::MessageType type,
+                                      std::span<const std::uint8_t> payload) {
+        return rollback_send_locked(target, type, payload);
+    };
 
     // This owner-only path is shared by authenticated leave/disconnect notices,
     // current transport closure and the heartbeat watchdog. Spectators never own
@@ -5915,8 +6069,9 @@ void DirectSession::pump_locked() {
                 }
             }
             if (approved)
-                dkr::runtime::rollback_check::receive(this, rollback_context(), packet_sender, packet.header.type,
-                                                      packet.payload, rollback_send, std::chrono::steady_clock::now());
+                dkr::runtime::rollback_check::receive(this, rollback_context_locked(), packet_sender,
+                                                      packet.header.type, packet.payload, rollback_send,
+                                                      std::chrono::steady_clock::now());
             continue; // Never enter legacy preflight or real game-input handlers.
         }
         // Inside DirectSession::pump_locked, after AEAD and replay-window validation.
@@ -6296,7 +6451,7 @@ void DirectSession::pump_locked() {
         return;
     }
     if (dkr::runtime::rollback_check::engaged(this))
-        dkr::runtime::rollback_check::service(this, rollback_context(), rollback_send,
+        dkr::runtime::rollback_check::service(this, rollback_context_locked(), rollback_send,
                                               std::chrono::steady_clock::now());
     // Inside pump_locked after ordinary receive/flush, before four-port policies.
     {
