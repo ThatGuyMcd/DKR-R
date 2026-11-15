@@ -657,6 +657,12 @@ int DkrMain(int argc, char** argv) {
                      passed ? "PASS" : "FAILED");
         return passed ? 0 : 1;
     }
+    if (argc == 3 && std::string_view(argv[1]) == "--self-test-settings") {
+        const bool written = dkr::runtime::ui::self_test_settings(std::filesystem::u8path(argv[2]));
+        std::fprintf(stderr, "[test][settings] %s: settings file loaded and written back\n",
+                     written ? "PASS" : "FAILED");
+        return written ? 0 : 1;
+    }
     if (argc >= 2 && std::string_view(argv[1]) == "--self-test-input-switch") {
         const std::filesystem::path test_directory =
             argc >= 3 ? std::filesystem::u8path(argv[2]) : DefaultConfigDirectory(argv[0]) / "input-switch-self-test";

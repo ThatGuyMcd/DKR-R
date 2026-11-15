@@ -2866,6 +2866,15 @@ if(BUILD_TESTING)
     add_test(NAME DKRWidescreenPolicy COMMAND DKRWidescreenPolicyTests)
 
     if(DKR_RUNTIME_BUILD_RT64 AND TARGET DKRPortGame)
+        # The settings file through the real LoadSettings and SaveSettings; the
+        # host preset does not compile runtime_ui.cpp, so this needs the game.
+        add_test(
+            NAME DKRSettingsRoundTrip
+            COMMAND
+                "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_LIST_DIR}/tests/settings_round_trip_tests.py"
+                "$<TARGET_FILE:DKRPortGame>" "${CMAKE_CURRENT_LIST_DIR}/../tests/fixtures/settings-round-trip"
+        )
+        set_tests_properties(DKRSettingsRoundTrip PROPERTIES LABELS "runtime" TIMEOUT 180)
         add_executable(DKRSplitScreenRT64Tests tests/split_screen_rt64_tests.cpp)
         target_include_directories(
             DKRSplitScreenRT64Tests
