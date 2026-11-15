@@ -34,6 +34,9 @@ TOOLING_TESTS = tuple(
         if path.name not in TOOLING_TESTS_SKIP and path.name not in HOST_TOOL_TESTS
     )
 )
+# The scripts' own unit tests (scripts/tests/test_*.py) run in tooling too:
+# they need Python only, and nothing else in CI runs most of them.
+SCRIPT_TESTS = tuple(sorted(path.name for path in (ROOT / "scripts/tests").glob("test_*.py")))
 # pinned_bytes_tests.py stays in tooling for its unit tests; its real pre-commit
 # run (which installs hook environments) is gated on this variable, which
 # host-tools sets when it runs the file again.
@@ -89,7 +92,10 @@ def main(argv=None) -> int:
             [sys.executable, "scripts/pattern_guard.py", "--tree", "--baseline", "check"],
             [sys.executable, "scripts/identity_guard.py", "check"],
         ],
-        "tooling": [[sys.executable, f"runtime-recomp/tests/{test}"] for test in TOOLING_TESTS],
+        "tooling": [
+            *([sys.executable, f"runtime-recomp/tests/{test}"] for test in TOOLING_TESTS),
+            *([sys.executable, f"scripts/tests/{test}"] for test in SCRIPT_TESTS),
+        ],
         "host-tools": [
             [sys.executable, f"runtime-recomp/tests/{test}"]
             for test in (*sorted(HOST_TOOL_TESTS), "pinned_bytes_tests.py")
