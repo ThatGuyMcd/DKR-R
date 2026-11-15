@@ -1,3 +1,4 @@
+#include "../guest_call_context.hpp"
 #include "legacy_character_stage.hpp"
 #include <algorithm>
 #include <bit>
@@ -12,12 +13,11 @@ std::uint32_t invoke(OriginalPiHandler fn, std::span<std::uint8_t> memory, const
                      std::uint32_t b = 0) {
     if (!fn)
         throw Error("Native stage callback is missing.");
-    auto ctx = saved;
-    ctx.r4 = ptr(a);
-    ctx.r5 = ptr(b);
-    ctx.f_odd = ctx.mips3_float_mode ? &ctx.f1.u32l : &ctx.f0.u32h;
-    fn(memory.data(), &ctx);
-    return static_cast<std::uint32_t>(ctx.r2);
+    dkr::runtime::GuestCallContext ctx(saved);
+    ctx->r4 = ptr(a);
+    ctx->r5 = ptr(b);
+    fn(memory.data(), ctx.get());
+    return static_cast<std::uint32_t>(ctx->r2);
 }
 void face_camera(CharacterMenuMemory& g, std::uint32_t object, std::uint32_t camera) {
     // Keep the additions parallel to the stage's frontal plane. A positional
@@ -263,14 +263,13 @@ bool CharacterStage::update(std::span<std::uint8_t> memory, const CharacterMenuF
         throw Error("Selection animation exceeds native frame range.");
     if (!calls.animation_fraction || !calls.animation_override)
         throw Error("Selection music clock is unavailable.");
-    auto music = ctx;
-    music.f_odd = music.mips3_float_mode ? &music.f1.u32l : &music.f0.u32h;
-    calls.animation_fraction(memory.data(), &music);
+    dkr::runtime::GuestCallContext music(ctx);
+    calls.animation_fraction(memory.data(), music.get());
     // The retail obj_loop_char_select call site applies this existing override
     // after audio-clock bookkeeping. Custom actors return before that call
     // site, so explicitly reuse it here: one shared phase, not a per-actor clock.
-    calls.animation_override(memory.data(), &music);
-    const float phase = music.f0.fl;
+    calls.animation_override(memory.data(), music.get());
+    const float phase = music->f0.fl;
     if (!std::isfinite(phase) || phase < 0 || phase > 1)
         throw Error("Invalid selection music phase.");
     const float pingpong = phase > 0.5f ? 2.0f * (1.0f - phase) : 2.0f * phase;

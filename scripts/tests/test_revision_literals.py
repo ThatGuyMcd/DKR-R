@@ -104,8 +104,52 @@ RECORDED = {
             "gGameNumPlayers": (0x80123500, 0x80123A80),
         },
     ),
+    "legacy_world_symbols.hpp": (
+        ["runtime_legacy_mods.cpp", "records_guest.inl"],
+        {
+            "gCharacterIdSlots": (0x801263F0, 0x80126990),
+            "gSettingsPtr": (0x80123510, 0x80123A90),
+        },
+    ),
+    "resident_assets_symbols.hpp": (
+        ["mods/legacy_resident_assets.cpp"],
+        {
+            "gTextureAssetTable": (0x80126320, 0x801268C0),
+            "gSpriteOffsetTable": (0x80126348, 0x801268E8),
+            "gObjectModelTable": (0x8011D620, 0x8011DBA0),
+            "gAnimationTable": (0x8011D638, 0x8011DBB8),
+            "gObjectAnimationTable": (0x8011D63C, 0x8011DBBC),
+            "gSequenceTable": (0x80115CF8, 0x80116278),
+            "gSeqLengthTable": (0x80115D0C, 0x8011628C),
+            "gNumberOfLoadedTextures": (0x80126330, 0x801268D0),
+            "gTextureCache": (0x80126328, 0x801268C8),
+            "gSpriteCacheCount": (0x80126358, 0x801268F8),
+            "gSpriteCache": (0x8012634C, 0x801268EC),
+            "gModelCacheCount": (0x8011D62C, 0x8011DBAC),
+            "gModelCache": (0x8011D624, 0x8011DBA4),
+        },
+    ),
+    "enhancements_symbols.hpp": (
+        ["runtime_enhancements.cpp"],
+        {
+            "gSceneCurrentPlayerID": (0x8011B0B4, 0x8011B634),
+            "gScenePlayerViewports": (0x8011D37C, 0x8011D8FC),
+        },
+    ),
+    "hud_layout_symbols.hpp": (
+        ["runtime_hud_layout.cpp"],
+        {
+            "gViewportLayout": (0x80120CE0, 0x80121260),
+            "gPrevPlayerCount": (0x8012350C, 0x80123A8C),
+            "gCurrDisplayList": (0x801211F8, 0x80121778),
+            "gGameCurrTriList": (0x80121228, 0x801217A8),
+            "gHudOffsetX": (0x80126D24, 0x801272E4),
+            "gDialogueBoxBackground": (0x8012A7E8, 0x8012ADA8),
+            "gTimeTrialEnabled": (0x8011AEF4, 0x8011B474),
+        },
+    ),
     "display_list_symbols.hpp": (
-        ["custom_tracks_hooks.cpp"],
+        ["custom_tracks_hooks.cpp", "runtime_legacy_mods.cpp"],
         {
             "gNumF3dCmdsPerPlayer": (0x800DD3B0, 0x800DD920),
             "gPrevPlayerCount": (0x8012350C, 0x80123A8C),
@@ -113,9 +157,45 @@ RECORDED = {
             "gDisplayLists": (0x801211F0, 0x80121770),
         },
     ),
-    "memory_symbols.hpp": (["custom_tracks_hooks.cpp"], {"gMemoryPools": (0x80123580, 0x80123B00)}),
+    "memory_symbols.hpp": (
+        ["custom_tracks_hooks.cpp", "mods/legacy_memory_safety.h"],
+        {"gMemoryPools": (0x80123580, 0x80123B00)},
+    ),
     # The decomp symbol list, so these need extern/dkr-decomp.
     "audio_queue_symbols.hpp": (["runtime_stubs.cpp"], {"__CSPPostNextSeqEvent": (0x800629CC, 0x80062C0C)}),
+}
+
+# header -> (symbol, offset, old v77, old v80): addresses the sources spelled that no
+# symbol names. The header expresses each as a named symbol plus a byte offset.
+OFFSETS = {
+    # The 3D texture table, word 1 of gTextureAssetTable.
+    "resident_assets_symbols.hpp": [("gTextureAssetTable", 4, 0x80126324, 0x801268C4)],
+}
+# Call sites the HUD layout recognises by return address: decomp function symbol
+# -> {revision: [(offset spelled in the source, old absolute address)]}.
+RECORDED_CALL_SITES = {
+    "hud_main_time_trial": {
+        "77": [
+            (0xDD4, 0x800A3550),
+            (0xE10, 0x800A358C),
+            (0xE4C, 0x800A35C8),
+            (0xEA4, 0x800A3620),
+            (0xEDC, 0x800A3658),
+            (0xF14, 0x800A3690),
+        ],
+        "80": [
+            (0xDDC, 0x800A3A98),
+            (0xE18, 0x800A3AD4),
+            (0xE54, 0x800A3B10),
+            (0xEAC, 0x800A3B68),
+            (0xEE4, 0x800A3BA0),
+            (0xF1C, 0x800A3BD8),
+        ],
+    },
+    "hud_finish_position": {
+        "77": [(0x174, 0x800A608C), (0x250, 0x800A6168), (0x32C, 0x800A6244)],
+        "80": [(0x174, 0x800A65D4), (0x250, 0x800A66B0), (0x32C, 0x800A678C)],
+    },
 }
 
 
@@ -157,13 +237,36 @@ class MovedLiteralTests(unittest.TestCase):
                 for value in (v77, v80):
                     self.assertIn(f"0x{value:08X}U", text, f"{header} {symbol}")
 
+    def test_unnamed_addresses_are_a_symbol_plus_the_old_offset(self):
+        tables = {revision: gen.table("sdk", revision, ROOT) for revision in gen.REVISIONS}
+        headers = gen.generate([gen.SPECS / f"{Path(h).stem}.toml" for h in OFFSETS])
+        for header, entries in OFFSETS.items():
+            for symbol, offset, v77, v80 in entries:
+                for revision, expected in (("77", v77), ("80", v80)):
+                    base = tables[revision][symbol][0]
+                    self.assertEqual(base + offset, expected, f"{header} {symbol} v{revision}")
+                    self.assertIn(f"0x{base:08X}U + {offset}U", headers[header], f"{header} {symbol} v{revision}")
+
     def test_no_source_still_spells_an_old_literal(self):
         for header, (sources, recorded) in RECORDED.items():
             old = {value for pair in recorded.values() for value in pair}
+            old |= {value for _, _, v77, v80 in OFFSETS.get(header, []) for value in (v77, v80)}
             for source in sources:
                 text = (ROOT / GAME / source).read_text(encoding="utf-8")
                 spelled = {int(m.group(1), 16) for m in re.finditer(r"0[xX](80[0-9A-Fa-f]{6})U?\b", text)}
                 self.assertEqual(spelled & old, set(), f"{source} still carries {header} literals")
+
+    @unittest.skipUnless(DECOMP.is_dir(), "extern/dkr-decomp is not checked out; call site check skipped")
+    def test_hud_call_sites_are_the_function_plus_the_recorded_offset(self):
+        source = (ROOT / GAME / "runtime_hud_layout.cpp").read_text(encoding="utf-8")
+        for symbol, revisions in RECORDED_CALL_SITES.items():
+            for revision, sites in revisions.items():
+                base = gen.table("decomp", revision, ROOT)[symbol]
+                self.assertEqual(len(base), 1, symbol)
+                for offset, absolute in sites:
+                    self.assertEqual(base[0] + offset, absolute, f"{symbol}+{offset:#x} v{revision}")
+                    self.assertIn(f"0x{offset:X}", source, f"{symbol}+{offset:#x}")
+                    self.assertNotIn(f"0x{absolute:08X}", source.upper().replace("0X", "0x"), f"{absolute:#x}")
 
 
 if __name__ == "__main__":
