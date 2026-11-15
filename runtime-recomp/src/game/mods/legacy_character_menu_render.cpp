@@ -1,3 +1,4 @@
+#include "../guest_call_context.hpp"
 #include "legacy_character_menu_render.hpp"
 #include <algorithm>
 #include <bit>
@@ -26,23 +27,22 @@ class Calls {
             throw Error("Native character menu callback is unavailable.");
         if (args.size() > 8)
             throw Error("Character menu callback argument budget exceeded.");
-        auto ctx = saved;
-        ctx.r29 = ptr(stack);
+        dkr::runtime::GuestCallContext ctx(saved);
+        ctx->r29 = ptr(stack);
         unsigned i = 0;
-        ctx.f_odd = ctx.mips3_float_mode ? &ctx.f1.u32l : &ctx.f0.u32h;
         for (auto v : args) {
             switch (i) {
             case 0:
-                ctx.r4 = ptr(v);
+                ctx->r4 = ptr(v);
                 break;
             case 1:
-                ctx.r5 = ptr(v);
+                ctx->r5 = ptr(v);
                 break;
             case 2:
-                ctx.r6 = ptr(v);
+                ctx->r6 = ptr(v);
                 break;
             case 3:
-                ctx.r7 = ptr(v);
+                ctx->r7 = ptr(v);
                 break;
             default:
                 guest.write(stack + i * 4, v);
@@ -50,8 +50,8 @@ class Calls {
             }
             ++i;
         }
-        fn(memory.data(), &ctx);
-        return static_cast<std::uint32_t>(ctx.r2);
+        fn(memory.data(), ctx.get());
+        return static_cast<std::uint32_t>(ctx->r2);
     }
 };
 } // namespace
@@ -219,17 +219,17 @@ void CharacterMenuRenderer::release(std::span<std::uint8_t> memory, recomp_conte
     for (const auto texture : portraits_) {
         if (!f.free_texture)
             throw Error("Missing portrait release callback.");
-        auto c = ctx;
-        c.r4 = ptr(texture);
-        f.free_texture(memory.data(), &c);
+        dkr::runtime::GuestCallContext c(ctx);
+        c->r4 = ptr(texture);
+        f.free_texture(memory.data(), c.get());
     }
     portraits_.clear();
     if (scratch_) {
         if (!f.release)
             throw Error("Missing character menu heap release.");
-        auto c = ctx;
-        c.r4 = ptr(scratch_);
-        f.release(memory.data(), &c);
+        dkr::runtime::GuestCallContext c(ctx);
+        c->r4 = ptr(scratch_);
+        f.release(memory.data(), c.get());
         scratch_ = 0;
     }
 }

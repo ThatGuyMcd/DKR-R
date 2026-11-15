@@ -1,3 +1,4 @@
+#include "../guest_call_context.hpp"
 #include "analog_driving/input.hpp"
 #include "magic_code_game_world.hpp"
 #include "magic_code_game_services.hpp"
@@ -591,7 +592,7 @@ void GameWorld::write(recomp_context& context, const Registers& registers) {
     context.hi = registers.hi;
     context.lo = registers.lo;
     context.mips3_float_mode = 0;
-    context.f_odd = &context.f0.u32h;
+    dkr::runtime::repair_float_odd_pointer(context);
 }
 void GameWorld::native(std::uint32_t address, Registers& registers, Budget& budget, bool curated) {
     const auto found = std::lower_bound(table_.entries.begin(), table_.entries.end(), address,
