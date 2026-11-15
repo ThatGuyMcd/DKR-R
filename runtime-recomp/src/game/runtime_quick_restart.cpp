@@ -1,3 +1,4 @@
+#include "guest_call_context.hpp"
 #include "quick_restart_policy.hpp"
 
 #include "game_payload.hpp"
@@ -37,7 +38,7 @@ std::int32_t ReadUnsignedByte(std::uint8_t* rdram, std::uint32_t address) {
 
 gpr CallAndReadV0(void (*function)(std::uint8_t*, recomp_context*), std::uint8_t* rdram, const recomp_context& source,
                   gpr argument = 0, bool set_argument = false) {
-    recomp_context call = source;
+    recomp_context call = dkr::runtime::guest_call_context(source);
     if (set_argument) {
         call.r4 = argument;
     }
@@ -82,14 +83,14 @@ extern "C" void dkr_quick_restart_poll(std::uint8_t* rdram, recomp_context* cont
         return;
     }
 
-    recomp_context call = *context;
+    recomp_context call = dkr::runtime::guest_call_context(*context);
     payload->sound_clear_delayed(rdram, &call);
-    call = *context;
+    call = dkr::runtime::guest_call_context(*context);
     payload->reset_delayed_text(rdram, &call);
 
     const bool should_check_lead_player = CallAndReadV0(payload->should_check_lead_player, rdram, *context) != 0;
     if (should_check_lead_player && CallAndReadV0(payload->is_in_two_player_adventure, rdram, *context) != 0) {
-        call = *context;
+        call = dkr::runtime::guest_call_context(*context);
         payload->swap_lead_player(rdram, &call);
     }
 
