@@ -580,7 +580,7 @@ RSP_INPUT_HASH = {
     "runtime-recomp/RecompiledRSP/aspMain.cpp": "ba5cef9b93a5d0dfae1ec06b8a0ab291460e221ecb02c01bbaf1e8d47efcaab6",
     "extern/n64-modern-runtime/librecomp/include/librecomp/rsp.hpp": "2d3a939023401557ccaf1e9c8a2f810a7519591df154609123089980b9f03633",
     "extern/n64-modern-runtime/librecomp/include/librecomp/rsp_vu.hpp": "18534c9c9fc66f0d2185d87de7cf1dd271ac1f5d4cb8791654c1eab7d8fc4e98",
-    "extern/n64-modern-runtime/librecomp/include/librecomp/rsp_vu_impl.hpp": "0e1afe4b3782dd177eb41c10cd34947cc060497a80750418b4b889d0b867ad0c",
+    "extern/n64-modern-runtime/librecomp/include/librecomp/rsp_vu_impl.hpp": "446c31da472340296e6a885d9c3caf1b64a7ffc3884bba7c57a88bb1617ac366",
 }
 INPUT_NATIVE_HASH = {
     "extern/n64-modern-runtime/ultramodern/src/input.cpp": "57e14a451ddc7d571baf8d886c650a5efcbfab94749720bad36f1b6393693524",

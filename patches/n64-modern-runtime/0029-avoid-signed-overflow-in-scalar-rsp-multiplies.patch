@@ -1,0 +1,22 @@
+diff --git a/librecomp/include/librecomp/rsp_vu_impl.hpp b/librecomp/include/librecomp/rsp_vu_impl.hpp
+index dbf46b2..6ec780a 100644
+--- a/librecomp/include/librecomp/rsp_vu_impl.hpp
++++ b/librecomp/include/librecomp/rsp_vu_impl.hpp
+@@ -944,7 +944,7 @@ auto RSP::VMADL(r128& vd, cr128& vs, cr128& vt) -> void {
+     if constexpr (Accuracy::RSP::SISD) {
+         cr128 vte = vt(e);
+         for (u32 n = 0; n < 8; n++) {
+-            accumulatorSet(n, accumulatorGet(n) + (u32(vs.u16(n) * vte.u16(n)) >> 16));
++            accumulatorSet(n, accumulatorGet(n) + (u32(vs.u16(n)) * u32(vte.u16(n)) >> 16));
+             vd.u16(n) = accumulatorSaturate(n, 0, 0x0000, 0xffff);
+         }
+     }
+@@ -1109,7 +1109,7 @@ auto RSP::VMUDL(r128& vd, cr128& vs, cr128& vt) -> void {
+     if constexpr (Accuracy::RSP::SISD) {
+         cr128 vte = vt(e);
+         for (u32 n = 0; n < 8; n++) {
+-            accumulatorSet(n, u16(vs.u16(n) * vte.u16(n) >> 16));
++            accumulatorSet(n, u16(u32(vs.u16(n)) * u32(vte.u16(n)) >> 16));
+         }
+         vd = ACCL;
+     }

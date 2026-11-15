@@ -166,7 +166,7 @@
     "scripts/compose_payloads.py": "c662355843564ccd40759cb245de158888abae80baf59c7f309834897626ba68",
     "scripts/gen_guest_symbols.py": "32a8294e498443044ef91249c67e2c85cbb7a9e0417c5538ee85d8390d058d1b",
     "scripts/generate_recomp_config.py": "444874a216c9011e6f196aa0a1269594517afcdea5fb3763196e092d99bfc473",
-    "scripts/generate_replay_probe.py": "447b69b2adc37223c3587b431ff94304072efc9e77a6be88bfce50b2259aaf0c",
+    "scripts/generate_replay_probe.py": "99133755e2bbcd10e2c504f5fbc172f074c79032361d48ec9b8a6cf5499b58fd",
     "scripts/generate_revision_policy.py": "bafbefad41542e00b6c5ec13b02acde69dda7f48e34025f46d92d028da6427b9",
     "scripts/guest_hooks.py": "4058af2139c1211c2db79c8748734c2c1f231ec6168e964166d90c83bb48c6cc",
     "scripts/host_task_policy.py": "aa28c9bcd8110d0ef16b2f6dfde7ec51b8767578f46d3bc5371f197efb016f78",
@@ -189,6 +189,6 @@
   },
   "last_update": {
     "identity_changed": false,
-    "reason": "Only affects lobbies launched with the architecture-free hash: the host prunes its other-architecture sender set to the lobby, and sampled frames use absolute numbering. Single-architecture lobbies send and simulate exactly as before."
+    "reason": "Scalar RSP multiplies avoid signed overflow; the SIMD path x86_64 and arm64 use is unchanged"
   }
 }
