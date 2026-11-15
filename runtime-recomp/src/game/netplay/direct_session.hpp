@@ -242,6 +242,10 @@ class DirectSession final {
         std::function<bool(bool, std::uint64_t, std::vector<std::uint8_t>&, std::filesystem::path&, std::string&)>;
     DirectSession();
     ~DirectSession();
+    // Writes the session's queued log lines to stderr, in the order they were
+    // queued. Never call it with mutex_ held: a blocked stderr must not stall
+    // the session.
+    void flush_log();
     DirectSession(const DirectSession&) = delete;
     DirectSession& operator=(const DirectSession&) = delete;
 
@@ -622,6 +626,16 @@ class DirectSession final {
     bool send_join_request();
     void broadcast(protocol::MessageType type, std::span<const std::uint8_t> payload, std::uint32_t frame = 0U);
     void pump_locked();
+    // Log from code that runs under mutex_ (the pump and everything it calls).
+    // The line is formatted here, exactly as fprintf would, and queued; the
+    // owner of the lock flushes the queue to stderr after releasing it. The
+    // queue holds at most kLogQueueCap lines; older ones are dropped and
+    // counted.
+#if defined(__GNUC__) || defined(__clang__)
+    __attribute__((format(printf, 2, 3)))
+#endif
+    void
+    log_locked(const char* format, ...);
     // Lock order for the rollback connection check, as it actually is:
     //   mutex_ -> PartyLink::mutex                 (rollback_context_locked,
     //                                               rollback_send_locked)
@@ -734,6 +748,15 @@ class DirectSession final {
     std::uint64_t& outbound_sequence(const PeerAddress& address, const secure::Key& key);
 
     mutable std::mutex mutex_;
+    static constexpr std::size_t kLogQueueCap = 512;
+    std::vector<std::string> log_queue_;
+    std::uint64_t log_dropped_ = 0U;
+    // Serialises writers so two flushers cannot reorder batches. Lock order:
+    // log_flush_mutex_ -> mutex_ (briefly, to take the queue). Nothing holds
+    // mutex_ while taking log_flush_mutex_.
+    std::mutex log_flush_mutex_;
+    // Test hook: receives each line instead of stderr.
+    std::function<void(std::string_view)> log_sink_;
     std::shared_ptr<TransportReceiveSignal> receive_signal_ = std::make_shared<TransportReceiveSignal>();
     std::condition_variable& state_changed_ = receive_signal_->changed;
     std::unique_ptr<SessionTransport> transport_;

@@ -91,8 +91,7 @@
                     identity.manual_delay = next.manual_input_delay;
                     identity.prediction_window = next.rollback_window;
                     extension->configure(std::move(identity));
-                    std::fprintf(
-                        stderr,
+                    log_locked(
                         "[online][host-settings] room=%llu request=%llu playing=%u auto=%u delay=%u window=%u queued=%u spectators=%u\n",
                         static_cast<unsigned long long>(match_id_), static_cast<unsigned long long>(request->serial),
                         unsigned(context.playing), unsigned(next.automatic_input_delay),

@@ -148,9 +148,9 @@ bool DirectSession::complete_mod_admission(std::uint64_t request, std::string_vi
         return false;
     }
     if (resources.empty() || !valid_mod_manifest_hash(resources) || resources != manifest_.owned_resources_hash) {
-        std::fprintf(stderr, "[online][compatibility] prepared-resources expected=%s received=%.*s\n",
-                     manifest_.owned_resources_hash.c_str(), int(std::min<std::size_t>(resources.size(), 64)),
-                     resources.data());
+        log_locked("[online][compatibility] prepared-resources expected=%s received=%.*s\n",
+                   manifest_.owned_resources_hash.c_str(), int(std::min<std::size_t>(resources.size(), 64)),
+                   resources.data());
         error = "Prepared mod resources do not match. Re-prepare the host's mods before joining.";
         return false;
     }
