@@ -16,6 +16,7 @@
 #include "experimental_lobby_admission.hpp"
 #include "experimental_checkpoint_hash.hpp"
 #include "experimental_rollback.hpp"
+#include "check_course.hpp"
 #include "state_cross_check.hpp"
 #include "experimental_confirmed_output.hpp"
 #include "owned_game.hpp"
@@ -599,6 +600,7 @@ bool run_party_runtime(ultramodern::renderer::WindowHandle window, const std::fi
             auto observed_cursor = runtime.next();
             auto menu_since = observed_cursor.frame;
             bool car_selection_sent = false;
+            bool course_logged = false;
             dkr::online_stability::HostSettingsQualification host_settings_check(scripted_check);
             while (!shared.stop) {
                 OwnerActivity::Scope stage(shared.simulation_activity, OwnerStage::Pump);
@@ -614,6 +616,7 @@ bool run_party_runtime(ultramodern::renderer::WindowHandle window, const std::fi
                         observed_cursor = at;
                         menu_since = at.frame;
                         car_selection_sent = false;
+                        course_logged = false;
                         std::fprintf(stderr, "[party][scene] epoch=%llu menu=%d id=%d level=%d type=%d viewports=%u\n",
                                      static_cast<unsigned long long>(at.epoch), scene.menu, scene.menu_id, scene.level,
                                      scene.race_type, unsigned(scene.viewports));
@@ -623,8 +626,13 @@ bool run_party_runtime(ultramodern::renderer::WindowHandle window, const std::fi
                     if (scene.menu) {
                         if (scene.menu_id == 0 && age >= 150 && age % 30 == 0)
                             sampled = {0x1000, 0, 0};
-                        if ((scene.menu_id == 3 || scene.menu_id == 15) && age >= 50 && age % 30 == 20)
+                        if ((scene.menu_id == 3 || scene.menu_id == 15) && age >= 50 && age % 30 == 20 &&
+                            !(scene.menu_id == 15 && check_course_world() >= 0))
                             sampled = {0x8000, 0, 0};
+                        // DKR_OWNED_CHECK_TRACK: steer the real track cursor, then confirm.
+                        if (scene.menu_id == 15 && check_course_world() >= 0)
+                            if (const auto pick = check_track_select_input(check_course_world(), initial.host, age))
+                                sampled = *pick;
                         // Opt-in disposable-profile lighting check: move the
                         // host's real cursor down/left to the first custom
                         // stage actor, then use ordinary A confirmation.
@@ -652,8 +660,16 @@ bool run_party_runtime(ultramodern::renderer::WindowHandle window, const std::fi
                                 "[custom-vehicles][isolated-check] local-port=%u picker-input=d-pad-right; ordinary confirmation follows\n",
                                 local_port.load());
                         }
-                    } else
+                    } else {
                         sampled = check_autopilot_input(scene.autopilot, local_port.load(), at.frame);
+                        if (!course_logged && scene.autopilot[0].valid) {
+                            course_logged = true;
+                            std::fprintf(stderr, "[check][course] raced level=%d race-type=%d vehicles=%u,%u,%u,%u\n",
+                                         scene.level, scene.race_type, unsigned(scene.autopilot[0].vehicle),
+                                         unsigned(scene.autopilot[1].vehicle), unsigned(scene.autopilot[2].vehicle),
+                                         unsigned(scene.autopilot[3].vehicle));
+                        }
+                    }
                 }
                 dkr::online_stability::ReplaySlice replay_slice(Network::Clock::now());
                 do {
