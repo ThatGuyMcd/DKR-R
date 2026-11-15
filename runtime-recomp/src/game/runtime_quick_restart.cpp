@@ -38,12 +38,12 @@ std::int32_t ReadUnsignedByte(std::uint8_t* rdram, std::uint32_t address) {
 
 gpr CallAndReadV0(void (*function)(std::uint8_t*, recomp_context*), std::uint8_t* rdram, const recomp_context& source,
                   gpr argument = 0, bool set_argument = false) {
-    recomp_context call = dkr::runtime::guest_call_context(source);
+    dkr::runtime::GuestCallContext call(source);
     if (set_argument) {
-        call.r4 = argument;
+        call->r4 = argument;
     }
-    function(rdram, &call);
-    return call.r2;
+    function(rdram, call.get());
+    return call->r2;
 }
 
 } // namespace
@@ -83,15 +83,15 @@ extern "C" void dkr_quick_restart_poll(std::uint8_t* rdram, recomp_context* cont
         return;
     }
 
-    recomp_context call = dkr::runtime::guest_call_context(*context);
-    payload->sound_clear_delayed(rdram, &call);
-    call = dkr::runtime::guest_call_context(*context);
-    payload->reset_delayed_text(rdram, &call);
+    dkr::runtime::GuestCallContext call(*context);
+    payload->sound_clear_delayed(rdram, call.get());
+    call.reset(*context);
+    payload->reset_delayed_text(rdram, call.get());
 
     const bool should_check_lead_player = CallAndReadV0(payload->should_check_lead_player, rdram, *context) != 0;
     if (should_check_lead_player && CallAndReadV0(payload->is_in_two_player_adventure, rdram, *context) != 0) {
-        call = dkr::runtime::guest_call_context(*context);
-        payload->swap_lead_player(rdram, &call);
+        call.reset(*context);
+        payload->swap_lead_player(rdram, call.get());
     }
 
     // mode_game keeps buttonHeldInputs in s0 at this boundary. Feed the same

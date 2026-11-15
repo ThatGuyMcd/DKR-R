@@ -206,10 +206,10 @@ bool dkr_private_replay_boot(std::uint8_t* rdram, recomp_context* context) {
     // Same retail single-player setup as the established custom-track auto
     // boot, but restricted to a private offline fixture and a retail map.
     const auto invoke = [&](dkr::runtime::RecompiledEntrypoint fn, gpr argument = 0) {
-        recomp_context call = dkr::runtime::guest_call_context(*context);
-        call.r4 = argument;
-        fn(rdram, &call);
-        return call.r2;
+        dkr::runtime::GuestCallContext call(*context);
+        call->r4 = argument;
+        fn(rdram, call.get());
+        return call->r2;
     };
     invoke(payload->titlescreen_controller_assign, 0);
     invoke(payload->input_assign_players);

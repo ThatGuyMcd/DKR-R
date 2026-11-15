@@ -162,9 +162,9 @@ void set_fov(std::uint8_t* rdram, recomp_context* context, float fov) {
     const dkr::runtime::GamePayload* payload = dkr::runtime::active_payload();
     if (payload == nullptr || payload->cam_set_fov == nullptr || context == nullptr)
         return;
-    recomp_context call = dkr::runtime::guest_call_context(*context);
-    call.f12.fl = fov;
-    payload->cam_set_fov(rdram, &call);
+    dkr::runtime::GuestCallContext call(*context);
+    call->f12.fl = fov;
+    payload->cam_set_fov(rdram, call.get());
 }
 
 void release_fov(std::uint8_t* rdram, recomp_context* context) {

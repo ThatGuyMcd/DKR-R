@@ -4,8 +4,8 @@
 
 namespace dkr::runtime::live_fov {
 inline void apply_guest_fov(std::uint8_t* rdram, const recomp_context& context, float target, recomp_func_t* setter) {
-    recomp_context call = guest_call_context(context);
-    call.f12.fl = target;
-    setter(rdram, &call);
+    GuestCallContext call(context);
+    call->f12.fl = target;
+    setter(rdram, call.get());
 }
 } // namespace dkr::runtime::live_fov
