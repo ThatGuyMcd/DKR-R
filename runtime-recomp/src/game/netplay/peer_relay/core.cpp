@@ -223,7 +223,9 @@ void Engine::reset() {
     serial_ = signal_serial_ = control_serial_ = 0;
     tokens_at_ = {};
     tokens_ = 256 * 1024;
-    forwarded_ = dropped_ = 0;
+    // forwarded_, dropped_ and the lane counters are the transport's lifetime
+    // totals. They survive a reset (a room change, or the session leaving its
+    // active states) so the teardown line can still report them.
     lobby_.clear();
     lobby_payload_.clear();
     lobby_serial_ = lobby_generation_ = 0;
@@ -255,6 +257,8 @@ void Engine::configure(Context next, Clock::time_point now) {
     context_ = std::move(next);
     if (!context_.active)
         return;
+    if (context_.allow || context_.volunteer)
+        participated_ = true;
     std::erase_if(recovery_at_, [&](const auto& item) { return !admitted(item.first); });
     if (context_.local == context_.host)
         policy_ = context_.allow;
@@ -465,7 +469,7 @@ void Engine::service(Clock::time_point now) {
             queued_bytes_ -= q.bytes.size();
             auto r = routes_.find(q.route);
             if (r == routes_.end() || now >= q.expires) {
-                ++dropped_;
+                drop(lane, Drop::Expired);
                 continue;
             }
             if (!transmit(r->second, q.to, q.bytes, q.lane, now, false)) {
@@ -928,10 +932,11 @@ bool Engine::wire(Id id, Id physical, std::span<const std::uint8_t> bytes, Clock
             return false;
         const bool result =
             packet(route, destination, unsigned(kind), origin, destination, unsigned(lane), token, payload, 1, now);
-        if (result)
+        if (result) {
             forwarded_ += bytes.size();
-        else
-            ++dropped_;
+            lane_forwarded_[std::min<std::size_t>(lane, 4U)] += bytes.size();
+        } else
+            drop(unsigned(lane), Drop::ForwardFailed);
         return result;
     }
     if (destination != context_.local || sender != (g.proxy ? g.proxy : origin) || hop != (g.proxy ? 1U : 0U))
@@ -976,7 +981,7 @@ bool Engine::wire(Id id, Id physical, std::span<const std::uint8_t> bytes, Clock
     if (!secure::inspect_packet(payload, original, match) || original != origin || match != context_.room)
         return false;
     if (!io_.deliver || !io_.deliver(origin, Bytes(payload.begin(), payload.end()), unsigned(lane))) {
-        ++dropped_;
+        drop(unsigned(lane), Drop::DeliverFull);
         return false;
     }
     // An endpoint-only MAC proves application-lane delivery; the proxy cannot
@@ -1129,6 +1134,12 @@ std::vector<Control> Engine::controls() {
 }
 View Engine::view(Clock::time_point now) const {
     View out{policy_, context_.volunteer, {}, forwarded_, dropped_, queued_bytes_, context_.local, context_.host};
+    out.participated = participated_;
+    out.lane_forwarded = lane_forwarded_;
+    out.lane_dropped = lane_dropped_;
+    for (std::size_t lane = 0; lane < queued_.size(); ++lane)
+        for (const auto& q : queued_[lane])
+            out.lane_queued[lane] += q.bytes.size();
     for (const auto& [id, r] : routes_)
         if (context_.local != r.grant.proxy) {
             const auto c = choices_.find(context_.local == context_.host ? r.grant.endpoint : context_.host);

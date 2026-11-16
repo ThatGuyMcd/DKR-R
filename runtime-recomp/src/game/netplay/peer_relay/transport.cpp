@@ -148,11 +148,25 @@ class Transport final : public net::SessionTransport {
     }
     void close() override {
         live_.reset();
-        // What this device relayed for others, at the end of the session.
-        if (const auto relayed = engine_.view(); relayed.forwarded || relayed.dropped)
-            dkr::runtime::session_log::write("[online][proxy] teardown forwarded-bytes=%llu dropped=%llu\n",
-                                             (unsigned long long)relayed.forwarded,
-                                             (unsigned long long)relayed.dropped);
+        // What this device relayed for others, at the end of the session. Written for
+        // every device that took part (even with nothing relayed), so a missing line
+        // means the process never got here. Per lane: forwarded bytes, then datagrams
+        // dropped as expired / forward-failed / deliver-full.
+        if (const auto relayed = engine_.view();
+            relayed.participated || relayed.enabled || relayed.volunteer || relayed.forwarded || relayed.dropped) {
+            std::string lanes;
+            for (std::size_t lane = 0; lane < relayed.lane_forwarded.size(); ++lane) {
+                const auto& d = relayed.lane_dropped[lane];
+                char text[96];
+                std::snprintf(text, sizeof text, " lane%zu=%llu/%llu/%llu/%llu", lane,
+                              (unsigned long long)relayed.lane_forwarded[lane], (unsigned long long)d[0],
+                              (unsigned long long)d[1], (unsigned long long)d[2]);
+                lanes += text;
+            }
+            dkr::runtime::session_log::write("[online][proxy] teardown forwarded-bytes=%llu dropped=%llu%s\n",
+                                             (unsigned long long)relayed.forwarded, (unsigned long long)relayed.dropped,
+                                             lanes.c_str());
+        }
         engine_.reset();
         meter_.reset();
         deliveries_.clear();
@@ -170,7 +184,11 @@ class Transport final : public net::SessionTransport {
     }
     net::DatagramSendStatus send_status(const net::PeerAddress& to, std::span<const std::uint8_t> bytes,
                                         net::TransportTrafficClass traffic, std::string& error) override {
-        const auto id = identify(to);
+        // Checkpoint chunks have no repair: the sender advances after each accepted
+        // send and a missing chunk only costs a whole new transfer after 30 s. A relay
+        // can accept a datagram and still drop it (flip, full queue, expiry), so they
+        // always take the direct route, which is reliable.
+        const auto id = traffic == net::TransportTrafficClass::Checkpoint ? Id{0} : identify(to);
         if (id && engine_.send(id, bytes, unsigned(traffic)))
             return net::DatagramSendStatus::Sent;
         if (id && live_.send(id, bytes, unsigned(traffic)))
@@ -261,7 +279,9 @@ class Transport final : public net::SessionTransport {
         return bytes;
     }
     bool traffic_ready(const net::PeerAddress& a, net::TransportTrafficClass c) const override {
-        return base_->traffic_ready(a, c) || engine_.usable(identify(a));
+        // A relay route does not carry checkpoints, so it cannot make them ready.
+        return base_->traffic_ready(a, c) ||
+               (c != net::TransportTrafficClass::Checkpoint && engine_.usable(identify(a)));
     }
     std::size_t maximum_plaintext_datagram_bytes() const override {
         return base_->maximum_plaintext_datagram_bytes();
@@ -455,8 +475,10 @@ class Transport final : public net::SessionTransport {
             }
         for (const auto& [peer, route] : selected_)
             if (!selected.contains(peer))
-                dkr::runtime::session_log::write("[online][proxy] endpoint=%llu event=direct-fallback\n",
-                                                 (unsigned long long)peer);
+                dkr::runtime::session_log::write(
+                    "[online][proxy] endpoint=%llu event=direct-fallback checkpoint-queued-bytes=%zu "
+                    "checkpoint-buffered-bytes=%zu\n",
+                    (unsigned long long)peer, v.lane_queued[4], buffered_bytes(net::TransportTrafficClass::Checkpoint));
         selected_ = std::move(selected);
         auto& state = registry();
         std::lock_guard lock(state.mutex);
@@ -718,6 +740,11 @@ class Transport final : public net::SessionTransport {
     struct Resolved {
         net::PeerAddress endpoint, proxy;
     };
+    struct Delivery {
+        Id source;
+        Bytes bytes;
+        unsigned lane;
+    };
     std::map<Id, Resolved> resolved_;
     const void* key_;
     std::unique_ptr<net::SessionTransport> base_;
@@ -729,11 +756,6 @@ class Transport final : public net::SessionTransport {
     dkr::online_stability::qualification_delivery::Queue<net::PeerAddress> qualification_;
     Clock::time_point service_at_{}, snapshot_at_{};
     std::map<Id, Id> selected_;
-    struct Delivery {
-        Id source;
-        Bytes bytes;
-        unsigned lane;
-    };
     std::vector<Address> addresses_;
     std::deque<Delivery> deliveries_;
 };

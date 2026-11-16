@@ -1,5 +1,6 @@
 #pragma once
 #include "netplay/secure_channel.hpp"
+#include <algorithm>
 #include <array>
 #include <chrono>
 #include <cstdint>
@@ -71,6 +72,9 @@ struct RouteLabel {
     std::string text;
     bool proxy = false, checking = false;
 };
+// Why a relayed datagram was lost on this device.
+enum class Drop : unsigned { Expired, ForwardFailed, DeliverFull };
+inline constexpr std::size_t DropReasons = 3;
 struct View {
     bool enabled = false, volunteer = false;
     std::vector<Row> rows;
@@ -79,6 +83,14 @@ struct View {
     Id local = 0, host = 0;
     std::vector<LobbyRoute> lobby;
     Id lobby_generation = 0;
+    // Per traffic lane (control, authoritative, realtime, replica, checkpoint).
+    // forwarded is bytes this device relayed; dropped is datagrams it lost, by
+    // reason; queued is bytes waiting in the forward queue right now.
+    // The relay was allowed (host) or volunteered (joiner) at some point in this transport's life.
+    bool participated = false;
+    std::array<std::uint64_t, 5> lane_forwarded{};
+    std::array<std::array<std::uint64_t, DropReasons>, 5> lane_dropped{};
+    std::array<std::size_t, 5> lane_queued{};
 };
 struct Io {
     // Calls are owner-thread-only. Extra links terminate at the proxy, never
@@ -207,6 +219,13 @@ class Engine final {
     Id serial_ = 0, signal_serial_ = 0;
     Id control_serial_ = 0;
     std::uint64_t forwarded_ = 0, dropped_ = 0;
+    bool participated_ = false;
+    std::array<std::uint64_t, 5> lane_forwarded_{};
+    std::array<std::array<std::uint64_t, DropReasons>, 5> lane_dropped_{};
+    void drop(unsigned lane, Drop reason) {
+        ++dropped_;
+        ++lane_dropped_[std::min(lane, 4U)][std::size_t(reason)];
+    }
     Clock::time_point tokens_at_{};
     std::size_t tokens_ = 256 * 1024;
     std::vector<LobbyRoute> lobby_;
