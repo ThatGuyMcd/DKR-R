@@ -24,8 +24,8 @@ using namespace dkr::runtime::netplay;
 
 namespace {
 
-constexpr std::string_view kPolicy = "v77:c4deefd55aca1dc1af1391a86d5df366624dabed2827a0fab055e8ffad8cd702|"
-                                     "v80:b8a89ed014f6e6a7f1113adf72fe8c92b1f8cf8323ac4c35de00a258c28adb9b";
+constexpr std::string_view kPolicy = "v77:4fcfb6ae8bb7fe874df2e02eb2c13820ec5575bb9ec1c1e4ccb4fdbcef688164|"
+                                     "v80:91cb9e05edc8f9fcb1006dec28316e5a1e90dd2d64aada976f2289688816897f";
 constexpr const char* kEngine77 = "8a5a0d3005a50f2f12d332346c804df6bfa277fd05650e48a639a64796db09c3";
 constexpr const char* kEngine80 = "ef12b5452a0ea54b4a1562aef21fd62d11bcd19b0b85122e818d8b350857b6a0";
 
