@@ -774,9 +774,9 @@ std::uint32_t course_flags_at(std::uint8_t* rdram, recomp_context* context, std:
     if (level < 0 || !payload || !payload->get_settings) {
         return 0U;
     }
-    recomp_context call = *context;
-    payload->get_settings(rdram, &call);
-    const auto settings = static_cast<std::uint32_t>(call.r2);
+    dkr::runtime::GuestCallContext call(*context);
+    payload->get_settings(rdram, call.get());
+    const auto settings = static_cast<std::uint32_t>(call->r2);
     if (!addressable(settings + kCourseFlagsPointer)) {
         return 0U;
     }
@@ -798,8 +798,7 @@ void dkr::runtime::custom_tracks::return_lent_boss_flags(std::uint8_t* rdram, re
     }
 }
 
-static void skip_custom_boss_intro(std::uint8_t* rdram, recomp_context* context,
-                                   std::int32_t level) {
+static void skip_custom_boss_intro(std::uint8_t* rdram, recomp_context* context, std::int32_t level) {
     namespace tracks_ns = dkr::runtime::custom_tracks;
     tracks_ns::return_lent_boss_flags(rdram, context, level);
     if (level < 0 || tracks_ns::level_race_type(level) != tracks_ns::kRaceTypeBoss) {
@@ -977,45 +976,49 @@ extern "C" void dkr_custom_tracks_prepare_vehicle(std::uint8_t* rdram, recomp_co
 // (0x8000CAC8 in US 1.0 and Rev A alike) and before any entry is spawned:
 // s0 still holds the object map's asset offset, the one asset_load was given,
 // and 0x48(sp) the buffer the map was inflated into - a 16-byte header that
-// starts with the entries' byte count, then the entries. A hub EXIT that leads to another .dkrmap track was exported with
-// a placeholder destination, since that track's level id depends on what is
-// installed; the package's levelLinks name the byte and the track, and the id
-// resolved for this session is written in before the exit spawns. A link whose
+// starts with the entries' byte count, then the entries. A hub EXIT that leads to another .dkrmap track was exported
+// with a placeholder destination, since that track's level id depends on what is installed; the package's levelLinks
+// name the byte and the track, and the id resolved for this session is written in before the exit spawns. A link whose
 // track is missing keeps the placeholder (the exporter writes a retail hub).
-extern "C" void dkr_custom_tracks_object_map_links(std::uint8_t* rdram,
-                                                   recomp_context* context) {
-    if (dkr::runtime::legacy::frozen_online_resources()) return;
-    if (owned_vanilla_bootstrap()) return;
+extern "C" void dkr_custom_tracks_object_map_links(std::uint8_t* rdram, recomp_context* context) {
+    if (dkr::runtime::legacy::frozen_online_resources())
+        return;
+    if (owned_vanilla_bootstrap())
+        return;
     const auto offset = static_cast<std::uint32_t>(context->r16);
     const auto links = dkr::runtime::custom_tracks::level_links_for_object_map(offset);
     if (links.empty()) {
         return;
     }
+    namespace tracks_ns = dkr::runtime::custom_tracks;
     const auto stack = static_cast<std::uint32_t>(context->r29);
     if (!addressable(stack + 0x48U)) {
         return;
     }
     const auto buffer = static_cast<std::uint32_t>(read_word(rdram, stack + 0x48U));
-    if (!addressable(buffer)) {
+    // The whole OBJECT_MAP_SIZE buffer must be reachable. The entry byte count
+    // comes from the inflated map, which a package controls, so it only ever
+    // narrows the range inside that buffer, never widens it.
+    if (!addressable(buffer) || !addressable(buffer + tracks_ns::kObjectMapBufferBytes - 1U)) {
         return;
     }
     const std::int32_t entry_bytes = read_word(rdram, buffer);
+    const std::uint32_t entries_end =
+        0x10U + std::min<std::uint32_t>(entry_bytes > 0 ? static_cast<std::uint32_t>(entry_bytes) : 0U,
+                                        tracks_ns::kObjectMapBufferBytes - 0x10U);
     for (const auto& link : links) {
-        if (entry_bytes <= 0 || link.offset < 0x10U ||
-            link.offset >= 0x10U + static_cast<std::uint32_t>(entry_bytes) ||
-            !addressable(buffer + link.offset)) {
+        if (link.offset < 0x10U || link.offset >= entries_end) {
             std::fprintf(stderr, "[custom-tracks] level link to %s at byte %u is outside the object map\n",
                          link.track.c_str(), link.offset);
             continue;
         }
-        if (link.level_id < 0 || link.level_id > 0xFF) {
+        if (link.level_id < 0 || link.level_id > tracks_ns::kMaxLevelId) {
             std::fprintf(stderr, "[custom-tracks] level link to %s: track not installed, exit keeps its placeholder\n",
                          link.track.c_str());
             continue;
         }
-        MEM_B(static_cast<std::int32_t>(link.offset), rdram_address(buffer)) =
-            static_cast<std::int8_t>(link.level_id);
-        std::fprintf(stderr, "[custom-tracks] level link to %s now leads to level %d\n",
-                     link.track.c_str(), static_cast<int>(link.level_id));
+        MEM_B(static_cast<std::int32_t>(link.offset), rdram_address(buffer)) = static_cast<std::int8_t>(link.level_id);
+        std::fprintf(stderr, "[custom-tracks] level link to %s now leads to level %d\n", link.track.c_str(),
+                     static_cast<int>(link.level_id));
     }
 }

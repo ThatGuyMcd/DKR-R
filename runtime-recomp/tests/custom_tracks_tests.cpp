@@ -3,6 +3,7 @@
 #include "custom_track_files.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cassert>
 #include <cstdio>
 #include <filesystem>
@@ -291,7 +292,8 @@ void level_link_tests(const std::filesystem::path& base) {
                    "{\"section\":\"LEVEL_OBJECT_MAPS\",\"slot\":\"structure\",\"file\":\"s.bin\"},"
                    "{\"section\":\"LEVEL_OBJECT_MAPS\",\"slot\":\"collectables\",\"file\":\"o.bin\"}],"
                    "\"levelLinks\":[{\"slot\":\"structure\",\"offset\":24,\"track\":\"race\"},"
-                   "{\"slot\":\"structure\",\"offset\":40,\"track\":\"gone\"}]}");
+                   "{\"slot\":\"structure\",\"offset\":40,\"track\":\"gone\"},"
+                   "{\"slot\":\"structure\",\"offset\":12287,\"track\":\"race\"}]}");
         std::string boss_header(200U, '\0');
         boss_header[0x4C] = static_cast<char>(kRaceTypeBoss);
         write_file(hub / "h.bin", boss_header);
@@ -305,8 +307,20 @@ void level_link_tests(const std::filesystem::path& base) {
                    "\"adds\":[{\"section\":\"LEVEL_HEADERS\",\"file\":\"h.bin\"}],"
                    "\"levelLinks\":[{\"slot\":\"structure\",\"offset\":12,\"track\":\"race\"}]}");
         write_file(bad / "h.bin", std::string(200U, 'h'));
+        // A hostile package: offsets at or past the game's 0x3000-byte object map buffer
+        // (the parser used to stop at 0x10000) are refused with the whole package.
+        for (const char* offset : {"12288", "12289", "65535", "65536"}) {
+            const std::filesystem::path hostile = links / (std::string("hostile-") + offset + ".dkrmap");
+            std::filesystem::create_directories(hostile);
+            write_file(hostile / "manifest.json",
+                       std::string("{\"schemaVersion\":1,\"id\":\"hostile\",\"name\":\"Hostile\","
+                                   "\"adds\":[{\"section\":\"LEVEL_HEADERS\",\"file\":\"h.bin\"}],"
+                                   "\"levelLinks\":[{\"slot\":\"structure\",\"offset\":") +
+                           offset + ",\"track\":\"race\"}]}");
+            write_file(hostile / "h.bin", std::string(200U, 'h'));
+        }
         scan(links);
-        assert(tracks().size() == 2U); // The map header is not a link target.
+        assert(tracks().size() == 2U); // The map header and the hostile offsets are not link targets.
 
         constexpr std::int32_t kMaps[] = {0x0, 0x80, 0x100, -1};
         const auto headers = build_extended_table(Section::LevelHeaders, kRetail);
@@ -319,19 +333,35 @@ void level_link_tests(const std::filesystem::path& base) {
         assert(level_race_type(race_level) >= 0); // Read from its own header.
         assert(level_race_type(0) == -1);
 
-        const std::int32_t structure = sibling_index(
-            Section::LevelHeaders, static_cast<std::uint32_t>(headers[hub_level]),
-            Section::LevelObjectMaps, MapSlot::Structure);
-        const std::int32_t collectables = sibling_index(
-            Section::LevelHeaders, static_cast<std::uint32_t>(headers[hub_level]),
-            Section::LevelObjectMaps, MapSlot::Collectables);
+        const std::int32_t structure =
+            sibling_index(Section::LevelHeaders, static_cast<std::uint32_t>(headers[hub_level]),
+                          Section::LevelObjectMaps, MapSlot::Structure);
+        const std::int32_t collectables =
+            sibling_index(Section::LevelHeaders, static_cast<std::uint32_t>(headers[hub_level]),
+                          Section::LevelObjectMaps, MapSlot::Collectables);
         assert(structure >= 0 && collectables >= 0);
         const auto found = level_links_for_object_map(static_cast<std::uint32_t>(maps[structure]));
-        assert(found.size() == 2U);
+        assert(found.size() == 3U);
         assert(found[0].offset == 24U && found[0].level_id == race_level && found[0].track == "race");
         assert(found[1].offset == 40U && found[1].level_id == -1);
+        // The last byte of the buffer is the last offset a link may name.
+        assert(found[2].offset == kObjectMapBufferBytes - 1U && found[2].level_id == race_level);
         assert(level_links_for_object_map(static_cast<std::uint32_t>(maps[collectables])).empty());
         assert(level_links_for_object_map(0x0).empty()); // Retail map.
+
+        // Online, only races are admitted: a boss level would run retail's intro-scene scan,
+        // which the frozen world does not carry, so the set is refused and the boss is named.
+        std::array<std::vector<std::int32_t>, 7> base;
+        for (auto& table : base)
+            table = {0, 0x100, -1};
+        std::string refusal;
+        try {
+            (void)prepare_tracks(tracks(), base);
+        } catch (const std::exception& error) {
+            refusal = error.what();
+        }
+        assert(refusal.find("\"Hub\" is a boss level") != std::string::npos);
+        assert(refusal.find("turn it off to play online") != std::string::npos);
     }
 }
 
