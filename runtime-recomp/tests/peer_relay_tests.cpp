@@ -1,4 +1,5 @@
 #include "netplay/peer_relay/transport.hpp"
+#include "session_log.hpp"
 #include <algorithm>
 #include <cassert>
 #include <cstdio>
@@ -1115,7 +1116,41 @@ void socket_tests(bool rtc) {
                 (long long)std::chrono::duration_cast<std::chrono::milliseconds>(Clock::now() - start).count());
 }
 } // namespace
+// close() runs more than once per transport in the real session (explicit disconnect, then the
+// destructor). The teardown report must be written once, and the second close must not change it.
+void teardown_line_once_test() {
+    int key = 0;
+    std::string error;
+    auto transport = wrap(&key, std::make_unique<DelayedUdp>(false), NetworkOptions{{}});
+    check(transport->open(0, error), "teardown test socket open");
+    n::PeerAddress self;
+    check(n::DatagramSocket::resolve("127.0.0.1", transport->local_port(), self, error), "teardown test address");
+    Context c;
+    c.room = 902;
+    c.host = 1;
+    c.local = 2;
+    c.active = true;
+    c.allow = true;
+    c.members = {{1, "Host", n::DatagramSocket::describe(self), true},
+                 {2, "Client", n::DatagramSocket::describe(self), true}};
+    configure(&key, c, {});
+    dkr::runtime::session_log::Queue queue;
+    {
+        dkr::runtime::session_log::Scope scope(&queue);
+        transport->close();
+        transport->close();
+        transport->close();
+    }
+    unsigned lines = 0;
+    for (const auto& line : queue.lines)
+        if (line.find("[online][proxy] teardown ") != std::string::npos)
+            ++lines;
+    check(lines == 1, "teardown line written exactly once across repeated close()");
+    check(!transport->is_open(), "transport closed after repeated close()");
+}
+
 int main(int argc, char** argv) {
+    teardown_line_once_test();
     if (argc == 1 || std::string(argv[1]) == "--policy")
         policy_tests();
     if (argc == 1 || std::string(argv[1]) == "--udp")
