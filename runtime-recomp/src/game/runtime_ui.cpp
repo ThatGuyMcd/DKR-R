@@ -2187,6 +2187,8 @@ void LoadSettings() {
                 continue;
             if (dkr::overlay::load(key, number, overlay_loaded))
                 continue;
+            if (dkr::runtime::driving::load(key, number))
+                continue;
             if (key == "session_mods") {
                 dkr::session_content::next_enabled = number != 0;
                 continue;
@@ -2255,9 +2257,6 @@ void LoadSettings() {
                 break;
             }
             if (shortcut_setting)
-                continue;
-            // Outside the long compatibility parser below (MSVC nesting limit).
-            if (dkr::runtime::driving::load(key, number))
                 continue;
             if (key == "standalone_look_behind") {
                 dkr::runtime::look_behind::enabled = number != 0;
