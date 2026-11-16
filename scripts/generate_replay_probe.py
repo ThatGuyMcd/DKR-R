@@ -624,7 +624,12 @@ INPUT_NATIVE_HASH = {
     # mempool_alloc_safe, material_set and the track-select cover) now uses
     # GuestCallContext, which repairs f_odd. None of those callees touches an
     # odd float register or a double, so no register, RAM or ordering changes.
-    "runtime-recomp/src/game/runtime_legacy_mods.cpp": "30738ac15d9d4ba15f96023302104979fa52ee45b565f83bd1e4ff81626485ce",
+    # Nov 16: prepare_presentation admits the custom character presentation when an
+    # armed custom track's auto boot skips character select (PR #93, e45dc21).
+    # CharacterPresentation::initialize only sizes host vectors, so it allocates
+    # nothing in the guest; the probe's fixtures have no character selector and
+    # return before prepare_presentation.
+    "runtime-recomp/src/game/runtime_legacy_mods.cpp": "e3236a4095ffeb59c1ca77e8cc2c6828241feb1da0d3249a5a89ca7a8fa59a26",
     # Oct 9: guest-owned deferred queue/reserve; no shortened borrower lifetime.
     # Nov 15: the memory pool table address comes from the generated memory_symbols.hpp
     # (gMemoryPools, v77 0x80123580, v80 0x80123B00: both unchanged, see test_revision_literals.py).
@@ -752,7 +757,8 @@ REVIEWED_MAIN_MERGE_HASH = {
     # Nov 8: event 2 derives selected-actor label anchors and calls three
     # read-only font/camera accessors through the same private payload. The
     # reviewed diff leaves input, Pak, rumble and checkpoint ownership intact.
-    "runtime-recomp/src/game/runtime_legacy_mods.cpp": "30738ac15d9d4ba15f96023302104979fa52ee45b565f83bd1e4ff81626485ce",
+    # Nov 16: the same image as the primary pin (auto-boot presentation admission).
+    "runtime-recomp/src/game/runtime_legacy_mods.cpp": "e3236a4095ffeb59c1ca77e8cc2c6828241feb1da0d3249a5a89ca7a8fa59a26",
     "runtime-recomp/src/game/mods/legacy_guest_checkpoint.cpp": "92db808732d530ad8e70c93bad1e14f3e4396e486d71d758a75cf0f3f9d6af50",
 }
 

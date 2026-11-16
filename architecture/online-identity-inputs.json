@@ -184,7 +184,7 @@
     "scripts/compose_payloads.py": "c662355843564ccd40759cb245de158888abae80baf59c7f309834897626ba68",
     "scripts/gen_guest_symbols.py": "f9c74c5c8214fae6372595db4c5f2721e656dabed9c783aa0bb3c6d7dc3e8202",
     "scripts/generate_recomp_config.py": "444874a216c9011e6f196aa0a1269594517afcdea5fb3763196e092d99bfc473",
-    "scripts/generate_replay_probe.py": "f4fc4b8de8a2bcdb75adfdbf08a7d3cf8b542513acc30cbfd7bc879203835325",
+    "scripts/generate_replay_probe.py": "841145598bbf10662286417faadea96c5d96b9909ae7ed98aa9284c48beacf9c",
     "scripts/generate_revision_policy.py": "bafbefad41542e00b6c5ec13b02acde69dda7f48e34025f46d92d028da6427b9",
     "scripts/guest_hooks.py": "4058af2139c1211c2db79c8748734c2c1f231ec6168e964166d90c83bb48c6cc",
     "scripts/host_task_policy.py": "aa28c9bcd8110d0ef16b2f6dfde7ec51b8767578f46d3bc5371f197efb016f78",
@@ -207,6 +207,6 @@
   },
   "last_update": {
     "identity_changed": false,
-    "reason": "revision_addresses.hpp no longer keeps mutable aliases; select() publishes the revision and one atomic table pointer. Same tables, same addresses (owned race per revision pending)"
+    "reason": "prepare_presentation admits custom character presentation on demand (host vectors only, no guest allocation); pin comment only"
   }
 }
