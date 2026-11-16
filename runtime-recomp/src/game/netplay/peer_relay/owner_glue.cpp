@@ -26,6 +26,7 @@ Context build_context(const RelayRoster& roster, Clock::time_point now) {
     context.allow = roster.allow;
     context.volunteer = roster.volunteer;
     context.quick = roster.quick;
+    context.force_proxy = roster.force_proxy;
     context.building = roster.forming && !roster.launch_pending;
     context.generation = roster.party_enabled ? roster.party_generation : roster.room_generation;
     for (const auto& row : roster.rows) {

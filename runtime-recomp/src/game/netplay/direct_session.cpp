@@ -5870,6 +5870,7 @@ void DirectSession::service_peer_relay_locked(dkr::runtime::spectators::PartyLin
     roster.allow = proxy::host_enabled.load();
     roster.volunteer = proxy::volunteer_enabled.load();
     roster.quick = transport_->quick_join();
+    roster.force_proxy = check_force_proxy_.load(std::memory_order_relaxed);
     roster.local_slot = local_slot_;
     if (party.enabled)
         roster.party_generation = party.party.snapshot().generation;

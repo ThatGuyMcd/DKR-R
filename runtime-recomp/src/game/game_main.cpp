@@ -41,6 +41,7 @@
 #include "netplay/check_names.hpp"
 #include "netplay/experimental_runtime.hpp"
 #include "netplay/session_chat/chat.hpp"
+#include "netplay/peer_relay/transport.hpp"
 #include "netplay/session_chat/settings.hpp"
 #include <cwchar>
 #endif
@@ -990,6 +991,19 @@ int DkrMain(int argc, char** argv) {
         const bool chat_off = check_chat && std::string_view(chat_check) == "off";
         if (chat_off && launch.owned_check_host)
             dkr::chat::host_enabled = false;
+        // DKR_OWNED_CHECK_PROXY=1 / force: this process (never the saved settings) lets the host
+        // hand out relay routes and joiners volunteer to relay; force also makes the host prefer
+        // a fresh proxy route over the direct one. Relaying needs three racers.
+        if (const char* proxy_check = std::getenv("DKR_OWNED_CHECK_PROXY");
+            proxy_check && (std::string_view(proxy_check) == "1" || std::string_view(proxy_check) == "force")) {
+            if (launch.owned_check_host)
+                dkr::relay::host_enabled = true;
+            else
+                dkr::relay::volunteer_enabled = true;
+            online.set_check_force_proxy(std::string_view(proxy_check) == "force");
+            std::fprintf(stderr, "[check][proxy] %s role=%s\n", proxy_check,
+                         launch.owned_check_host ? "host" : "joiner");
+        }
         bool chat_sent = false;
         std::set<std::uint64_t> chat_seen;
         unsigned chat_received = 0;

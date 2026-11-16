@@ -58,6 +58,7 @@ struct RelayRoster {
     bool forming = false;        // hosting or in the lobby
     bool launch_pending = false; // a launch descriptor is already accepted
     bool allow = false, volunteer = false, quick = false;
+    bool force_proxy = false; // self-test only, see Context::force_proxy
     unsigned local_slot = 255;
     Id party_generation = 0, room_generation = 0;
     std::vector<RosterRow> rows;

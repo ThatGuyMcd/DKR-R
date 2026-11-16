@@ -148,6 +148,11 @@ class Transport final : public net::SessionTransport {
     }
     void close() override {
         live_.reset();
+        // What this device relayed for others, at the end of the session.
+        if (const auto relayed = engine_.view(); relayed.forwarded || relayed.dropped)
+            dkr::runtime::session_log::write("[online][proxy] teardown forwarded-bytes=%llu dropped=%llu\n",
+                                             (unsigned long long)relayed.forwarded,
+                                             (unsigned long long)relayed.dropped);
         engine_.reset();
         meter_.reset();
         deliveries_.clear();

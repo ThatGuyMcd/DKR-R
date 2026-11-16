@@ -95,6 +95,10 @@ int main() {
         r = base(true);
         r.quick = true;
         check(build_context(r, kNow).quick, "quick join flag");
+        r = base(true);
+        check(!build_context(r, kNow).force_proxy, "the test-only force flag is off by default");
+        r.force_proxy = true;
+        check(build_context(r, kNow).force_proxy, "and is carried to the engine when a self-test sets it");
     }
     // A party host: ports come from the party roster, pings from the party ring, generation from the party.
     {

@@ -41,6 +41,7 @@ struct Simulation {
     std::vector<std::pair<Id, Bytes>> delivered;
     std::vector<std::string> signals;
     bool direct_good = false, proxy_dead = false, drop_control = false, drop_signal = false;
+    bool force_proxy = false;
     bool blackhole = false, bad_quality = false, block_forward = false, repair_block = false, substitute = false,
          block_origin = false, reject_delivery = false;
     unsigned blackholed_data = 0, realtime_forwarded = 0;
@@ -112,6 +113,7 @@ struct Simulation {
             c.active = true;
             c.allow = allow;
             c.volunteer = (id == 3 || (count > 3 && id > 1)) && volunteer;
+            c.force_proxy = force_proxy;
             for (Id peer = 1; peer <= count; ++peer)
                 c.members.push_back({peer, "Player " + std::to_string(peer), "", count == 3 || peer != 1});
             nodes[id]->configure(c, now);
@@ -651,6 +653,22 @@ void policy_tests() {
         sim.configure(77, false);
         sim.run(14s);
         check(!sim.selected(), "proxy requires separate device consent");
+    }
+    {
+        // Self-test only: the forced mode relays even when the direct route is better, and still
+        // needs a consenting relay.
+        Simulation sim;
+        sim.direct_good = true;
+        sim.force_proxy = true;
+        sim.configure();
+        sim.run(14s);
+        check(sim.selected() && sim.selected(2), "forced proxy route preferred over a better direct route");
+        Simulation without;
+        without.direct_good = true;
+        without.force_proxy = true;
+        without.configure(77, false);
+        without.run(14s);
+        check(!without.selected(), "forcing never creates a relay nobody volunteered");
     }
     {
         Simulation sim;
