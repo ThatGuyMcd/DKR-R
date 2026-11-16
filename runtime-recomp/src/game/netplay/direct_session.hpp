@@ -414,6 +414,8 @@ class DirectSession final {
                                   std::string& error);
 
   private:
+    // disconnect() with announce=false: local teardown only, nothing sent or pumped.
+    void disconnect_locally(std::string_view reason, bool announce);
     friend struct DirectSessionTestAccess;
     struct PendingRecord;
     std::uint32_t mod_manifest_bytes_ = 0;
