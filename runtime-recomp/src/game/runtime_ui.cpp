@@ -21,6 +21,7 @@
 #include "launcher_themes/art_sdl.hpp"
 #include "launcher_themes/greeting.hpp"
 #include "character_portraits/character_portraits.hpp"
+#include "netplay/netplay_manifest_builder.hpp"
 #include "netplay/session_chat/chat.hpp"
 #include "netplay/session_chat/feed_policy.hpp"
 #include "netplay/session_chat/settings.hpp"
@@ -4481,29 +4482,23 @@ void DrawComingSoonPage(const char* heading, const char* card_id, const char* de
 
 dkr::runtime::netplay::CompatibilityManifest BuildNetplayManifest(const dkr::runtime::rom::Identity& identity) {
     using namespace dkr::runtime::netplay;
-    CompatibilityManifest manifest{};
-    // Network compatibility comes from the repository VERSION and network ABI,
-    // not a platform-specific package/RC label. The human-facing launcher can
-    // still display DKR_RELEASE_VERSION independently.
-    manifest.release_version = canonical_network_release(DKR_NETWORK_RELEASE_VERSION);
-    manifest.build_fingerprint = canonical_network_build_fingerprint(DKR_NETWORK_RELEASE_VERSION);
-    manifest.revision = identity.revision == dkr::runtime::rom::Revision::UsV80 ? Revision::UsV80 : Revision::UsV77;
-    manifest.canonical_rom_hash = identity.canonical_xxh3;
-    // CMake derives this digest directly from the checked Patch Pipeline
-    // policy used for this revision. Admission therefore fails before launch
-    // whenever authored hook or instruction policy differs between builds.
-    manifest.patch_policy_hash = stable_hash(DKR_PATCH_POLICY_SHA256);
-    manifest.magic_codes_hash = dkr::runtime::magic_codes::selected_mask();
-    manifest.gameplay_settings_hash = stable_hash(std::to_string(manifest.magic_codes_hash) + ":retail-simulation-30");
+    // Only gathers the inputs; netplay/netplay_manifest_builder.cpp decides what they mean.
+    ManifestInputs inputs;
+    inputs.source_release_version = DKR_NETWORK_RELEASE_VERSION;
+    inputs.revision = identity.revision == dkr::runtime::rom::Revision::UsV80 ? Revision::UsV80 : Revision::UsV77;
+    inputs.canonical_rom_hash = identity.canonical_xxh3;
+    inputs.patch_policy = DKR_PATCH_POLICY_SHA256;
+    inputs.magic_codes = dkr::runtime::magic_codes::selected_mask();
     std::vector<std::uint8_t> canonical_save;
     std::string save_error;
-    if (dkr::runtime::saves::canonical_adventure_bytes(canonical_save, save_error)) {
-        manifest.session_save_hash =
-            stable_hash(std::string_view(reinterpret_cast<const char*>(canonical_save.data()), canonical_save.size()));
-    }
-    manifest.simulation_rate = 30U;
-    manifest.architecture = std::string(build_architecture());
-    manifest.floating_point_mode = floating_point_contract();
+    if (dkr::runtime::saves::canonical_adventure_bytes(canonical_save, save_error))
+        inputs.adventure_save = std::span<const std::uint8_t>(canonical_save);
+    inputs.architecture = build_architecture();
+    inputs.floating_point_mode = floating_point_contract();
+#if defined(DKR_EXPERIMENTAL_RACE_TEST)
+    inputs.owned_engine_hash = experimental::runtime_engine_identity(identity.revision);
+#endif
+    CompatibilityManifest manifest = build_netplay_manifest(inputs);
     // Once per run, for whoever is bringing up a new platform: what this build
     // tells its peers, and which clause it misses if it cannot race them.
     static const bool reported = [&manifest] {
@@ -4516,9 +4511,6 @@ dkr::runtime::netplay::CompatibilityManifest BuildNetplayManifest(const dkr::run
         return true;
     }();
     (void)reported;
-#if defined(DKR_EXPERIMENTAL_RACE_TEST)
-    manifest.owned_engine_hash = experimental::runtime_engine_identity(identity.revision);
-#endif
     return manifest;
 }
 
