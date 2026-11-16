@@ -71,6 +71,19 @@ launch. The host cancels the start after 30 seconds. Releases cannot join
 each other at all, so this only happens between development builds and the
 release they are based on.
 
+The host says so when it cancels. The status line names the racers that did not
+acknowledge, and adds "This lobby spans CPU architectures, so every racer needs
+a build that supports that." when the launch used the architecture-free hash. The
+countdown line in the log shows which form the launch used:
+
+```text
+[lobby][countdown] five seconds; racers=3 launch-hash=class
+```
+
+`launch-hash=full` is the hash earlier builds compute, `class` the architecture-free
+one. Note that a host on one architecture and every joiner on another also counts as
+spanning: the host's own architecture is the reference.
+
 ## Live state check
 
 Rollback netplay only sends controller inputs. Every machine then works out

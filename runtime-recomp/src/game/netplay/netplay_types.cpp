@@ -138,6 +138,10 @@ bool launch_hash_accepted(std::uint64_t hash, const CompatibilityManifest& own) 
     return hash == manifest_hash(own) || hash == manifest_class_hash(own);
 }
 
+std::string_view launch_hash_form(std::uint64_t hash, const CompatibilityManifest& host) {
+    return hash == manifest_class_hash(host) && hash != manifest_hash(host) ? "class" : "full";
+}
+
 bool valid_mod_manifest_hash(std::string_view hash) {
     return hash.empty() || (hash.size() == 64 && std::all_of(hash.begin(), hash.end(), [](char c) {
                                 return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f');
