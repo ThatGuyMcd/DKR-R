@@ -1055,7 +1055,8 @@ void Engine::choose(Clock::time_point now) {
             auto& choice = choices_[a.id];
             Route* direct = nullptr;
             Route* best = nullptr;
-            unsigned best_score = UINT32_MAX;
+            Route* forced = nullptr;
+            unsigned best_score = UINT32_MAX, forced_score = UINT32_MAX;
             for (auto& [id, r] : routes_)
                 if (r.grant.endpoint == a.id) {
                     if (!r.grant.proxy)
@@ -1071,9 +1072,15 @@ void Engine::choose(Clock::time_point now) {
                         best = &r;
                         best_score = value;
                     }
+                    if (context_.force_proxy && r.grant.proxy && value < forced_score) {
+                        forced = &r;
+                        forced_score = value;
+                    }
                 }
             Id target = 0;
-            if (best && best->grant.proxy && direct) {
+            if (context_.force_proxy && forced) {
+                target = forced->grant.id;
+            } else if (best && best->grant.proxy && direct) {
                 const auto baseline = std::max(score(direct->local.summary(now)), score(direct->remote));
                 if (!direct->local.fresh(now) || best_score + std::max(8U, baseline * 15 / 100) < baseline)
                     target = best->grant.id;

@@ -6,7 +6,7 @@
     const auto now = std::chrono::steady_clock::now();
     auto party = watch::party_link(this);
     std::scoped_lock party_lock(party->mutex);
-#include "netplay/peer_relay/owner_service.inl"
+    service_peer_relay_locked(*party, now);
     stability::Identity identity;
     identity.room = match_id_;
     identity.local = sender_id_;

@@ -27,6 +27,7 @@ function(dkr_add_peer_relay)
             STATIC
             "${_dkr_relay_root}/src/game/netplay/peer_relay/core.cpp"
             "${_dkr_relay_root}/src/game/netplay/peer_relay/live_datagram.cpp"
+            "${_dkr_relay_root}/src/game/netplay/peer_relay/owner_glue.cpp"
             "${_dkr_relay_root}/src/game/netplay/peer_relay/transport.cpp"
         )
         target_compile_features(DKRPeerRelay PUBLIC cxx_std_20)
@@ -53,6 +54,13 @@ function(dkr_add_peer_relay)
         endif()
         if(BUILD_TESTING)
             add_test(NAME DKRLiveDatagram COMMAND DKRLiveDatagramTests)
+        endif()
+    endif()
+    if(NOT TARGET DKRPeerRelayGlueTests)
+        add_executable(DKRPeerRelayGlueTests "${_dkr_relay_root}/tests/peer_relay_glue_tests.cpp")
+        target_link_libraries(DKRPeerRelayGlueTests PRIVATE DKRPeerRelay)
+        if(BUILD_TESTING)
+            add_test(NAME DKRPeerRelayGlue COMMAND DKRPeerRelayGlueTests)
         endif()
     endif()
     if(NOT TARGET DKRPeerRelayTests)

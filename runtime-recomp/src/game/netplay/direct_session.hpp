@@ -391,6 +391,11 @@ class DirectSession final {
     bool enable_owned_backend(bool available);
     bool owned_backend_available() const;
     bool owned_game_active() const;
+    // Self-test only (--self-test-owned-*, DKR_OWNED_CHECK_PROXY=force): the host prefers any
+    // fresh proxy route to the direct one. Off unless the self-test turns it on.
+    void set_check_force_proxy(bool force) {
+        check_force_proxy_.store(force, std::memory_order_relaxed);
+    }
     struct OwnedPacket {
         std::uint8_t source = 0;
         TransportTrafficClass traffic = TransportTrafficClass::Control;
@@ -632,6 +637,10 @@ class DirectSession final {
     void pump_locked();
     // Session chat's share of the pump. Requires mutex_ and party.mutex.
     void service_chat_locked(dkr::runtime::spectators::PartyLink& party);
+    // The peer relay's share of the pump (lobby roster for the relay, its control packets).
+    // Requires mutex_ and party.mutex; `now` is the pump's clock reading.
+    void service_peer_relay_locked(dkr::runtime::spectators::PartyLink& party,
+                                   std::chrono::steady_clock::time_point now);
     // Log from code that runs under mutex_ (the pump and everything it calls).
     // The line is formatted here, exactly as fprintf would, and queued; the
     // owner of the lock flushes the queue to stderr after releasing it. The
@@ -893,6 +902,7 @@ class DirectSession final {
     bool run_signal_sent_ = false;
     std::optional<LaunchDescriptor> launch_descriptor_;
     std::uint8_t local_slot_ = 0U;
+    std::atomic<bool> check_force_proxy_{false};
     std::uint8_t input_delay_ = 2U;
     std::uint64_t match_id_ = 0U;
     std::uint64_t sender_id_ = 0U;

@@ -30,6 +30,9 @@ struct Member {
 struct Context {
     Id room = 0, local = 0, host = 0;
     bool active = false, allow = false, volunteer = false, quick = false, building = true;
+    // Self-test only (DKR_OWNED_CHECK_PROXY=force): a host prefers any fresh proxy route to
+    // the direct one, so a loopback test exercises relaying. Never set by the game.
+    bool force_proxy = false;
     std::vector<Member> members;
     Id generation = 0;
 };
