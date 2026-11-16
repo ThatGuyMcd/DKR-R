@@ -694,7 +694,9 @@ FULL_SCENE_NATIVE_HASH = {
     # hand-written value (scripts/tests/test_revision_addresses.py).
     # Nov 16: adds current() and its atomic table pointer, set last by select();
     # no address or alias changed (tests/revision_addresses_current_tests.cpp).
-    "runtime-recomp/src/game/revision_addresses.hpp": "14a133a37a114ee3dd86d837e8db1ea6f86958ac112fdb6cf083ef4893565525",
+    # Nov 17: the 102 mutable aliases and select()'s field assignments are gone; select() stores the
+    # revision and publishes one atomic table pointer. The tables themselves are unchanged.
+    "runtime-recomp/src/game/revision_addresses.hpp": "b173ff2428468e84c8c41c156914fd3e6a0411ee4318f20f68035c189e3ef0a2",
     # Frozen online binding diverts before offline decoder/global song reads.
     # Without a ModWorld the private hooks retain their prior identity branch.
     # Nov 17: reads the selected revision through revision_addresses::current(); same addresses, no new store, call or hook.
