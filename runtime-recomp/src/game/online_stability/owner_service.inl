@@ -109,5 +109,5 @@
         } else if (!packet.target || packet.target == host_sender_id_)
             send(host_address_, key_);
     }
-#include "netplay/session_chat/owner_service.inl"
+    service_chat_locked(*party);
 }
