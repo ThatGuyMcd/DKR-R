@@ -739,6 +739,86 @@ void dkr::runtime::custom_tracks::set_level_load_observer(LevelLoadObserver obse
     g_level_load_observer = observer;
 }
 
+// A boss race that has not been visited is not loaded at all the first time:
+// level_load (game.c, the RACETYPE_BOSS branch) pushes it and loads the boss's
+// introduction scene instead, found by scanning ASSET_MISC_67 for pairs of
+// {boss level, intro level} until the level id matches. A .dkrmap level is in
+// no such pair, so the scan runs past the table and loads whatever level id it
+// meets - the camera then sits frozen in an unrelated scene. racer_boss_finish
+// (vehicle_tricky.c) repeats that scan with settings->courseId when the player
+// finishes, unless the course is already cleared, and pushes the level it found
+// as the next scene. So the course is marked visited and cleared (bits 0 and 1
+// of its courseFlags): retail's own rematch path, which starts the race
+// directly and ends it with a plain transition. world 6 is served as Dino
+// Domain, so the Wizpig worlds' unconditional intro never applies to a .dkrmap
+// header, and a boss level never runs a silver coin race (objects.c tests
+// level_type()), so the cleared bit unlocks nothing.
+//
+// The bits are only lent. save_data.c packs two bits per boss level up to
+// levelCount, so a lent flag left in courseFlags would reach the EEPROM with
+// the next Adventure save. Whatever this function set is taken back when
+// another level loads and, through return_lent_boss_flags, wherever Track
+// Select takes back its lent vehicle choice.
+namespace {
+struct LentBossFlags {
+    std::int32_t level = -1;
+    std::int32_t bits = 0;
+};
+LentBossFlags g_lent_boss_flags{};
+constexpr std::uint32_t kCourseFlagsPointer = 4U; // Settings::courseFlagsPtr
+constexpr std::int32_t kRaceVisitedAndCleared = 1 | 2;
+
+// The address of courseFlags[level], or 0 when it cannot be reached.
+std::uint32_t course_flags_at(std::uint8_t* rdram, recomp_context* context, std::int32_t level) {
+    const auto* payload = dkr::runtime::active_payload();
+    if (level < 0 || !payload || !payload->get_settings) {
+        return 0U;
+    }
+    recomp_context call = *context;
+    payload->get_settings(rdram, &call);
+    const auto settings = static_cast<std::uint32_t>(call.r2);
+    if (!addressable(settings + kCourseFlagsPointer)) {
+        return 0U;
+    }
+    const auto flags = static_cast<std::uint32_t>(read_word(rdram, settings + kCourseFlagsPointer));
+    const std::uint32_t at = flags + 4U * static_cast<std::uint32_t>(level);
+    return addressable(flags) && addressable(at) ? at : 0U;
+}
+} // namespace
+
+void dkr::runtime::custom_tracks::return_lent_boss_flags(std::uint8_t* rdram, recomp_context* context,
+                                                         std::int32_t keep_level) {
+    const LentBossFlags lent = g_lent_boss_flags;
+    if (lent.level < 0 || lent.level == keep_level) {
+        return;
+    }
+    g_lent_boss_flags = {};
+    if (const std::uint32_t at = course_flags_at(rdram, context, lent.level)) {
+        write_word(rdram, at, read_word(rdram, at) & ~lent.bits);
+    }
+}
+
+static void skip_custom_boss_intro(std::uint8_t* rdram, recomp_context* context,
+                                   std::int32_t level) {
+    namespace tracks_ns = dkr::runtime::custom_tracks;
+    tracks_ns::return_lent_boss_flags(rdram, context, level);
+    if (level < 0 || tracks_ns::level_race_type(level) != tracks_ns::kRaceTypeBoss) {
+        return;
+    }
+    const std::uint32_t at = course_flags_at(rdram, context, level);
+    if (at == 0U) {
+        return;
+    }
+    const std::int32_t value = read_word(rdram, at);
+    const std::int32_t missing = kRaceVisitedAndCleared & ~value;
+    if (missing != 0) {
+        write_word(rdram, at, value | missing);
+        g_lent_boss_flags = {level, (g_lent_boss_flags.level == level ? g_lent_boss_flags.bits : 0) | missing};
+        std::fprintf(stderr, "[custom-tracks] level %d: boss race runs without the retail intro and outro scenes\n",
+                     static_cast<int>(level));
+    }
+}
+
 // Called by the existing level_load scene-reset hook, before the level
 // allocates anything. Every load passes here - races, Track Lab and restarts,
 // and also the Track Select previews that load_level_game's hook never sees -
@@ -756,6 +836,7 @@ extern "C" void dkr_custom_tracks_prepare_memory(std::uint8_t* rdram, recomp_con
     const auto level = static_cast<std::int32_t>(context->r4);
     grow_main_pool_for_level(rdram, level);
     prepare_track_heap(level);
+    skip_custom_boss_intro(rdram, context, level);
     if (g_level_load_observer != nullptr) {
         g_level_load_observer(level);
     }
@@ -890,4 +971,51 @@ extern "C" void dkr_custom_tracks_prepare_vehicle(std::uint8_t* rdram, recomp_co
     context->r7 = static_cast<gpr>(vehicle);
     std::fprintf(stderr, "[track-lab] level=%d vehicle=%d selected=%d players=%d\n", level, vehicle, selected,
                  players_minus_one + 1);
+}
+
+// In track_spawn_objects, on the instruction after gzip_inflate returns
+// (0x8000CAC8 in US 1.0 and Rev A alike) and before any entry is spawned:
+// s0 still holds the object map's asset offset, the one asset_load was given,
+// and 0x48(sp) the buffer the map was inflated into - a 16-byte header that
+// starts with the entries' byte count, then the entries. A hub EXIT that leads to another .dkrmap track was exported with
+// a placeholder destination, since that track's level id depends on what is
+// installed; the package's levelLinks name the byte and the track, and the id
+// resolved for this session is written in before the exit spawns. A link whose
+// track is missing keeps the placeholder (the exporter writes a retail hub).
+extern "C" void dkr_custom_tracks_object_map_links(std::uint8_t* rdram,
+                                                   recomp_context* context) {
+    if (dkr::runtime::legacy::frozen_online_resources()) return;
+    if (owned_vanilla_bootstrap()) return;
+    const auto offset = static_cast<std::uint32_t>(context->r16);
+    const auto links = dkr::runtime::custom_tracks::level_links_for_object_map(offset);
+    if (links.empty()) {
+        return;
+    }
+    const auto stack = static_cast<std::uint32_t>(context->r29);
+    if (!addressable(stack + 0x48U)) {
+        return;
+    }
+    const auto buffer = static_cast<std::uint32_t>(read_word(rdram, stack + 0x48U));
+    if (!addressable(buffer)) {
+        return;
+    }
+    const std::int32_t entry_bytes = read_word(rdram, buffer);
+    for (const auto& link : links) {
+        if (entry_bytes <= 0 || link.offset < 0x10U ||
+            link.offset >= 0x10U + static_cast<std::uint32_t>(entry_bytes) ||
+            !addressable(buffer + link.offset)) {
+            std::fprintf(stderr, "[custom-tracks] level link to %s at byte %u is outside the object map\n",
+                         link.track.c_str(), link.offset);
+            continue;
+        }
+        if (link.level_id < 0 || link.level_id > 0xFF) {
+            std::fprintf(stderr, "[custom-tracks] level link to %s: track not installed, exit keeps its placeholder\n",
+                         link.track.c_str());
+            continue;
+        }
+        MEM_B(static_cast<std::int32_t>(link.offset), rdram_address(buffer)) =
+            static_cast<std::int8_t>(link.level_id);
+        std::fprintf(stderr, "[custom-tracks] level link to %s now leads to level %d\n",
+                     link.track.c_str(), static_cast<int>(link.level_id));
+    }
 }
