@@ -1,0 +1,26 @@
+diff --git a/library/threading.c b/library/threading.c
+--- a/library/threading.c
++++ b/library/threading.c
+@@ -111,6 +111,7 @@ int (*mbedtls_mutex_unlock)(mbedtls_threading_mutex_t *) = threading_mutex_unloc
+ #endif /* MBEDTLS_THREADING_PTHREAD */
+ 
+ #if defined(MBEDTLS_THREADING_ALT)
++#if !defined(DKRR_MBEDTLS_THREADING_WIN32)
+ static int threading_mutex_fail(mbedtls_threading_mutex_t *mutex)
+ {
+     ((void) mutex);
+@@ -126,6 +127,14 @@ void (*mbedtls_mutex_init)(mbedtls_threading_mutex_t *) = threading_mutex_dummy;
+ void (*mbedtls_mutex_free)(mbedtls_threading_mutex_t *) = threading_mutex_dummy;
+ int (*mbedtls_mutex_lock)(mbedtls_threading_mutex_t *) = threading_mutex_fail;
+ int (*mbedtls_mutex_unlock)(mbedtls_threading_mutex_t *) = threading_mutex_fail;
++#else
++/* DKR-R, Windows: start with working SRWLOCK mutexes instead of failing ones, so a
++ * binary that never calls mbedtls_threading_set_alt() is still thread safe. */
++void (*mbedtls_mutex_init)(mbedtls_threading_mutex_t *) = dkrr_mbedtls_mutex_init;
++void (*mbedtls_mutex_free)(mbedtls_threading_mutex_t *) = dkrr_mbedtls_mutex_free;
++int (*mbedtls_mutex_lock)(mbedtls_threading_mutex_t *) = dkrr_mbedtls_mutex_lock;
++int (*mbedtls_mutex_unlock)(mbedtls_threading_mutex_t *) = dkrr_mbedtls_mutex_unlock;
++#endif
+ 
+ /*
+  * Set functions pointers and initialize global mutexes
