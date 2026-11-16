@@ -605,6 +605,10 @@ int DkrMain(int argc, char** argv) {
     // The external updater must obtain exclusive access before any replacement.
     std::unique_ptr<dkr::updates::InstallLock> application_update_lock;
     dkr::online_stability::ProcessServices process_services([] {
+        // Leave the session here, while WebRTC and the CRT are intact. Left to
+        // ~DirectSession (a namespace-scope object) the departure pump runs
+        // during static destruction, after libdatachannel's own statics are gone.
+        dkr::runtime::netplay::session().disconnect("The racer application closed.");
         dkr::crash_reports::shutdown();
         dkr::online_stability::retire_store_http();
         dkr::online::shutdown_account();
