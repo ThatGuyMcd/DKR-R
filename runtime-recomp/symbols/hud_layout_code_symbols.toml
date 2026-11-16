@@ -1,19 +1,108 @@
-# The HUD functions whose text calls the layout recognises by return address
-# (runtime_hud_layout.cpp). The call offsets inside them stay in the source.
+# The return addresses of the text calls inside hud_main_time_trial and hud_finish_position that
+# the HUD layout recognises (runtime_hud_layout.cpp): a function plus a byte offset, resolved per
+# revision from modding/reference-us-v*/functions.toml. v80 inserted eight bytes into the first
+# function, so its stopwatch offsets differ; the finish offsets are the same in both.
 schema = 1
 header = "hud_layout_code_symbols.hpp"
-table = "decomp"
+table = "functions"
 hex = "upper"
-symbols = [
-  "hud_main_time_trial",
-  "hud_finish_position",
-]
 template = '''#pragma once
+#include <array>
 #include <cstdint>
 namespace dkr::runtime::hud_layout_code_symbols {
-struct Symbols {std::uint32_t time_trial;std::uint32_t finish_position;};
-inline constexpr Symbols symbols77{@ALL:77@};
-inline constexpr Symbols symbols80{@ALL:80@};
+struct Symbols {
+    std::array<std::uint32_t, 6> stopwatch;
+    std::array<std::uint32_t, 3> finish;
+};
+inline constexpr Symbols symbols77{{{@stopwatch0_77:77@,@stopwatch1_77:77@,@stopwatch2_77:77@,@stopwatch3_77:77@,@stopwatch4_77:77@,@stopwatch5_77:77@}},{{@finish0:77@,@finish1:77@,@finish2:77@}}};
+inline constexpr Symbols symbols80{{{@stopwatch0_80:80@,@stopwatch1_80:80@,@stopwatch2_80:80@,@stopwatch3_80:80@,@stopwatch4_80:80@,@stopwatch5_80:80@}},{{@finish0:80@,@finish1:80@,@finish2:80@}}};
 inline constexpr const Symbols& for_revision(bool us_v80) { return us_v80 ? symbols80 : symbols77; }
 }
 '''
+
+[[site]]
+name = "stopwatch0_77"
+function = "hud_main_time_trial"
+offset = 0xDD4
+revisions = ["77"]
+
+[[site]]
+name = "stopwatch1_77"
+function = "hud_main_time_trial"
+offset = 0xE10
+revisions = ["77"]
+
+[[site]]
+name = "stopwatch2_77"
+function = "hud_main_time_trial"
+offset = 0xE4C
+revisions = ["77"]
+
+[[site]]
+name = "stopwatch3_77"
+function = "hud_main_time_trial"
+offset = 0xEA4
+revisions = ["77"]
+
+[[site]]
+name = "stopwatch4_77"
+function = "hud_main_time_trial"
+offset = 0xEDC
+revisions = ["77"]
+
+[[site]]
+name = "stopwatch5_77"
+function = "hud_main_time_trial"
+offset = 0xF14
+revisions = ["77"]
+
+[[site]]
+name = "stopwatch0_80"
+function = "hud_main_time_trial"
+offset = 0xDDC
+revisions = ["80"]
+
+[[site]]
+name = "stopwatch1_80"
+function = "hud_main_time_trial"
+offset = 0xE18
+revisions = ["80"]
+
+[[site]]
+name = "stopwatch2_80"
+function = "hud_main_time_trial"
+offset = 0xE54
+revisions = ["80"]
+
+[[site]]
+name = "stopwatch3_80"
+function = "hud_main_time_trial"
+offset = 0xEAC
+revisions = ["80"]
+
+[[site]]
+name = "stopwatch4_80"
+function = "hud_main_time_trial"
+offset = 0xEE4
+revisions = ["80"]
+
+[[site]]
+name = "stopwatch5_80"
+function = "hud_main_time_trial"
+offset = 0xF1C
+revisions = ["80"]
+
+[[site]]
+name = "finish0"
+function = "hud_finish_position"
+offset = 0x174
+
+[[site]]
+name = "finish1"
+function = "hud_finish_position"
+offset = 0x250
+
+[[site]]
+name = "finish2"
+function = "hud_finish_position"
+offset = 0x32C

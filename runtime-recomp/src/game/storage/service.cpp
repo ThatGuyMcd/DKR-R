@@ -72,10 +72,11 @@ struct Service {
     std::atomic<bool> playing{false};
     std::uint64_t cleared_bytes = 0, cleared_files = 0;
     std::chrono::steady_clock::time_point ready_at{};
+    Pacing pacing;
     std::stop_source cancellation;
     std::jthread worker;
-    explicit Service(fs::path path)
-        : profile(profile_path(fs::canonical(profile_path(path)))), root(profile / "storage") {
+    explicit Service(fs::path path, const Pacing& timing)
+        : profile(profile_path(fs::canonical(profile_path(path)))), root(profile / "storage"), pacing(timing) {
         fs::create_directory(root);
         dkr::updates::require_private_tree(root);
         dkr::updates::InstallLock register_lock(root, 10000);
@@ -110,7 +111,7 @@ struct Service {
     void run(std::stop_token stop) noexcept {
         BackgroundPriority priority;
         using Clock = std::chrono::steady_clock;
-        const auto startup_due = Clock::now() + std::chrono::seconds(10);
+        const auto startup_due = Clock::now() + pacing.startup_delay;
         while (!stop.stop_requested()) {
             Action action;
             std::string installed_digest;
@@ -143,7 +144,7 @@ struct Service {
                         lock.lock();
                         preferences_dirty = true;
                         snapshot.status = error.what();
-                        changed.wait_for(lock, stop, std::chrono::seconds(5), [] { return false; });
+                        changed.wait_for(lock, stop, pacing.retry_delay, [] { return false; });
                     }
                     continue;
                 }
@@ -197,6 +198,7 @@ struct Service {
                     options.stop = cancellation.get_token();
                 }
                 options.background = true;
+                options.pacing = pacing;
                 options.gameplay = &playing;
                 options.progress = [this, action](const View& progress) {
                     std::lock_guard lock(mutex);
@@ -229,10 +231,10 @@ struct Service {
                     snapshot.busy = false;
                     if (snapshot.deferred) {
                         if (action == Action::Installed) {
-                            installs.try_emplace(installed_digest, Clock::now() + std::chrono::seconds(5));
+                            installs.try_emplace(installed_digest, Clock::now() + pacing.retry_delay);
                         } else if (!pending) {
                             pending = action;
-                            ready_at = Clock::now() + std::chrono::seconds(5);
+                            ready_at = Clock::now() + pacing.retry_delay;
                         }
                     } else if (action == Action::Automatic || action == Action::Clean) {
                         startup_complete = true;
@@ -249,10 +251,10 @@ struct Service {
                 snapshot.busy = false;
                 snapshot.status = error.what();
                 if (action == Action::Installed) {
-                    installs.try_emplace(installed_digest, Clock::now() + std::chrono::seconds(5));
+                    installs.try_emplace(installed_digest, Clock::now() + pacing.retry_delay);
                 } else if (!pending) {
                     pending = action;
-                    ready_at = Clock::now() + std::chrono::seconds(5);
+                    ready_at = Clock::now() + pacing.retry_delay;
                 }
             }
         }
@@ -265,12 +267,12 @@ std::shared_ptr<Service> current() {
     return owner;
 }
 } // namespace
-void start(const fs::path& profile) {
+void start(const fs::path& profile, const Pacing& pacing) {
     std::lock_guard lock(owner_mutex);
     if (owner)
         return;
     try {
-        owner = std::make_shared<Service>(profile);
+        owner = std::make_shared<Service>(profile, pacing);
     } catch (...) {
     }
 }

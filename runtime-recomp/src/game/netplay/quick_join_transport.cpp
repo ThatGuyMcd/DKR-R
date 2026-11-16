@@ -1,3 +1,4 @@
+#include "../session_log.hpp"
 #include "setup_policy.hpp"
 #include <cstdio>
 #include "online_presentation/test_receive_delay.hpp"
@@ -605,8 +606,7 @@ class QuickJoinTransport final : public SessionTransport {
                     for (unsigned n = 0; n < queued.size(); ++n)
                         if (row.channels[n])
                             queued[n] = row.channels[n]->bufferedAmount();
-                    std::fprintf(
-                        stderr,
+                    dkr::runtime::session_log::write(
                         "[online][sdk] role=%s sctp-rtt-ms=%lld bytes-sent=%zu bytes-received=%zu queued-control=%zu queued-authority=%zu queued-live=%zu queued-checkpoint=%zu queued-replica=%zu\n",
                         host_ ? "host" : "client", static_cast<long long>(rtt ? rtt->count() : -1),
                         row.connection->bytesSent(), row.connection->bytesReceived(), queued[0], queued[1], queued[2],

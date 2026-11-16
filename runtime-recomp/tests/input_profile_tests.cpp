@@ -32,6 +32,22 @@ int main() {
     assert(secondary_controller_binding(0U, Action::A) == kUnbound);
     assert(controller_binding(0U, Action::Z) == kSecondarySource);
 
+    // A saved table is installed verbatim: the defaults share a source between
+    // actions that are never live together, and a reload must keep both.
+    restore_controller_binding(0U, Action::CUp, kPlayerTwoSource);
+    restore_controller_binding(0U, Action::OrbitUp, kPlayerTwoSource);
+    assert(controller_binding(0U, Action::CUp) == kPlayerTwoSource);
+    assert(controller_binding(0U, Action::OrbitUp) == kPlayerTwoSource);
+    restore_secondary_controller_binding(0U, Action::Z, kPlayerTwoSource);
+    assert(controller_binding(0U, Action::CUp) == kPlayerTwoSource);
+    assert(secondary_controller_binding(0U, Action::Z) == kPlayerTwoSource);
+    assert(controller_binding(1U, Action::CUp) != kPlayerTwoSource);
+    // Picking a source in the UI still moves it off the action that held it.
+    set_controller_binding(0U, Action::CDown, kPlayerTwoSource);
+    assert(controller_binding(0U, Action::CUp) == kUnbound);
+    assert(controller_binding(0U, Action::OrbitUp) == kUnbound);
+    assert(secondary_controller_binding(0U, Action::Z) == kUnbound);
+
     // Global shortcuts are independent actions and support two-button chords.
     const ShortcutBinding overlay_shortcut{21, 22};
     const ShortcutBinding texture_shortcut{23, kUnbound};

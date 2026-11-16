@@ -1,4 +1,5 @@
 #include "vehicle_world.hpp"
+#include "guest_call_context.hpp"
 #include "vehicle_symbols.hpp"
 #include "legacy_character_menu.hpp"
 #include "vehicle_lighting/capture.hpp"
@@ -62,6 +63,8 @@ gpr pointer(std::uint32_t p) {
 }
 class Calls {
     std::span<std::uint8_t> ram_;
+    // Only a source for GuestCallContext: its f_odd still points at the caller's
+    // context, so it is never passed to guest code itself.
     recomp_context context_;
     Memory g_;
 
@@ -78,23 +81,22 @@ class Calls {
     unsigned call(RecompiledEntrypoint fn, std::initializer_list<unsigned> args) {
         if (!fn || args.size() > 8)
             bad("native menu callback is unavailable.");
-        auto c = context_;
-        c.r29 = pointer(stack);
-        c.f_odd = c.mips3_float_mode ? &c.f1.u32l : &c.f0.u32h;
+        GuestCallContext c(context_);
+        c->r29 = pointer(stack);
         unsigned i = 0;
         for (const auto v : args) {
             switch (i) {
             case 0:
-                c.r4 = pointer(v);
+                c->r4 = pointer(v);
                 break;
             case 1:
-                c.r5 = pointer(v);
+                c->r5 = pointer(v);
                 break;
             case 2:
-                c.r6 = pointer(v);
+                c->r6 = pointer(v);
                 break;
             case 3:
-                c.r7 = pointer(v);
+                c->r7 = pointer(v);
                 break;
             default:
                 g_.set(stack + i * 4, v);
@@ -102,8 +104,8 @@ class Calls {
             }
             ++i;
         }
-        fn(ram_.data(), &c);
-        return unsigned(c.r2);
+        fn(ram_.data(), c.get());
+        return unsigned(c->r2);
     }
 };
 } // namespace

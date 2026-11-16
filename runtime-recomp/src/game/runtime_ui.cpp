@@ -35,6 +35,7 @@
 #include "mod_store/install_notice.hpp"
 #include "water_style/appearance.hpp"
 #include "display_settings/policy.hpp"
+#include "sound_settings/policy.hpp"
 #include "session_content/policy.hpp"
 #include "analog_driving/settings.hpp"
 #include "look_behind/policy.hpp"
@@ -1592,6 +1593,42 @@ void SetSoundMuted(std::size_t channel, bool muted) {
     g_sound_muted[channel] = muted;
 }
 
+dkr::sound::Settings SoundSettingsSnapshot() {
+    dkr::sound::Settings settings;
+    for (std::size_t channel = 0; channel < kSoundChannelCount; ++channel) {
+        settings.level[channel] = SoundLevel(channel);
+        if (g_sound_muted[channel])
+            settings.muted |= 1U << channel;
+    }
+    settings.custom_curve = g_eq_custom;
+    settings.multiplayer_race_music = dkr::runtime::enhancements::multiplayer_race_music_requested();
+    settings.bass = dkr::runtime::platform::bass_gain();
+    settings.mid = dkr::runtime::platform::mid_gain();
+    settings.treble = dkr::runtime::platform::treble_gain();
+    return settings;
+}
+
+// Volumes load as levels; muted channels go silent once all are read.
+void ApplyLoadedSound(const dkr::sound::Loaded& loaded) {
+    for (std::size_t channel = 0; channel < kSoundChannelCount; ++channel) {
+        if (loaded.level[channel])
+            SetSoundChannelVolume(channel, *loaded.level[channel]);
+    }
+    if (loaded.custom_curve)
+        g_eq_custom = loaded.custom_curve;
+    if (loaded.multiplayer_race_music)
+        dkr::runtime::enhancements::set_multiplayer_race_music_enabled(*loaded.multiplayer_race_music);
+    if (loaded.bass)
+        dkr::runtime::platform::set_bass_gain(*loaded.bass);
+    if (loaded.mid)
+        dkr::runtime::platform::set_mid_gain(*loaded.mid);
+    if (loaded.treble)
+        dkr::runtime::platform::set_treble_gain(*loaded.treble);
+    for (std::size_t channel = 0; channel < kSoundChannelCount; ++channel) {
+        SetSoundMuted(channel, (loaded.muted & (1U << channel)) != 0U);
+    }
+}
+
 void SaveSettings() {
     std::error_code error;
     std::filesystem::create_directories(g_config_directory, error);
@@ -1670,25 +1707,7 @@ void SaveSettings() {
         output << "crt_filter_index=" << g_crt_filter_index << '\n';
         output << "crt_scale_mode=" << g_crt_scale_mode << '\n';
         output << "crt_strength=" << static_cast<int>(std::clamp(g_crt_strength, 0.0F, 1.0F) * 1000.0F) << '\n';
-        output << "master_volume=" << SoundLevel(0U) << '\n';
-        output << "music_volume=" << SoundLevel(1U) << '\n';
-        output << "sound_effects_volume=" << SoundLevel(2U) << '\n';
-        output << "vehicle_volume=" << SoundLevel(3U) << '\n';
-        output << "nature_volume=" << SoundLevel(4U) << '\n';
-        unsigned sound_muted = 0U;
-        for (std::size_t channel = 0; channel < kSoundChannelCount; ++channel) {
-            if (g_sound_muted[channel])
-                sound_muted |= 1U << channel;
-        }
-        output << "sound_muted=" << sound_muted << '\n';
-        if (g_eq_custom) {
-            output << "eq_custom=" << (*g_eq_custom)[0] << ',' << (*g_eq_custom)[1] << ',' << (*g_eq_custom)[2] << '\n';
-        }
-        output << "modern_multiplayer_race_music="
-               << (dkr::runtime::enhancements::multiplayer_race_music_requested() ? 1 : 0) << '\n';
-        output << "eq_bass=" << dkr::runtime::platform::bass_gain() << '\n';
-        output << "eq_mid=" << dkr::runtime::platform::mid_gain() << '\n';
-        output << "eq_treble=" << dkr::runtime::platform::treble_gain() << '\n';
+        dkr::sound::save(output, SoundSettingsSnapshot());
         output << "maximum_detail=" << (dkr::runtime::enhancements::maximum_detail_requested() ? 1 : 0) << '\n';
         output << "modern_fov_offset=" << dkr::runtime::enhancements::fov_offset() << '\n';
         dkr::runtime::driving::save(output);
@@ -1914,9 +1933,9 @@ bool LoadPlayerBindingSetting(const std::string& key, int number) {
             if (keyboard) {
                 dkr::runtime::input::set_keyboard_binding(player, action, number);
             } else if (controller_secondary) {
-                dkr::runtime::input::set_secondary_controller_binding(player, action, number);
+                dkr::runtime::input::restore_secondary_controller_binding(player, action, number);
             } else {
-                dkr::runtime::input::set_controller_binding(player, action, number);
+                dkr::runtime::input::restore_controller_binding(player, action, number);
             }
             return true;
         }
@@ -1973,8 +1992,7 @@ void LoadSettings() {
     }
     auto assignment_mode = dkr::runtime::platform::controller_assignment_mode();
     auto controller_assignments = dkr::runtime::platform::controller_assignment_keys();
-    // Volumes load as levels; muted channels go silent once all are read.
-    unsigned sound_muted = 0U;
+    dkr::sound::Loaded sound_loaded;
     for (std::size_t channel = 0; channel < kSoundChannelCount; ++channel) {
         SetSoundMuted(channel, false);
     }
@@ -2087,21 +2105,11 @@ void LoadSettings() {
             g_shared_online_policy_loaded = value == "2";
             continue;
         }
-        // Outside the chain below, which is already at MSVC's nesting limit.
-        if (key == "sound_muted") {
-            sound_muted = static_cast<unsigned>(std::strtoul(value.c_str(), nullptr, 10));
-            continue;
-        }
-        if (key == "eq_custom") {
-            std::array<int, 3> curve{};
-            char comma_a = 0;
-            char comma_b = 0;
-            std::istringstream fields(value);
-            if (fields >> curve[0] >> comma_a >> curve[1] >> comma_b >> curve[2] && comma_a == ',' && comma_b == ',') {
-                for (int& band : curve)
-                    band = std::clamp(band, -12, 12);
-                g_eq_custom = curve;
-            }
+        try {
+            if (dkr::sound::load(key, value, sound_loaded))
+                continue;
+        } catch (...) {
+            std::fprintf(stderr, "[boot][settings] ignored malformed setting %s\n", key.c_str());
             continue;
         }
         bool player_gyro_key = false;
@@ -2382,24 +2390,6 @@ void LoadSettings() {
                 g_crt_scale_mode = std::clamp(number, 0, 1);
             } else if (key == "crt_strength") {
                 g_crt_strength = std::clamp(number, 0, 1000) / 1000.0F;
-            } else if (key == "master_volume") {
-                dkr::runtime::platform::set_master_volume(std::stof(value));
-            } else if (key == "music_volume") {
-                dkr::runtime::audio::set_music_volume(std::stof(value));
-            } else if (key == "sound_effects_volume") {
-                dkr::runtime::audio::set_sound_effects_volume(std::stof(value));
-            } else if (key == "vehicle_volume") {
-                dkr::runtime::audio::set_vehicle_volume(std::stof(value));
-            } else if (key == "nature_volume") {
-                dkr::runtime::audio::set_nature_volume(std::stof(value));
-            } else if (key == "modern_multiplayer_race_music") {
-                dkr::runtime::enhancements::set_multiplayer_race_music_enabled(number != 0);
-            } else if (key == "eq_bass") {
-                dkr::runtime::platform::set_bass_gain(std::stof(value));
-            } else if (key == "eq_mid") {
-                dkr::runtime::platform::set_mid_gain(std::stof(value));
-            } else if (key == "eq_treble") {
-                dkr::runtime::platform::set_treble_gain(std::stof(value));
             } else if (key == "maximum_detail") {
                 dkr::runtime::enhancements::set_maximum_detail_enabled(number != 0);
             } else if (key == "modern_fov_offset") {
@@ -2536,9 +2526,7 @@ void LoadSettings() {
     g_online_experimental_rollback = true;
     g_online_automatic_backend = false;
     migrated |= migrated_rollback_backend; // Persist only after every setting owner has loaded.
-    for (std::size_t channel = 0; channel < kSoundChannelCount; ++channel) {
-        SetSoundMuted(channel, (sound_muted & (1U << channel)) != 0U);
-    }
+    ApplyLoadedSound(sound_loaded);
     if (settings_version < 8) {
         // The former global gamepad map becomes the starting point for every
         // local player. Keyboard ownership remains Player 1, matching all
@@ -8234,6 +8222,14 @@ void dkr::runtime::ui::configure(const std::filesystem::path& config_directory) 
 
 void dkr::runtime::ui::persist_settings() {
     SaveSettings();
+}
+
+bool dkr::runtime::ui::self_test_settings(const std::filesystem::path& directory) {
+    g_config_directory = directory;
+    LoadSettings();
+    SaveSettings();
+    std::error_code error;
+    return std::filesystem::is_regular_file(SettingsPath(), error);
 }
 
 void dkr::runtime::ui::persist_graphics_api_fallback() {
