@@ -272,7 +272,22 @@ if(DKR_NETPLAY_WEBRTC)
         "DKR-R Mbed TLS protocol extensions"
         FORCE
     )
+    # mbedtls_dkrr_user_config.h enables MBEDTLS_THREADING_C: libdatachannel runs
+    # TLS and DTLS handshakes (all of which call psa_crypto_init) on several
+    # threads. Everywhere but Windows that is the pthread backend, which needs
+    # the library linked with pthread explicitly on older glibc.
+    set(LINK_WITH_PTHREAD ON CACHE BOOL "Link Mbed TLS with pthread (MBEDTLS_THREADING_PTHREAD)" FORCE)
     add_subdirectory("${DKR_MBEDTLS_SOURCE}" "${CMAKE_BINARY_DIR}/mbedtls" EXCLUDE_FROM_ALL)
+    if(WIN32)
+        # MBEDTLS_THREADING_ALT includes "threading_alt.h" from mbedtls/threading.h:
+        # every consumer of the Mbed TLS headers needs the SRWLOCK mutex definition.
+        foreach(_dkr_mbedtls_target mbedcrypto mbedx509 mbedtls)
+            target_include_directories(
+                ${_dkr_mbedtls_target}
+                PUBLIC "${CMAKE_CURRENT_LIST_DIR}/src/game/netplay/mbedtls_threading"
+            )
+        endforeach()
+    endif()
     if(NOT TARGET MbedTLS::MbedTLS)
         add_library(MbedTLS::MbedTLS ALIAS mbedtls)
     endif()

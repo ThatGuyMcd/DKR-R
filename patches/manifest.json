@@ -305,7 +305,12 @@
       "name": "MbedTLS",
       "repositoryPath": "extern/mbedtls",
       "expectedCommit": "068ff080b369adfac81509f9b57b2afabaf82dc5",
-      "patches": []
+      "patches": [
+        {
+          "path": "patches/mbedtls/0001-use-srwlock-mutexes-by-default-on-windows.patch",
+          "sha256": "82e14c44b4be3067f4fdc3bdcfa3a3427ddf81b1af4e0e907c7debf61ea4b1fc"
+        }
+      ]
     },
     {
       "name": "SDL3",
