@@ -47,6 +47,9 @@ from this file. Bump the version in the manifest and in `bl_info`
   retail level or a custom track by id. The export writes a placeholder and
   a `levelLinks` entry in the manifest, and DKR-R fills in the track's level
   id when the hub loads (docs/CUSTOM_TRACKS.md, *Hub doors*).
+  The exporter refuses a link whose offset is outside the object map (below
+  `0x3000`) and an exit destination outside level ids 0 to 127; Validate
+  reports the same. Links are resolved offline only.
 - A few raw fields now have names: an AI node's destination class, a
   Head-For Point's kind and racer, and the racer a chest or flag belongs to.
 

@@ -560,6 +560,16 @@ def _check_exits(object_map: ObjectMap, catalog,
     if not known:
         return []
     issues = []
+    linked = any(level_links.linked_track(o) for o in object_map.by_id(EXIT))
+    if linked and estimate_size(object_map, catalog) > level_links.MAX_OBJECT_MAP_BYTES:
+        issues.append(Issue(
+            WARNING,
+            "this map with its links to other tracks is about %d bytes, more "
+            "than the game's %d byte object map buffer, which the exporter "
+            "refuses when the encoded size is over it"
+            % (estimate_size(object_map, catalog), level_links.MAX_OBJECT_MAP_BYTES),
+            EXIT,
+        ))
     for exit_object in object_map.by_id(EXIT):
         destination = exit_object.fields.get("destinationMapId")
         track = level_links.linked_track(exit_object)
@@ -572,6 +582,15 @@ def _check_exits(object_map: ObjectMap, catalog,
                     "an exit leads to custom track %r, which is not a track id: "
                     "lowercase words joined by single hyphens, as that track's "
                     "Package panel shows it" % track,
+                    EXIT,
+                ))
+            continue
+        if isinstance(destination, (int, float)) and not isinstance(destination, bool):
+            if not 0 <= destination <= level_links.MAX_LEVEL_ID:
+                issues.append(Issue(
+                    ERROR,
+                    "an exit leads to level id %s, outside 0 to %d"
+                    % (destination, level_links.MAX_LEVEL_ID),
                     EXIT,
                 ))
             continue
@@ -592,6 +611,27 @@ def _check_exits(object_map: ObjectMap, catalog,
                 "track that defines it is installed" % destination,
                 EXIT,
             ))
+    return issues
+
+
+def check_manifest_links(manifest: dict, map_sizes=None) -> List[Issue]:
+    """Issues for a package manifest's ``levelLinks``.
+
+    An offset outside the object map or a level id outside 0..127 is an error:
+    the runtime writes a byte at the offset, so a bad one corrupts the map.
+    """
+    links = manifest.get("levelLinks", [])
+    if not isinstance(links, list):
+        return [Issue(ERROR, "levelLinks must be a list", EXIT)]
+    issues = []
+    for index, link in enumerate(links):
+        if not isinstance(link, dict):
+            issues.append(Issue(ERROR, "levelLinks[%d] is not an object" % index, EXIT))
+            continue
+        try:
+            level_links.check_links([link], map_sizes)
+        except level_links.LevelLinkError as error:
+            issues.append(Issue(ERROR, "levelLinks[%d]: %s" % (index, error), EXIT))
     return issues
 
 
