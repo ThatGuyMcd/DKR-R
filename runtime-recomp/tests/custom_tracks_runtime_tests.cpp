@@ -22,6 +22,7 @@ extern "C" void dkr_custom_tracks_table_load_begin(std::uint8_t*, recomp_context
 extern "C" void dkr_custom_tracks_table_load_end(std::uint8_t*, recomp_context*);
 extern "C" void dkr_custom_tracks_asset_load_begin(std::uint8_t*, recomp_context*);
 extern "C" void dkr_custom_tracks_asset_load_end(std::uint8_t*, recomp_context*);
+extern "C" void dkr_custom_tracks_object_map_links(std::uint8_t*, recomp_context*);
 
 namespace tracks = dkr::runtime::custom_tracks;
 namespace addresses = dkr::runtime::revision_addresses;
@@ -704,6 +705,93 @@ int main() {
         }
         payload.mempool_alloc_safe = nullptr;
     }
+    // -----------------------------------------------------------------------
+    // Hub exits: levelLinks written into the inflated object map
+    // -----------------------------------------------------------------------
+    // track_spawn_objects inflates every map into one OBJECT_MAP_SIZE buffer. The
+    // entry byte count at its start comes from the package, so the write must stay
+    // inside the buffer however hostile that count is.
+    {
+        assert(addresses::select(dkr::runtime::rom::Revision::UsV77));
+        const auto library = root / "links";
+        const auto write_package = [&](const char* id, const char* extra) {
+            const auto folder = library / (std::string(id) + ".dkrmap");
+            std::filesystem::create_directories(folder);
+            std::ofstream(folder / "manifest.json")
+                << R"({"schemaVersion":1,"id":")" << id << R"(","name":")" << id
+                << R"(","adds":[{"section":"LEVEL_HEADERS","file":"h.bin"},)"
+                   R"({"section":"LEVEL_OBJECT_MAPS","slot":"structure","file":"s.bin"},)"
+                   R"({"section":"LEVEL_OBJECT_MAPS","slot":"collectables","file":"o.bin"}])"
+                << extra << "}";
+            std::ofstream(folder / "h.bin", std::ios::binary) << std::string(200, '\0');
+            std::ofstream(folder / "s.bin", std::ios::binary) << std::string(48, 's');
+            std::ofstream(folder / "o.bin", std::ios::binary) << std::string(64, 'o');
+        };
+        write_package("target", "");
+        write_package("hub", R"(,"levelLinks":[{"slot":"structure","offset":24,"track":"target"},)"
+                             R"({"slot":"structure","offset":40,"track":"target"},)"
+                             R"({"slot":"structure","offset":12272,"track":"target"}])");
+        tracks::scan(library);
+        const std::int32_t retail_headers[] = {0, 196, -1};
+        const std::int32_t retail_maps[] = {0, 0x80, 0x100, -1};
+        assert(!tracks::build_extended_table(tracks::Section::LevelHeaders, retail_headers).empty());
+        const auto maps = tracks::build_extended_table(tracks::Section::LevelObjectMaps, retail_maps);
+        const auto headers = tracks::build_extended_table(tracks::Section::LevelHeaders, retail_headers);
+        const std::int32_t hub_level = tracks::resolved_level_id("hub");
+        const std::int32_t target_level = tracks::resolved_level_id("target");
+        assert(hub_level > 0 && target_level > 0 && hub_level <= tracks::kMaxLevelId);
+        const std::int32_t structure =
+            tracks::sibling_index(tracks::Section::LevelHeaders, static_cast<std::uint32_t>(headers[hub_level]),
+                                  tracks::Section::LevelObjectMaps, tracks::MapSlot::Structure);
+        assert(structure >= 0);
+        const auto map_offset = static_cast<std::uint32_t>(maps[structure]);
+
+        constexpr std::uint32_t kBuffer = 0x80500000U, kStack = 0x80700000U;
+        const auto run = [&](std::int32_t entry_bytes) {
+            for (unsigned at = kBuffer - 0x20; at < kBuffer + tracks::kObjectMapBufferBytes + 0x40; ++at)
+                MEM_B(0, addr(at)) = 0x55;
+            MEM_W(0, addr(kStack + 0x48)) = addr(kBuffer);
+            MEM_W(0, addr(kBuffer)) = entry_bytes;
+            recomp_context context{};
+            context.r16 = addr(map_offset);
+            context.r29 = addr(kStack);
+            dkr_custom_tracks_object_map_links(rdram, &context);
+        };
+        const auto written = [&](std::uint32_t offset) {
+            return static_cast<unsigned char>(MEM_B(0, addr(kBuffer + offset))) == target_level;
+        };
+        const auto untouched_outside = [&] {
+            for (unsigned at = kBuffer - 0x20; at < kBuffer; ++at)
+                if (static_cast<unsigned char>(MEM_B(0, addr(at))) != 0x55)
+                    return false;
+            for (unsigned at = kBuffer + tracks::kObjectMapBufferBytes;
+                 at < kBuffer + tracks::kObjectMapBufferBytes + 0x40; ++at)
+                if (static_cast<unsigned char>(MEM_B(0, addr(at))) != 0x55)
+                    return false;
+            return true;
+        };
+        // A map whose entries end at 0x30 takes the two links inside it; the one at 0x2FF0 is
+        // outside the entries and stays untouched.
+        run(0x20);
+        assert(written(24) && written(40) && !written(0x2FF0) && untouched_outside());
+        // A count that claims more than the buffer holds opens the whole buffer, never more.
+        run(0x7FFFFFFF);
+        assert(written(24) && written(40) && written(0x2FF0) && untouched_outside());
+        run(0x40000000);
+        assert(written(0x2FF0) && untouched_outside());
+        // A count that is negative or zero admits nothing.
+        run(-1);
+        assert(!written(24) && !written(40) && !written(0x2FF0) && untouched_outside());
+        run(0);
+        assert(!written(24) && !written(0x2FF0) && untouched_outside());
+        // A buffer pointer whose last byte falls outside guest memory writes nothing.
+        MEM_W(0, addr(kStack + 0x48)) = addr(0x807FFFF0U);
+        recomp_context edge{};
+        edge.r16 = addr(map_offset);
+        edge.r29 = addr(kStack);
+        dkr_custom_tracks_object_map_links(rdram, &edge);
+    }
+
     tracks::set_auto_boot(false);
     tracks::arm_track_override("");
     std::filesystem::remove_all(root);

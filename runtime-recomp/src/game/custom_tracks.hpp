@@ -289,6 +289,11 @@ struct MusicInfo {
 // `offset` counts from the start of the inflated object map, its 16-byte header
 // (u32 entry bytes, then padding) included: the buffer track_spawn_objects
 // spawns from, whose entries begin at +0x10.
+// The game's object map buffer (OBJECT_MAP_SIZE in objects.c): track_spawn_objects
+// inflates every map into one of these. A link's offset must land inside it.
+inline constexpr std::uint32_t kObjectMapBufferBytes = 0x3000U;
+// Native preview and selection store level ids in signed bytes.
+inline constexpr std::int32_t kMaxLevelId = 127;
 struct LevelLink {
     MapSlot slot = MapSlot::Structure;
     std::uint32_t offset = 0;
@@ -317,7 +322,7 @@ struct Track {
     bool hd_pack_sibling_mismatch = false;          // sibling present, digest differs
     std::optional<MusicInfo> music;                 // manifest.music (schema 2)
     std::optional<water::enhanced::Metadata> water; // Renderer-only appearance.
-    std::vector<LevelLink> level_links;       // manifest.levelLinks
+    std::vector<LevelLink> level_links;             // manifest.levelLinks
 };
 
 // Scans `directory` for *.dkrmap archives and parses their manifests. Invalid

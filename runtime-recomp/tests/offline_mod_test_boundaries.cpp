@@ -18,3 +18,9 @@ bool frozen_music_render(float*, std::size_t, unsigned) {
     return false;
 }
 } // namespace dkr::runtime::legacy
+
+// custom_tracks_hooks.cpp asks whether a private replay fixture owns the boot.
+// These offline tests never arm one.
+bool dkr_private_replay_boot(std::uint8_t*, recomp_context*) {
+    return false;
+}

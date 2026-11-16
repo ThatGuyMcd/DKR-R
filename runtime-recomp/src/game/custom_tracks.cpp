@@ -35,10 +35,10 @@
 namespace {
 
 using dkr::runtime::custom_tracks::Entry;
+using dkr::runtime::custom_tracks::LevelLink;
 using dkr::runtime::custom_tracks::MapSlot;
 using dkr::runtime::custom_tracks::Section;
 using dkr::runtime::custom_tracks::Track;
-using dkr::runtime::custom_tracks::LevelLink;
 
 constexpr std::size_t kSectionCount = 7U;
 
@@ -833,9 +833,10 @@ std::vector<ResolvedLevelLink> level_links_for_object_map(std::uint32_t offset) 
                     continue;
                 }
                 const auto resolved = g_resolved_level_ids.find(link.track);
-                found.push_back({link.offset,
-                                 resolved != g_resolved_level_ids.end() ? resolved->second : -1,
-                                 link.track});
+                // The byte written is a signed level id: anything above kMaxLevelId is not a target.
+                const bool usable =
+                    resolved != g_resolved_level_ids.end() && resolved->second >= 0 && resolved->second <= kMaxLevelId;
+                found.push_back({link.offset, usable ? resolved->second : -1, link.track});
             }
         }
         break;
@@ -1198,13 +1199,20 @@ PreparedTracks prepare_tracks(std::vector<Track> tracks, const std::array<std::v
             auto bytes =
                 std::vector<std::uint8_t>(section.blob.begin() + offset, section.blob.begin() + offset + added.size);
             if (i == section_slot(Section::LevelHeaders)) {
-                if (bytes.size() < 0xC8 || bytes[0] != kCustomTrackWorld || bytes[0x4C] != 0 || !bytes[0x4E] ||
-                    (bytes[0x4E] & ~7U))
-                    throw std::runtime_error("Online Track Lab course is not a playable Custom Tracks race.");
                 const auto found =
                     std::find_if(tracks.begin(), tracks.end(), [&](const Track& t) { return t.id == added.track_id; });
                 if (found == tracks.end())
                     throw std::runtime_error("Online Track Lab header lost its owner.");
+                // Boss, challenge and hub levels run retail scenes the frozen online
+                // world does not carry (a boss's intro scan, for one), so they are
+                // refused here, by name, rather than failing in a race.
+                if (bytes.size() >= 0xC8 && bytes[0x4C] != 0)
+                    throw std::runtime_error(
+                        "\"" + found->name + "\" is a " +
+                        (bytes[0x4C] == kRaceTypeBoss ? "boss level" : "Track Lab level that is not a race") +
+                        ". Only races can be played online; turn it off to play online.");
+                if (bytes.size() < 0xC8 || bytes[0] != kCustomTrackWorld || !bytes[0x4E] || (bytes[0x4E] & ~7U))
+                    throw std::runtime_error("Online Track Lab course is not a playable Custom Tracks race.");
                 out.courses.push_back({found->id, found->name, static_cast<std::int32_t>(added.index), bytes[0x4E]});
                 // The sixth world is a menu category only. The game indexes
                 // fixed five-world save/background arrays; serve Dino Domain.
@@ -1837,11 +1845,9 @@ bool parse_track(const std::filesystem::path& input_root, Track& track, std::str
             error = "levelLinks must be an array of at most 255 links";
             return false;
         }
-        constexpr std::uint32_t kMaxObjectMapBytes = 0x10000U;
         for (const auto& link : links) {
-            if (!link.is_object() || !link.contains("slot") || !link["slot"].is_string() ||
-                !link.contains("offset") || !link["offset"].is_number_unsigned() ||
-                !link.contains("track") || !link["track"].is_string()) {
+            if (!link.is_object() || !link.contains("slot") || !link["slot"].is_string() || !link.contains("offset") ||
+                !link["offset"].is_number_unsigned() || !link.contains("track") || !link["track"].is_string()) {
                 error = "levelLinks entries need slot, offset and track";
                 return false;
             }
@@ -1857,7 +1863,7 @@ bool parse_track(const std::filesystem::path& input_root, Track& track, std::str
             }
             const auto offset = link["offset"].get<std::uint64_t>();
             // Past the 16-byte map header, inside the game's object map buffer.
-            if (offset < 0x10U || offset >= kMaxObjectMapBytes) {
+            if (offset < 0x10U || offset >= dkr::runtime::custom_tracks::kObjectMapBufferBytes) {
                 error = "levelLinks offset " + std::to_string(offset) + " is outside an object map";
                 return false;
             }
