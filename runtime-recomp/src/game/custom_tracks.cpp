@@ -756,6 +756,51 @@ bool owns_level_id(std::int32_t level_id) {
                        [level_id](const auto& entry) { return entry.second == level_id; });
 }
 
+bool inspect_object_map_payload(const std::vector<std::uint8_t>& bytes, std::string& error) {
+    constexpr std::size_t kContainerHeader = 5U;
+    constexpr std::uint32_t kEntriesAt = 0x10U;
+    if (bytes.size() <= kContainerHeader || bytes[4] != kContainerTag) {
+        error = "an object map is not in the five-byte-container form the game inflates";
+        return false;
+    }
+    const std::uint32_t inflated_size =
+        static_cast<std::uint32_t>(bytes[0]) | (static_cast<std::uint32_t>(bytes[1]) << 8) |
+        (static_cast<std::uint32_t>(bytes[2]) << 16) | (static_cast<std::uint32_t>(bytes[3]) << 24);
+    if (inflated_size < kEntriesAt || inflated_size > dkr::runtime::custom_tracks::kObjectMapBufferBytes) {
+        error = "an object map inflates to " + std::to_string(inflated_size) + " bytes; the game's buffer holds " +
+                std::to_string(dkr::runtime::custom_tracks::kObjectMapBufferBytes);
+        return false;
+    }
+    std::vector<std::uint8_t> map(inflated_size);
+    if (tinfl_decompress_mem_to_mem(map.data(), map.size(), bytes.data() + kContainerHeader,
+                                    bytes.size() - kContainerHeader, 0) != map.size()) {
+        error = "an object map does not inflate to the size it declares";
+        return false;
+    }
+    const std::uint32_t count = read_be32(map.data());
+    // Mirrors the loop in track_spawn_objects: position += entry[1] & 0x3F until count bytes are consumed.
+    std::uint32_t used = 0;
+    std::uint32_t at = kEntriesAt;
+    while (used < count) {
+        if (at + 2U > inflated_size) {
+            error = "an object map's entry byte count runs past its entries";
+            return false;
+        }
+        const std::uint32_t step = map[at + 1U] & 0x3FU;
+        if (step == 0U) {
+            error = "an object map has an entry of size 0, which the game's spawn loop never advances past";
+            return false;
+        }
+        if (at + step > inflated_size) {
+            error = "an object map entry runs past the end of the map";
+            return false;
+        }
+        used += step;
+        at += step;
+    }
+    return true;
+}
+
 std::int32_t count_level_model_batches(const std::uint8_t* bytes, std::size_t size) {
     // LevelModel and LevelModelSegment offsets, docs/LEVEL_MODEL_FORMAT.md.
     constexpr std::size_t kContainerHeader = 5U;
@@ -1767,6 +1812,13 @@ bool parse_track(const std::filesystem::path& input_root, Track& track, std::str
                 return false;
             }
             track.textures_2d.push_back(info);
+        }
+        if (entry.section == Section::LevelObjectMaps) {
+            std::string reason;
+            if (!dkr::runtime::custom_tracks::inspect_object_map_payload(entry.bytes, reason)) {
+                error = file + ": " + reason;
+                return false;
+            }
         }
         if (entry.section == Section::Sprites) {
             dkr::runtime::custom_tracks::SpriteInfo info;

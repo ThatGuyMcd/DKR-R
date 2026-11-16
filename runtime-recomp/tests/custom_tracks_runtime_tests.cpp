@@ -724,8 +724,10 @@ int main() {
                    R"({"section":"LEVEL_OBJECT_MAPS","slot":"collectables","file":"o.bin"}])"
                 << extra << "}";
             std::ofstream(folder / "h.bin", std::ios::binary) << std::string(200, '\0');
-            std::ofstream(folder / "s.bin", std::ios::binary) << std::string(48, 's');
-            std::ofstream(folder / "o.bin", std::ios::binary) << std::string(64, 'o');
+            // Five-byte container, then one stored block holding a 16-byte map with no entries.
+            const std::string empty_map = std::string("\x10\0\0\0\x09\x01\x10\0\xEF\xFF", 10) + std::string(16, '\0');
+            std::ofstream(folder / "s.bin", std::ios::binary) << empty_map;
+            std::ofstream(folder / "o.bin", std::ios::binary) << empty_map;
         };
         write_package("target", "");
         write_package("hub", R"(,"levelLinks":[{"slot":"structure","offset":24,"track":"target"},)"
