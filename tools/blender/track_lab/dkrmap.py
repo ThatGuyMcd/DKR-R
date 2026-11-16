@@ -263,8 +263,14 @@ class TrackPackage:
         encoder = object_map_encoder.ObjectMapEncoder(
             catalog, translation_table, asset_index)
         payload = encoder.pack(object_map)
-        self.level_links[slot] = level_links.links(
-            object_map, encoder.entry_offsets(object_map), slot, catalog)
+        blob = encoder.encode(object_map)
+        offsets = encoder.entry_offsets(object_map)
+        try:
+            level_links.check_exit_destinations(object_map, offsets, blob, catalog)
+            self.level_links[slot] = level_links.links(
+                object_map, offsets, slot, catalog, map_size=len(blob))
+        except level_links.LevelLinkError as error:
+            raise DkrMapError("%s map: %s" % (slot, error)) from error
         os.makedirs(self.directory, exist_ok=True)
         path = os.path.join(self.directory, OBJECT_MAP_SLOTS[slot])
         with open(path, "wb") as handle:
