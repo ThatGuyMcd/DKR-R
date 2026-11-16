@@ -44,6 +44,10 @@ void shutdown_online_mods();
 // Throws rather than silently launching if an accepted mod proof is missing.
 std::shared_ptr<const dkr::mods::online::RuntimeResources> online_mod_resources();
 void persist_settings();
+// --self-test-settings: load <directory>/dkr-port-settings.ini (defaults when
+// absent), save it back through the normal writer, and report whether the file
+// exists afterwards. Touches no other runtime state.
+bool self_test_settings(const std::filesystem::path& directory);
 // Called only after an explicitly selected renderer backend fails and RT64
 // successfully recovers with Automatic. Persist the recovered choice so the
 // next launch does not repeat the same failure loop.

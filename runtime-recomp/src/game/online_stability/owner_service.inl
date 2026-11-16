@@ -56,8 +56,7 @@
         for (const auto& route : identity.routes)
             if (route.racer)
                 rtt = std::max(rtt, route.rtt_ms);
-        std::fprintf(
-            stderr,
+        log_locked(
             "[online][transport] role=%s maximum-route-rtt-ms=%u realtime-buffered=%zu authority-buffered=%zu control-buffered=%zu checkpoint-buffered=%zu\n",
             is_host_ ? "host" : "client", rtt, transport_->buffered_bytes(TransportTrafficClass::Realtime),
             transport_->buffered_bytes(TransportTrafficClass::Authoritative),
