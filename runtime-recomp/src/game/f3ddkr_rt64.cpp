@@ -107,7 +107,9 @@ constexpr std::uint32_t kHudPassMarkerBeginMode = 1U;
 constexpr float kSplitViewportCoverQuantisation = 1024.0F;
 constexpr std::uint32_t kRDRAMAddressMask = 0x00FFFFFFU;
 thread_local std::uint32_t kRDRAMSize = 0x00800000U; // widened only inside an authorized private camera decode
-const std::uint32_t& kCurrentMenuIdAddress = dkr::runtime::revision_addresses::CurrentMenuId;
+std::uint32_t current_menu_id_address() {
+    return dkr::runtime::revision_addresses::current().CurrentMenuId;
+}
 constexpr std::uint32_t kScratchVertexAddress = 0x007FE000U;
 constexpr std::uint32_t kMaxDKRVertices = 32;
 constexpr std::uint32_t kMaxNestedDisplayLists = 32;
@@ -134,9 +136,10 @@ void ReportMalformedInput(RT64::State* state, RT64::DisplayList* command, std::u
             std::memcpy(&value, state->RDRAM + p, 4);
         return value;
     };
-    dkr::runtime::render_provenance::report(
-        task, unsigned(address), payload, bytes, dkr::runtime::presentation::task_scene_generation(),
-        word(dkr::runtime::revision_addresses::CurrentMapId), word(dkr::runtime::revision_addresses::CurrentMenuId));
+    dkr::runtime::render_provenance::report(task, unsigned(address), payload, bytes,
+                                            dkr::runtime::presentation::task_scene_generation(),
+                                            word(dkr::runtime::revision_addresses::current().CurrentMapId),
+                                            word(dkr::runtime::revision_addresses::current().CurrentMenuId));
 }
 
 struct CanonicalShadowSlotHistory {
@@ -252,7 +255,7 @@ void SelectInterpolationGroup(RT64::RSP& rsp, std::uint32_t id, bool interpolate
                               bool interpolate_texcoords = false, bool interpolate_tiles = false,
                               std::uint8_t aspect_mode = G_EX_ASPECT_AUTO, bool preserve_vertex_interpolation = false,
                               std::uint8_t water_scroll_tag = 0U, bool native_visual = false) {
-    auto current_menu = ReadU32(rsp.state->RDRAM, kCurrentMenuIdAddress);
+    auto current_menu = ReadU32(rsp.state->RDRAM, current_menu_id_address());
 #if defined(DKR_WATER_QUALIFICATION)
     // The automatic preview is hosted by the title frontend, which normally
     // disables tile interpolation. Exercise the GAMEPLAY matching policy in
@@ -1545,26 +1548,26 @@ void dkr::runtime::F3DDKRRT64Bridge::process(RT64::Application& application, con
         surgical_water_quality = unsigned(water::enhanced::requested_quality.load(std::memory_order_relaxed));
 #endif
         surgical::context(presentation::task_scene_generation(),
-                          ReadU32(state->RDRAM, revision_addresses::CurrentMapId),
-                          ReadU32(state->RDRAM, kCurrentMenuIdAddress), application.userConfig.refreshRateTarget,
+                          ReadU32(state->RDRAM, revision_addresses::current().CurrentMapId),
+                          ReadU32(state->RDRAM, current_menu_id_address()), application.userConfig.refreshRateTarget,
                           surgical_water_quality);
         surgical::publish_context(presentation::task_scene_generation(),
-                                  ReadU32(state->RDRAM, revision_addresses::CurrentMapId),
-                                  ReadU32(state->RDRAM, kCurrentMenuIdAddress));
+                                  ReadU32(state->RDRAM, revision_addresses::current().CurrentMapId),
+                                  ReadU32(state->RDRAM, current_menu_id_address()));
     }
     surgical::Scope decode_timing(surgical::Region::Decode);
     data_->title_text.begin(*state, data_->world_window_aspect,
                             enhancements::modern_presentation_enabled() && enhancements::fit_to_window_enabled());
     data_->credits_viewport.begin(enhancements::modern_presentation_enabled() &&
                                       enhancements::fit_to_window_enabled() &&
-                                      ReadU32(state->RDRAM, kCurrentMenuIdAddress) == 25U,
+                                      ReadU32(state->RDRAM, current_menu_id_address()) == 25U,
                                   data_->world_window_aspect);
     data_->credits_sky.begin(*state, data_->world_window_aspect, data_->credits_viewport.enabled());
     data_->intro_caption.begin(*state, enhancements::modern_presentation_enabled(), data_->world_window_aspect);
     data_->intro_sky.begin(*state,
                            enhancements::modern_presentation_enabled() && enhancements::fit_to_window_enabled());
     data_->intro_viewport.begin(enhancements::modern_presentation_enabled() && enhancements::fit_to_window_enabled() &&
-                                ReadU32(state->RDRAM, kCurrentMenuIdAddress) == 1U);
+                                ReadU32(state->RDRAM, current_menu_id_address()) == 1U);
 #if defined(DKR_ENHANCED_WATER)
     // A rejected/aborted display list must not leak its optical material into
     // the next task's shadows, HUD or ordinary scenery.
@@ -1746,8 +1749,8 @@ void dkr::runtime::F3DDKRRT64Bridge::process(RT64::Application& application, con
         data_->online_view->finish(*state);
     if (water::enabled()) {
         water::end_task(presentation::task_scene_generation(),
-                        ReadU32(state->RDRAM, revision_addresses::CurrentMapId & 0x007FFFFCU),
-                        ReadU32(state->RDRAM, kCurrentMenuIdAddress & 0x007FFFFCU));
+                        ReadU32(state->RDRAM, revision_addresses::current().CurrentMapId & 0x007FFFFCU),
+                        ReadU32(state->RDRAM, current_menu_id_address() & 0x007FFFFCU));
     }
 }
 

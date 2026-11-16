@@ -38,30 +38,30 @@ inline const Registry& task_registry(RT64::State& state, std::uint32_t scene, bo
                       reflection_strength.load(std::memory_order_relaxed) > 0;
     const std::array<std::uint32_t, 6> key{scene,
                                            model,
-                                           m.u32(revision_addresses::TextureCache),
-                                           m.u32(revision_addresses::NumberOfLoadedTextures),
+                                           m.u32(revision_addresses::current().TextureCache),
+                                           m.u32(revision_addresses::current().NumberOfLoadedTextures),
                                            m.u32(wave_batch_symbol()),
                                            (rays ? 1U : 0U) | (glow ? 2U : 0U) | (animation_only ? 4U : 0U)};
     const auto revision = revision_addresses::selected_revision();
     const auto scrolls = animation_only ? TextureScrolls{}
-                                        : texture_scrolls(m, m.u32(revision_addresses::ObjectList),
-                                                          m.u32(revision_addresses::ObjectCount));
+                                        : texture_scrolls(m, m.u32(revision_addresses::current().ObjectList),
+                                                          m.u32(revision_addresses::current().ObjectCount));
     if (cache.key != key || cache.revision != revision || cache.scrolls != scrolls) {
         const bool preserve_flow_phase = cache.key[0] == scene && cache.key[1] == model && cache.revision == revision;
         cache.key = key;
         cache.revision = revision;
         cache.scrolls = scrolls;
-        cache.registry.rebuild(
-            m, key[1], key[2], key[3], key[4],
-            legacy::renderer_water_for_level(static_cast<std::int32_t>(m.u32(revision_addresses::CurrentMapId))), rays,
-            preserve_flow_phase, scrolls, glow, animation_only);
+        cache.registry.rebuild(m, key[1], key[2], key[3], key[4],
+                               legacy::renderer_water_for_level(
+                                   static_cast<std::int32_t>(m.u32(revision_addresses::current().CurrentMapId))),
+                               rays, preserve_flow_phase, scrolls, glow, animation_only);
         if (!animation_only && key[4] && cache.trace_lines < 64) {
             ++cache.trace_lines;
             const auto symbols = wave_symbols(revision == rom::Revision::UsV80);
             std::fprintf(
                 stderr,
                 "[water][wave-reference] scene=%u map=%u batch=%08X liquid=%u subdivisions=%u players=%u buffer=%08X\n",
-                scene, m.u32(revision_addresses::CurrentMapId), key[4],
+                scene, m.u32(revision_addresses::current().CurrentMapId), key[4],
                 unsigned(cache.registry.procedural().has_value()), m.u32(symbols.controller), m.u32(symbols.players),
                 m.u32(symbols.triangles));
         }
@@ -86,8 +86,8 @@ inline const CraftFrame& task_crafts(Memory m, const Registry& registry, std::ui
     const bool reset = cache.history.observe(scene, time);
     cache.frame.previous = cache.frame.current;
     cache.frame.previous_time = reset ? time : old_time;
-    const auto racers = m.u32(revision_addresses::Racers);
-    const auto count = (std::min)(m.u32(revision_addresses::NumberOfRacers), 8U);
+    const auto racers = m.u32(revision_addresses::current().Racers);
+    const auto count = (std::min)(m.u32(revision_addresses::current().NumberOfRacers), 8U);
     for (unsigned i = 0; i < 8; ++i) {
         const auto object =
             i < count && racers && m.valid(racers, std::uint64_t(count) * 4) ? m.u32(racers + i * 4) : 0;
@@ -135,7 +135,7 @@ inline void apply_material(RT64::State& state, const Registry& registry, std::ui
     // Vertical water preserves its authored combiner and opacity, with a
     // separate flowing-water shader branch. It never uses horizontal optics.
     if (q != Quality::Original && camera_valid && surface) {
-        const auto map = static_cast<std::int32_t>(m.u32(revision_addresses::CurrentMapId));
+        const auto map = static_cast<std::int32_t>(m.u32(revision_addresses::current().CurrentMapId));
         const bool lava = surface->kind == Kind::Lava;
         const auto profile = registry.metadata() && registry.metadata()->profile ? *registry.metadata()->profile
                              : lava                                              ? lava_profile()

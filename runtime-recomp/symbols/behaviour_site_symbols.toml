@@ -1,0 +1,131 @@
+# Patch sites legacy behaviour mods may replace (mods/legacy_behaviour.cpp): a function plus a byte
+# offset, resolved per revision from modding/reference-us-v*/functions.toml. The instruction words
+# each site must hold stay in the source; they are the audit that the site is what we think.
+schema = 1
+header = "behaviour_site_symbols.hpp"
+table = "functions"
+hex = "lower"
+template = '''#pragma once
+#include <cstdint>
+namespace dkr::mods::behaviour_site_symbols {
+inline constexpr std::uint32_t track_spawn_objects_30_77 = @track_spawn_objects_30:77@;
+inline constexpr std::uint32_t track_spawn_objects_30_80 = @track_spawn_objects_30:80@;
+inline constexpr std::uint32_t track_spawn_objects_34_77 = @track_spawn_objects_34:77@;
+inline constexpr std::uint32_t track_spawn_objects_34_80 = @track_spawn_objects_34:80@;
+inline constexpr std::uint32_t track_spawn_objects_7c_77 = @track_spawn_objects_7c:77@;
+inline constexpr std::uint32_t track_spawn_objects_7c_80 = @track_spawn_objects_7c:80@;
+inline constexpr std::uint32_t trackmenu_set_records_d0_77 = @trackmenu_set_records_d0:77@;
+inline constexpr std::uint32_t trackmenu_set_records_d0_80 = @trackmenu_set_records_d0:80@;
+inline constexpr std::uint32_t trackmenu_set_records_e8_77 = @trackmenu_set_records_e8:77@;
+inline constexpr std::uint32_t trackmenu_set_records_e8_80 = @trackmenu_set_records_e8:80@;
+inline constexpr std::uint32_t menu_track_select_init_5f8_77 = @menu_track_select_init_5f8:77@;
+inline constexpr std::uint32_t menu_track_select_init_5f8_80 = @menu_track_select_init_5f8:80@;
+inline constexpr std::uint32_t menu_track_select_init_650_77 = @menu_track_select_init_650:77@;
+inline constexpr std::uint32_t menu_track_select_init_650_80 = @menu_track_select_init_650:80@;
+inline constexpr std::uint32_t menu_track_select_init_680_77 = @menu_track_select_init_680:77@;
+inline constexpr std::uint32_t menu_track_select_init_680_80 = @menu_track_select_init_680:80@;
+inline constexpr std::uint32_t menu_track_select_init_6b4_77 = @menu_track_select_init_6b4:77@;
+inline constexpr std::uint32_t menu_track_select_init_6b4_80 = @menu_track_select_init_6b4:80@;
+inline constexpr std::uint32_t trackmenu_render_names_1dc_77 = @trackmenu_render_names_1dc:77@;
+inline constexpr std::uint32_t trackmenu_render_names_1dc_80 = @trackmenu_render_names_1dc:80@;
+inline constexpr std::uint32_t trackmenu_render_names_210_77 = @trackmenu_render_names_210:77@;
+inline constexpr std::uint32_t trackmenu_render_names_210_80 = @trackmenu_render_names_210:80@;
+inline constexpr std::uint32_t trackmenu_setup_render_a38_77 = @trackmenu_setup_render_a38:77@;
+inline constexpr std::uint32_t trackmenu_setup_render_1040_77 = @trackmenu_setup_render_1040:77@;
+inline constexpr std::uint32_t trackmenu_setup_render_1098_77 = @trackmenu_setup_render_1098:77@;
+inline constexpr std::uint32_t func_80092188_4b0_77 = @func_80092188_4b0:77@;
+inline constexpr std::uint32_t is_tt_unlocked_4_77 = @is_tt_unlocked_4:77@;
+inline constexpr std::uint32_t is_tt_unlocked_4_80 = @is_tt_unlocked_4:80@;
+inline constexpr std::uint32_t is_drumstick_unlocked_4_77 = @is_drumstick_unlocked_4:77@;
+inline constexpr std::uint32_t is_drumstick_unlocked_4_80 = @is_drumstick_unlocked_4:80@;
+}
+'''
+
+[[site]]
+name = "track_spawn_objects_30"
+function = "track_spawn_objects"
+offset = 0x30
+
+[[site]]
+name = "track_spawn_objects_34"
+function = "track_spawn_objects"
+offset = 0x34
+
+[[site]]
+name = "track_spawn_objects_7c"
+function = "track_spawn_objects"
+offset = 0x7C
+
+[[site]]
+name = "trackmenu_set_records_d0"
+function = "trackmenu_set_records"
+offset = 0xD0
+
+[[site]]
+name = "trackmenu_set_records_e8"
+function = "trackmenu_set_records"
+offset = 0xE8
+
+[[site]]
+name = "menu_track_select_init_5f8"
+function = "menu_track_select_init"
+offset = 0x5F8
+
+[[site]]
+name = "menu_track_select_init_650"
+function = "menu_track_select_init"
+offset = 0x650
+
+[[site]]
+name = "menu_track_select_init_680"
+function = "menu_track_select_init"
+offset = 0x680
+
+[[site]]
+name = "menu_track_select_init_6b4"
+function = "menu_track_select_init"
+offset = 0x6B4
+
+[[site]]
+name = "trackmenu_render_names_1dc"
+function = "trackmenu_render_names"
+offset = 0x1DC
+
+[[site]]
+name = "trackmenu_render_names_210"
+function = "trackmenu_render_names"
+offset = 0x210
+
+[[site]]
+name = "trackmenu_setup_render_a38"
+function = "trackmenu_setup_render"
+offset = 0xA38
+revisions = ["77"]
+
+[[site]]
+name = "trackmenu_setup_render_1040"
+function = "trackmenu_setup_render"
+offset = 0x1040
+revisions = ["77"]
+
+[[site]]
+name = "trackmenu_setup_render_1098"
+function = "trackmenu_setup_render"
+offset = 0x1098
+revisions = ["77"]
+
+[[site]]
+name = "func_80092188_4b0"
+function = "func_80092188"
+offset = 0x4B0
+revisions = ["77"]
+
+[[site]]
+name = "is_tt_unlocked_4"
+function = "is_tt_unlocked"
+offset = 0x4
+
+[[site]]
+name = "is_drumstick_unlocked_4"
+function = "is_drumstick_unlocked"
+offset = 0x4

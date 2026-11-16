@@ -12,11 +12,21 @@
 
 namespace {
 
-const std::uint32_t& kTrophyRaceWorldIdAddress = dkr::runtime::revision_addresses::TrophyRaceWorldId;
-const std::uint32_t& kTracksModeAddress = dkr::runtime::revision_addresses::TracksMode;
-const std::uint32_t& kLevelLoadTimerAddress = dkr::runtime::revision_addresses::LevelLoadTimer;
-const std::uint32_t& kPausedAddress = dkr::runtime::revision_addresses::IsPaused;
-const std::uint32_t& kPostRaceAddress = dkr::runtime::revision_addresses::PostRaceViewport;
+std::uint32_t trophy_race_world_id_address() {
+    return dkr::runtime::revision_addresses::current().TrophyRaceWorldId;
+}
+std::uint32_t tracks_mode_address() {
+    return dkr::runtime::revision_addresses::current().TracksMode;
+}
+std::uint32_t level_load_timer_address() {
+    return dkr::runtime::revision_addresses::current().LevelLoadTimer;
+}
+std::uint32_t paused_address() {
+    return dkr::runtime::revision_addresses::current().IsPaused;
+}
+std::uint32_t post_race_address() {
+    return dkr::runtime::revision_addresses::current().PostRaceViewport;
+}
 constexpr std::uint32_t kSettingsWorldIdOffset = 0x48U;
 constexpr std::uint32_t kSettingsCourseIdOffset = 0x49U;
 constexpr gpr kRetailRestartButtons = 0x2020U; // L_TRIG | Z_TRIG
@@ -63,11 +73,11 @@ extern "C" void dkr_quick_restart_poll(std::uint8_t* rdram, recomp_context* cont
 
     dkr::runtime::quick_restart::State state{};
     state.modern_profile = dkr::runtime::enhancements::modern_presentation_enabled();
-    state.paused = ReadSignedByte(rdram, kPausedAddress) != 0;
-    state.post_race = ReadUnsignedByte(rdram, kPostRaceAddress) != 0;
-    state.level_loading = ReadWord(rdram, kLevelLoadTimerAddress) != 0;
-    state.trophy_race_world = ReadWord(rdram, kTrophyRaceWorldIdAddress);
-    state.tracks_mode = ReadWord(rdram, kTracksModeAddress) != 0;
+    state.paused = ReadSignedByte(rdram, paused_address()) != 0;
+    state.post_race = ReadUnsignedByte(rdram, post_race_address()) != 0;
+    state.level_loading = ReadWord(rdram, level_load_timer_address()) != 0;
+    state.trophy_race_world = ReadWord(rdram, trophy_race_world_id_address());
+    state.tracks_mode = ReadWord(rdram, tracks_mode_address()) != 0;
 
     const gpr settings = CallAndReadV0(payload->get_settings, rdram, *context);
     const std::uint32_t settings_address = static_cast<std::uint32_t>(settings);

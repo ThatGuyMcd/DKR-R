@@ -1,3 +1,4 @@
+#include "../../session_log.hpp"
 #include "transport.hpp"
 #include "live_datagram.hpp"
 #include "online_stability/traffic_meter.hpp"
@@ -443,13 +444,14 @@ class Transport final : public net::SessionTransport {
             if (!selected_.contains(peer) || selected_[peer] != route) {
                 const auto row =
                     std::find_if(v.rows.begin(), v.rows.end(), [&](const auto& r) { return r.route == route; });
-                std::fprintf(stderr,
-                             "[online][proxy] endpoint=%llu event=selected p95-ms=%u lost=%u samples=%u one-hop=1\n",
-                             (unsigned long long)peer, row->local.p95, row->local.lost, row->local.samples);
+                dkr::runtime::session_log::write(
+                    "[online][proxy] endpoint=%llu event=selected p95-ms=%u lost=%u samples=%u one-hop=1\n",
+                    (unsigned long long)peer, row->local.p95, row->local.lost, row->local.samples);
             }
         for (const auto& [peer, route] : selected_)
             if (!selected.contains(peer))
-                std::fprintf(stderr, "[online][proxy] endpoint=%llu event=direct-fallback\n", (unsigned long long)peer);
+                dkr::runtime::session_log::write("[online][proxy] endpoint=%llu event=direct-fallback\n",
+                                                 (unsigned long long)peer);
         selected_ = std::move(selected);
         auto& state = registry();
         std::lock_guard lock(state.mutex);

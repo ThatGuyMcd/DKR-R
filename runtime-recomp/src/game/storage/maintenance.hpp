@@ -1,5 +1,6 @@
 #pragma once
 #include <atomic>
+#include <chrono>
 #include <cstdint>
 #include <filesystem>
 #include <functional>
@@ -56,6 +57,20 @@ struct Activity {
 };
 enum class Action { Automatic, Images, Clean, Scan, Preview, ClearCaches, TrimHistory, OldDumps, Installed };
 struct View;
+// How the background service paces itself. The defaults are the shipped
+// policy; tests shorten them so they wait for the logic, not for the clock.
+struct Pacing {
+    // First automatic pass after launch, so cleanup never competes with boot.
+    std::chrono::milliseconds startup_delay{10000};
+    // Retry after a pass was deferred (a publisher held the barrier) and the
+    // grace before a freshly installed package is cleaned up.
+    std::chrono::milliseconds retry_delay{5000};
+    // Background work runs in slices, then yields: longer while the game is
+    // being played so cleanup stays out of its way.
+    std::chrono::milliseconds slice{4};
+    std::chrono::milliseconds playing_yield{36};
+    std::chrono::milliseconds idle_yield{6};
+};
 struct Options {
     Action action = Action::Automatic;
     std::uint64_t image_budget = 128ULL << 20, online_budget = 1ULL << 30;
@@ -64,6 +79,7 @@ struct Options {
     bool dry_run = false;
     std::stop_token stop;
     bool background = false;
+    Pacing pacing;
     const std::atomic<bool>* gameplay = nullptr;
     std::function<void(const View&)> progress;
     // Installed is restricted to this package's current, committed receipts.
@@ -88,7 +104,7 @@ View maintain(const std::filesystem::path& profile, const Options& = {},
               const std::filesystem::path& installation = {});
 std::filesystem::path cached_package(const std::filesystem::path& folder, const std::string& digest,
                                      std::uint64_t bytes);
-void start(const std::filesystem::path& profile);
+void start(const std::filesystem::path& profile, const Pacing& pacing = {});
 void shutdown();
 void gameplay(bool active);
 void request(Action action = Action::Automatic);

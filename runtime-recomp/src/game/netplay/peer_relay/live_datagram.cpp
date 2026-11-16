@@ -1,3 +1,4 @@
+#include "../../session_log.hpp"
 #include "live_datagram.hpp"
 #include <algorithm>
 #include <atomic>
@@ -269,9 +270,9 @@ std::vector<Control> LiveDatagram::controls() {
         out.push_back({id, std::move(bytes)});
         if (ready) {
             p->announced = true;
-            std::fprintf(stderr,
-                         "[online][datagram] peer=%llu event=connected encrypted=1 sctp-bypass=live-and-repair\n",
-                         static_cast<unsigned long long>(id));
+            dkr::runtime::session_log::write(
+                "[online][datagram] peer=%llu event=connected encrypted=1 sctp-bypass=live-and-repair\n",
+                static_cast<unsigned long long>(id));
         }
     }
 #endif

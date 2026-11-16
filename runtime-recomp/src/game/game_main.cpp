@@ -209,7 +209,7 @@ RspExitReason EmptyAudioTask(std::uint8_t*, std::uint32_t) {
 }
 
 RspUcodeFunc* GetRspMicrocode(const OSTask* task) {
-    if (task->t.type == M_AUDTASK && task->t.ucode == dkr::runtime::revision_addresses::AspMainTextStart) {
+    if (task->t.type == M_AUDTASK && task->t.ucode == dkr::runtime::revision_addresses::current().AspMainTextStart) {
         // DKR can submit a zero-command audio frame when the host-reported AI
         // queue already satisfies the synthesizer's requested frame size. The
         // original scheduler treats that as completed work; entering the ABI
@@ -657,6 +657,12 @@ int DkrMain(int argc, char** argv) {
                      "[test][hud-settings] %s: preset switching, restart, custom suppression and save failure\n",
                      passed ? "PASS" : "FAILED");
         return passed ? 0 : 1;
+    }
+    if (argc == 3 && std::string_view(argv[1]) == "--self-test-settings") {
+        const bool written = dkr::runtime::ui::self_test_settings(std::filesystem::u8path(argv[2]));
+        std::fprintf(stderr, "[test][settings] %s: settings file loaded and written back\n",
+                     written ? "PASS" : "FAILED");
+        return written ? 0 : 1;
     }
     if (argc >= 2 && std::string_view(argv[1]) == "--self-test-input-switch") {
         const std::filesystem::path test_directory =

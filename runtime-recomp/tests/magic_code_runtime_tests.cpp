@@ -42,8 +42,8 @@ int main() {
     const recomp_context before = context;
     for (const auto revision : {dkr::runtime::rom::Revision::UsV77, dkr::runtime::rom::Revision::UsV80}) {
         assert(addresses::select(revision));
-        const gpr active = static_cast<std::int32_t>(addresses::ActiveMagicCodes);
-        const gpr unlocked = static_cast<std::int32_t>(addresses::UnlockedMagicCodes);
+        const gpr active = static_cast<std::int32_t>(addresses::current().ActiveMagicCodes);
+        const gpr unlocked = static_cast<std::int32_t>(addresses::current().UnlockedMagicCodes);
         // All selectable bits, on repeated sessions in the same process.
         for (const auto& code : kMagicCodeDefinitions) {
             assert(clear_all(error));

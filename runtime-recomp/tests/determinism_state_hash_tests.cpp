@@ -37,16 +37,16 @@ constexpr std::uint32_t kWaterSeedSize = 120U;
 void seed_water(std::vector<std::uint8_t>& memory, std::uint16_t phase_x, std::uint16_t phase_y,
                 std::uint16_t generator_phase) {
     using namespace dkr::runtime::revision_addresses;
-    write_word(memory, WaveHeightIndices, kWaterHeightIndices);
-    write_word(memory, WaveController + 0x04U, kWaterTileCount);
-    write_word(memory, WaveController + 0x20U, kWaterSeedSize);
-    write_word(memory, WaveController + 0x40U, 0x3F400000U);
-    write_word(memory, WavePowerBase, 0x3F000000U);
-    write_word(memory, WaveMagnitude, 0x3F600000U);
-    write_word(memory, WavePowerDivisor, 12U);
-    write_word(memory, WaveGenCount, 2U);
-    write_word(memory, WaveGenList, kWaterGeneratorList);
-    write_word(memory, WaveGenObjects, kWaterGeneratorObjects);
+    write_word(memory, dkr::runtime::revision_addresses::current().WaveHeightIndices, kWaterHeightIndices);
+    write_word(memory, dkr::runtime::revision_addresses::current().WaveController + 0x04U, kWaterTileCount);
+    write_word(memory, dkr::runtime::revision_addresses::current().WaveController + 0x20U, kWaterSeedSize);
+    write_word(memory, dkr::runtime::revision_addresses::current().WaveController + 0x40U, 0x3F400000U);
+    write_word(memory, dkr::runtime::revision_addresses::current().WavePowerBase, 0x3F000000U);
+    write_word(memory, dkr::runtime::revision_addresses::current().WaveMagnitude, 0x3F600000U);
+    write_word(memory, dkr::runtime::revision_addresses::current().WavePowerDivisor, 12U);
+    write_word(memory, dkr::runtime::revision_addresses::current().WaveGenCount, 2U);
+    write_word(memory, dkr::runtime::revision_addresses::current().WaveGenList, kWaterGeneratorList);
+    write_word(memory, dkr::runtime::revision_addresses::current().WaveGenObjects, kWaterGeneratorObjects);
     write_word(memory, kWaterGeneratorObjects + 0U * 4U, 0x80307900U);
     write_word(memory, kWaterGeneratorObjects + 5U * 4U, 0x80307980U);
     write_half(memory, kWaterGeneratorList + 0U * 0x40U + 0x1AU, generator_phase);
@@ -63,23 +63,23 @@ void seed_water(std::vector<std::uint8_t>& memory, std::uint16_t phase_x, std::u
 }
 void seed_gameplay(std::vector<std::uint8_t>& memory) {
     using namespace dkr::runtime::revision_addresses;
-    write_word(memory, CurrentMenuId, 12U);
-    write_word(memory, CurrentMapId, 7U);
-    write_word(memory, IsInRace, 1U);
-    write_word(memory, CurrentRngSeed, 0x12345678U);
-    write_word(memory, PreviousRngSeed, 0x9ABCDEF0U);
-    write_word(memory, RaceStartTimer, 60U);
-    write_word(memory, RaceStartProgress, 0x43960000U); // 300.0f
-    write_word(memory, LogicUpdateRate, 2U);
-    write_word(memory, NumberOfActivePlayers, 2U);
-    write_byte(memory, NumberOfGameplayPlayers, 2U);
-    write_byte(memory, PlayersCharacterArray, 1U);
-    write_byte(memory, PlayersCharacterArray + 1U, 4U);
+    write_word(memory, dkr::runtime::revision_addresses::current().CurrentMenuId, 12U);
+    write_word(memory, dkr::runtime::revision_addresses::current().CurrentMapId, 7U);
+    write_word(memory, dkr::runtime::revision_addresses::current().IsInRace, 1U);
+    write_word(memory, dkr::runtime::revision_addresses::current().CurrentRngSeed, 0x12345678U);
+    write_word(memory, dkr::runtime::revision_addresses::current().PreviousRngSeed, 0x9ABCDEF0U);
+    write_word(memory, dkr::runtime::revision_addresses::current().RaceStartTimer, 60U);
+    write_word(memory, dkr::runtime::revision_addresses::current().RaceStartProgress, 0x43960000U); // 300.0f
+    write_word(memory, dkr::runtime::revision_addresses::current().LogicUpdateRate, 2U);
+    write_word(memory, dkr::runtime::revision_addresses::current().NumberOfActivePlayers, 2U);
+    write_byte(memory, dkr::runtime::revision_addresses::current().NumberOfGameplayPlayers, 2U);
+    write_byte(memory, dkr::runtime::revision_addresses::current().PlayersCharacterArray, 1U);
+    write_byte(memory, dkr::runtime::revision_addresses::current().PlayersCharacterArray + 1U, 4U);
     constexpr std::uint32_t racer_array = 0x80300000U;
     constexpr std::uint32_t object = 0x80300100U;
     constexpr std::uint32_t racer = 0x80301000U;
-    write_word(memory, NumberOfRacers, 1U);
-    write_word(memory, Racers, racer_array);
+    write_word(memory, dkr::runtime::revision_addresses::current().NumberOfRacers, 1U);
+    write_word(memory, dkr::runtime::revision_addresses::current().Racers, racer_array);
     write_word(memory, racer_array, object);
     write_word(memory, object + 0x64U, racer);
     write_word(memory, object + 0x0CU, 0x41200000U);
@@ -92,17 +92,17 @@ void seed_gameplay(std::vector<std::uint8_t>& memory) {
     constexpr std::uint32_t log_object = 0x80303000U;
     constexpr std::uint32_t log_state = 0x80303100U;
     constexpr std::uint32_t object_map = 0x80304000U;
-    write_word(memory, ObjectList, object_list);
-    write_word(memory, ObjectCount, 1U);
-    write_word(memory, ObjectListStart, 0U);
+    write_word(memory, dkr::runtime::revision_addresses::current().ObjectList, object_list);
+    write_word(memory, dkr::runtime::revision_addresses::current().ObjectCount, 1U);
+    write_word(memory, dkr::runtime::revision_addresses::current().ObjectListStart, 0U);
     // Portable actor synchronization intentionally accepts only objects whose
     // level-entry pointer belongs to one of the loaded object maps. This keeps
     // transient particles/projectiles and allocator-order differences out of
     // the determinism contract while still covering authored track hazards.
-    write_word(memory, ObjectMapSpawnList + 0U, object_map);
-    write_word(memory, ObjectMapSpawnList + 4U, 0U);
-    write_word(memory, ObjectMapSize + 0U, 0x100U);
-    write_word(memory, ObjectMapSize + 4U, 0U);
+    write_word(memory, dkr::runtime::revision_addresses::current().ObjectMapSpawnList + 0U, object_map);
+    write_word(memory, dkr::runtime::revision_addresses::current().ObjectMapSpawnList + 4U, 0U);
+    write_word(memory, dkr::runtime::revision_addresses::current().ObjectMapSize + 0U, 0x100U);
+    write_word(memory, dkr::runtime::revision_addresses::current().ObjectMapSize + 4U, 0U);
     write_word(memory, object_list, log_object);
     write_half(memory, log_object + 0x48U, 67U); // BHV_LOG
     write_half(memory, log_object + 0x4AU, 0x1234U);
@@ -150,29 +150,29 @@ int main() {
     assert(baseline.racer_count == 1U);
     assert(baseline.racer_details[0] != 0U);
 
-    write_word(second, CurrentRngSeed, 0x12345679U);
+    write_word(second, dkr::runtime::revision_addresses::current().CurrentRngSeed, 0x12345679U);
     const GameplayStateDigest rng_mismatch = canonical_gameplay_state_digest(second.data(), second.size());
     assert(baseline.combined != rng_mismatch.combined);
     assert(baseline.globals != rng_mismatch.globals);
     assert(baseline.roster == rng_mismatch.roster);
     assert(baseline.racers == rng_mismatch.racers);
-    write_word(second, CurrentRngSeed, 0x12345678U);
+    write_word(second, dkr::runtime::revision_addresses::current().CurrentRngSeed, 0x12345678U);
 
-    write_word(second, LogicUpdateRate, 3U);
+    write_word(second, dkr::runtime::revision_addresses::current().LogicUpdateRate, 3U);
     const GameplayStateDigest rate_mismatch = canonical_gameplay_state_digest(second.data(), second.size());
     assert(baseline.combined != rate_mismatch.combined);
     assert(baseline.globals != rate_mismatch.globals);
     assert(baseline.roster == rate_mismatch.roster);
     assert(baseline.racers == rate_mismatch.racers);
-    write_word(second, LogicUpdateRate, 2U);
+    write_word(second, dkr::runtime::revision_addresses::current().LogicUpdateRate, 2U);
 
-    write_word(second, RaceStartProgress, 0x43958000U);
+    write_word(second, dkr::runtime::revision_addresses::current().RaceStartProgress, 0x43958000U);
     const GameplayStateDigest countdown_mismatch = canonical_gameplay_state_digest(second.data(), second.size());
     assert(baseline.combined != countdown_mismatch.combined);
     assert(baseline.globals != countdown_mismatch.globals);
     assert(baseline.roster == countdown_mismatch.roster);
     assert(baseline.racers == countdown_mismatch.racers);
-    write_word(second, RaceStartProgress, 0x43960000U);
+    write_word(second, dkr::runtime::revision_addresses::current().RaceStartProgress, 0x43960000U);
 
     constexpr std::uint32_t racer = 0x80301000U;
     write_word(second, racer + 0x2CU, 0xC1000000U);
@@ -196,12 +196,12 @@ int main() {
     write_word(second, log_state + 0x08U, 0x11223344U);
 
     // Frontend presentation/audio state is deliberately not gameplay state.
-    write_word(first, CurrentMenuId, 12U);
-    write_word(second, CurrentMenuId, 99U);
-    write_word(first, NumberOfReadyPlayers, 1U);
-    write_word(second, NumberOfReadyPlayers, 2U);
-    write_byte(first, CharacterSelectStatus, 0U);
-    write_byte(second, CharacterSelectStatus, 1U);
+    write_word(first, dkr::runtime::revision_addresses::current().CurrentMenuId, 12U);
+    write_word(second, dkr::runtime::revision_addresses::current().CurrentMenuId, 99U);
+    write_word(first, dkr::runtime::revision_addresses::current().NumberOfReadyPlayers, 1U);
+    write_word(second, dkr::runtime::revision_addresses::current().NumberOfReadyPlayers, 2U);
+    write_byte(first, dkr::runtime::revision_addresses::current().CharacterSelectStatus, 0U);
+    write_byte(second, dkr::runtime::revision_addresses::current().CharacterSelectStatus, 1U);
     constexpr std::uint32_t object = 0x80300100U;
     write_word(first, object + 0x08U, 0x3F800000U); // render scale
     write_word(second, object + 0x08U, 0x40000000U);
@@ -250,19 +250,19 @@ int main() {
 
     // Renderer scale, camera distance and sound handles are absent from both
     // authored contracts; frontend identity is restored before checking them.
-    write_word(second, CurrentMenuId, 12U);
-    write_word(second, NumberOfReadyPlayers, 1U);
-    write_byte(second, CharacterSelectStatus, 0U);
+    write_word(second, dkr::runtime::revision_addresses::current().CurrentMenuId, 12U);
+    write_word(second, dkr::runtime::revision_addresses::current().NumberOfReadyPlayers, 1U);
+    write_byte(second, dkr::runtime::revision_addresses::current().CharacterSelectStatus, 0U);
     assert(canonical_frontend_state_hash(first.data(), first.size()) ==
            canonical_frontend_state_hash(second.data(), second.size()));
 
     // The eight CPU character slots are chosen by charselect_assign_ai and
     // become the race roster. They are authored frontend state, even though
     // character-select animation and music remain local presentation.
-    write_byte(second, CharacterIdSlots + 3U, 7U);
+    write_byte(second, dkr::runtime::revision_addresses::current().CharacterIdSlots + 3U, 7U);
     assert(canonical_frontend_state_hash(first.data(), first.size()) !=
            canonical_frontend_state_hash(second.data(), second.size()));
-    write_byte(second, CharacterIdSlots + 3U, 0U);
+    write_byte(second, dkr::runtime::revision_addresses::current().CharacterIdSlots + 3U, 0U);
     assert(canonical_frontend_state_hash(first.data(), first.size()) ==
            canonical_frontend_state_hash(second.data(), second.size()));
 
@@ -290,12 +290,17 @@ int main() {
     // Debt reduction must not bypass the retail finish/roster/actor lifecycle.
     // All rejected installations preserve the entire emulated memory image.
     auto catch_up_target = first;
-    write_word(catch_up_target, CurrentRngSeed, 0xDEADBEEFU);
+    write_word(catch_up_target, dkr::runtime::revision_addresses::current().CurrentRngSeed, 0xDEADBEEFU);
     assert(apply_catch_up_authoritative_state(catch_up_target.data(), catch_up_target.size(), snapshot, snapshot_frame,
                                               error));
     assert(catch_up_target == first);
-    for (const auto address : {IsInRace, TracksMode, NumberOfActivePlayers, ActiveMagicCodes, PathUpdateOff,
-                               RaceFinishTriggered, NumberOfFinishedRacers}) {
+    for (const auto address :
+         {dkr::runtime::revision_addresses::current().IsInRace, dkr::runtime::revision_addresses::current().TracksMode,
+          dkr::runtime::revision_addresses::current().NumberOfActivePlayers,
+          dkr::runtime::revision_addresses::current().ActiveMagicCodes,
+          dkr::runtime::revision_addresses::current().PathUpdateOff,
+          dkr::runtime::revision_addresses::current().RaceFinishTriggered,
+          dkr::runtime::revision_addresses::current().NumberOfFinishedRacers}) {
         auto lifecycle_host = first;
         write_word(lifecycle_host, address, 123U);
         std::vector<std::uint8_t> lifecycle_snapshot;
@@ -309,22 +314,22 @@ int main() {
     for (const bool timer : {false, true}) {
         catch_up_target = first;
         if (timer)
-            write_half(catch_up_target, RaceEndTimer, 1U);
+            write_half(catch_up_target, dkr::runtime::revision_addresses::current().RaceEndTimer, 1U);
         else
-            write_byte(catch_up_target, RaceEndStage, 1U);
+            write_byte(catch_up_target, dkr::runtime::revision_addresses::current().RaceEndStage, 1U);
         const auto before = catch_up_target;
         assert(!apply_catch_up_authoritative_state(catch_up_target.data(), catch_up_target.size(), snapshot,
                                                    snapshot_frame, error));
         assert(catch_up_target == before);
     }
     catch_up_target = first;
-    write_byte(catch_up_target, PlayerIdMap, 3U);
+    write_byte(catch_up_target, dkr::runtime::revision_addresses::current().PlayerIdMap, 3U);
     const auto before_roster = catch_up_target;
     assert(!apply_catch_up_authoritative_state(catch_up_target.data(), catch_up_target.size(), snapshot, snapshot_frame,
                                                error));
     assert(catch_up_target == before_roster);
     auto retired_actor_host = first;
-    write_word(retired_actor_host, ObjectCount, 0U);
+    write_word(retired_actor_host, dkr::runtime::revision_addresses::current().ObjectCount, 0U);
     std::vector<std::uint8_t> retired_actor_snapshot;
     assert(capture_authoritative_state(retired_actor_host.data(), retired_actor_host.size(), snapshot_frame,
                                        retired_actor_snapshot, error));
@@ -344,9 +349,9 @@ int main() {
     std::memcpy(target.data() + offset(relocated_log_state), first.data() + offset(log_state), 0x20U);
     write_word(target, object_list, relocated_log_object);
     write_word(target, relocated_log_object + 0x64U, relocated_log_state);
-    write_word(target, CurrentRngSeed, 0xDEADBEEFU);
-    write_word(target, LogicUpdateRate, 6U);
-    write_word(target, RaceStartProgress, 0U);
+    write_word(target, dkr::runtime::revision_addresses::current().CurrentRngSeed, 0xDEADBEEFU);
+    write_word(target, dkr::runtime::revision_addresses::current().LogicUpdateRate, 6U);
+    write_word(target, dkr::runtime::revision_addresses::current().RaceStartProgress, 0U);
     write_word(target, racer + 0x2CU, 0x3F800000U);
     const std::vector<std::uint8_t> before_truncated = target;
     std::vector<std::uint8_t> truncated = snapshot;
@@ -361,17 +366,21 @@ int main() {
            canonical_gameplay_state_hash(first.data(), first.size()));
     std::uint32_t restored_logic_rate = 0U;
     std::uint32_t restored_start_progress = 0U;
-    std::memcpy(&restored_logic_rate, target.data() + offset(LogicUpdateRate), sizeof(std::uint32_t));
-    std::memcpy(&restored_start_progress, target.data() + offset(RaceStartProgress), sizeof(std::uint32_t));
+    std::memcpy(&restored_logic_rate,
+                target.data() + offset(dkr::runtime::revision_addresses::current().LogicUpdateRate),
+                sizeof(std::uint32_t));
+    std::memcpy(&restored_start_progress,
+                target.data() + offset(dkr::runtime::revision_addresses::current().RaceStartProgress),
+                sizeof(std::uint32_t));
     assert(restored_logic_rate == 2U);
     assert(restored_start_progress == 0x43960000U);
 
-    write_word(target, NumberOfRacers, 0U);
+    write_word(target, dkr::runtime::revision_addresses::current().NumberOfRacers, 0U);
     const std::vector<std::uint8_t> before_topology = target;
     assert(!apply_authoritative_state(target.data(), target.size(), snapshot, snapshot_frame, error));
     assert(target == before_topology);
 
-    write_word(target, NumberOfRacers, 1U);
+    write_word(target, dkr::runtime::revision_addresses::current().NumberOfRacers, 1U);
     write_word(target, 0x80300000U, 0x807FFFFCU);
     const std::vector<std::uint8_t> before_bad_pointer = target;
     assert(!apply_authoritative_state(target.data(), target.size(), snapshot, snapshot_frame, error));
@@ -382,11 +391,11 @@ int main() {
     // array, and remains transactional when returning to a populated hub.
     auto cinematic_host = first;
     auto cinematic_client = first;
-    write_word(cinematic_host, NumberOfRacers, 0U);
-    write_word(cinematic_client, NumberOfRacers, 0U);
-    write_word(cinematic_host, Racers, 0U);
-    write_word(cinematic_client, Racers, 0U);
-    write_word(cinematic_client, CurrentRngSeed, 0xBADC0DEU);
+    write_word(cinematic_host, dkr::runtime::revision_addresses::current().NumberOfRacers, 0U);
+    write_word(cinematic_client, dkr::runtime::revision_addresses::current().NumberOfRacers, 0U);
+    write_word(cinematic_host, dkr::runtime::revision_addresses::current().Racers, 0U);
+    write_word(cinematic_client, dkr::runtime::revision_addresses::current().Racers, 0U);
+    write_word(cinematic_client, dkr::runtime::revision_addresses::current().CurrentRngSeed, 0xBADC0DEU);
     std::vector<std::uint8_t> cinematic_snapshot, cinematic_installed;
     assert(capture_authoritative_state(cinematic_host.data(), cinematic_host.size(), 0U, cinematic_snapshot, error));
     assert(apply_authoritative_state(cinematic_client.data(), cinematic_client.size(), cinematic_snapshot, 0U, error));
@@ -408,8 +417,8 @@ int main() {
     assert(capture_authoritative_state(water_host.data(), water_host.size(), snapshot_frame, dry_snapshot, error));
     seed_water(water_host, 7U, 13U, 0x1400U);
     seed_water(water_client, 29U, 41U, 0x2A00U);
-    write_word(water_client, WaveController + 0x40U, 0x3E800000U);
-    write_word(water_client, WavePowerBase, 0x3E000000U);
+    write_word(water_client, dkr::runtime::revision_addresses::current().WaveController + 0x40U, 0x3E800000U);
+    write_word(water_client, dkr::runtime::revision_addresses::current().WavePowerBase, 0x3E000000U);
     std::vector<std::uint8_t> water_snapshot;
     std::vector<std::uint8_t> client_snapshot;
     assert(capture_authoritative_state(water_host.data(), water_host.size(), snapshot_frame, water_snapshot, error));

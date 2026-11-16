@@ -14,7 +14,9 @@ extern "C" void dkr_skip_intro_audio(std::uint8_t* rdram, recomp_context* ctx) {
     // its sixteen-second lifetime is shortened. Reset only that ownership
     // boundary BEFORE retail queues its title song and loads the cinematic.
     // Equivalent to music_change_on + music_volume_reset, not a forced song.
-    MEM_W(0, static_cast<gpr>(static_cast<std::int32_t>(BlockMusicChange))) = 0;
+    MEM_W(0,
+          static_cast<gpr>(static_cast<std::int32_t>(dkr::runtime::revision_addresses::current().BlockMusicChange))) =
+        0;
     const auto& timers = dkr::runtime::startup_symbols::for_revision(v80);
     MEM_W(0, static_cast<gpr>(static_cast<std::int32_t>(timers.music_delay_timer))) = 0;
     MEM_W(0, static_cast<gpr>(static_cast<std::int32_t>(timers.music_delay_length))) = 0;
@@ -53,10 +55,13 @@ extern "C" void dkr_skip_intro_character_select(std::uint8_t* rdram, recomp_cont
     // path, rather than changing a menu ID or injecting a held Start button.
     // Equivalent to titlescreen_controller_assign(0), which has only these
     // writes. Keep launcher player-1 input ownership and allow others to join.
-    MEM_W(0, static_cast<gpr>(static_cast<std::int32_t>(NumberOfActivePlayers))) = 1;
+    MEM_W(0, static_cast<gpr>(
+                 static_cast<std::int32_t>(dkr::runtime::revision_addresses::current().NumberOfActivePlayers))) = 1;
     for (int i = 0; i < 4; ++i) {
-        MEM_B(i, static_cast<gpr>(static_cast<std::int32_t>(PlayersCharacterArray))) = i == 0 ? 1 : -1;
-        MEM_B(i, static_cast<gpr>(static_cast<std::int32_t>(ActivePlayersArray))) = i == 0 ? 1 : 0;
+        MEM_B(i, static_cast<gpr>(static_cast<std::int32_t>(
+                     dkr::runtime::revision_addresses::current().PlayersCharacterArray))) = i == 0 ? 1 : -1;
+        MEM_B(i, static_cast<gpr>(static_cast<std::int32_t>(
+                     dkr::runtime::revision_addresses::current().ActivePlayersArray))) = i == 0 ? 1 : 0;
     }
-    MEM_W(0, static_cast<gpr>(static_cast<std::int32_t>(MenuDelay))) = 31;
+    MEM_W(0, static_cast<gpr>(static_cast<std::int32_t>(dkr::runtime::revision_addresses::current().MenuDelay))) = 31;
 }

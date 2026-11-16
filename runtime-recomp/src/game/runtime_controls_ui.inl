@@ -70,8 +70,9 @@ void RestoreControlsSnapshot(const ControlsSnapshot& snapshot) {
         for (std::size_t index = 0; index < snapshot.bindings[player].size(); ++index) {
             const auto action = static_cast<input::Action>(index);
             input::set_keyboard_binding(player, action, snapshot.bindings[player][index][0]);
-            input::set_controller_binding(player, action, snapshot.bindings[player][index][1]);
-            input::set_secondary_controller_binding(player, action, snapshot.bindings[player][index][2]);
+            // The snapshot is the whole table as it stood, so put it back verbatim.
+            input::restore_controller_binding(player, action, snapshot.bindings[player][index][1]);
+            input::restore_secondary_controller_binding(player, action, snapshot.bindings[player][index][2]);
         }
     }
     input::set_stick_deadzone(snapshot.deadzone);

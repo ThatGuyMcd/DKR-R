@@ -31,7 +31,9 @@
 #include <algorithm>
 #include <charconv>
 #include <cmath>
+#include <cstdarg>
 #include <cstdio>
+#include <utility>
 #include <fstream>
 #include <limits>
 #include <random>
@@ -223,12 +225,39 @@ DirectSession::~DirectSession() {
     state_changed_.notify_all();
     if (network_worker_.joinable())
         network_worker_.join();
+    flush_log();
     save_executor_.stop();
     replay_writer_.stop();
     transport_closer_.stop();
     dkr::runtime::party_start::forget(this);
     dkr::runtime::spectators::forget_party_link(this);
     dkr::online::native::forget(this);
+}
+
+void DirectSession::log_locked(const char* format, ...) {
+    va_list arguments;
+    va_start(arguments, format);
+    log_queue_.push(dkr::runtime::session_log::vformat(format, arguments));
+    va_end(arguments);
+}
+
+void DirectSession::flush_log() {
+    std::scoped_lock flush(log_flush_mutex_);
+    dkr::runtime::session_log::Queue taken;
+    {
+        std::scoped_lock lock(mutex_);
+        std::swap(taken, log_queue_);
+    }
+    const auto write = [this](const std::string& line) {
+        if (log_sink_)
+            log_sink_(line);
+        else
+            std::fwrite(line.data(), 1U, line.size(), stderr);
+    };
+    if (taken.dropped)
+        write("[session][log] dropped " + std::to_string(taken.dropped) + " older lines\n");
+    for (const auto& line : taken.lines)
+        write(line);
 }
 
 void DirectSession::configure_manifest(const CompatibilityManifest& manifest) {
@@ -423,9 +452,9 @@ void DirectSession::service_save_jobs_locked() {
                 status_ = "A racer's network lanes are still warming up. Start again shortly.";
                 continue;
             }
-            std::fprintf(stderr, "[online][save] host-sealed match=%llu generation=%u hash=%llu bytes=512\n",
-                         static_cast<unsigned long long>(match_id_), session_save_generation_,
-                         static_cast<unsigned long long>(actual));
+            log_locked("[online][save] host-sealed match=%llu generation=%u hash=%llu bytes=512\n",
+                       static_cast<unsigned long long>(match_id_), session_save_generation_,
+                       static_cast<unsigned long long>(actual));
             host_start_verified_ = true;
             begin_countdown_locked();
             continue;
@@ -464,9 +493,9 @@ void DirectSession::service_save_jobs_locked() {
                 protocol::encode_online_save_ready({local_slot_, session_save_generation_, actual}));
         last_client_request_ = std::chrono::steady_clock::now();
         status_ = "Isolated online save installed and verified; waiting for Player 1's acknowledgement.";
-        std::fprintf(stderr, "[online][save] installed phase=%u match=%llu generation=%u hash=%llu bytes=512\n",
-                     unsigned(job.kind), static_cast<unsigned long long>(match_id_), session_save_generation_,
-                     static_cast<unsigned long long>(actual));
+        log_locked("[online][save] installed phase=%u match=%llu generation=%u hash=%llu bytes=512\n",
+                   unsigned(job.kind), static_cast<unsigned long long>(match_id_), session_save_generation_,
+                   static_cast<unsigned long long>(actual));
         worker_wake_ = true;
         state_changed_.notify_all();
     }
@@ -818,282 +847,288 @@ bool DirectSession::join_friend_invite(std::string_view invite, std::string play
 }
 
 void DirectSession::disconnect(std::string_view reason) {
-    std::scoped_lock lock(mutex_);
-    // disconnect already owns DirectSession::mutex_. No PartyLink lock is retained
-    // while pumping the authenticated receipt. The final wait is strictly bounded.
     {
-        namespace leaving = dkr::runtime::party_departure;
-        bool notify = false;
+        std::scoped_lock lock(mutex_);
+        // disconnect already owns DirectSession::mutex_. No PartyLink lock is retained
+        // while pumping the authenticated receipt. The final wait is strictly bounded.
+        {
+            namespace leaving = dkr::runtime::party_departure;
+            bool notify = false;
+            {
+                auto party = dkr::runtime::spectators::party_link(this);
+                std::scoped_lock party_lock(party->mutex);
+                notify = party->enabled && party->admitted && !is_host_ && bool(host_address_) && transport_->is_open();
+            }
+            if (notify) {
+                dkr::runtime::session_log::Scope log_scope(&log_queue_);
+                leaving::begin(this, sender_id_);
+                const auto bytes = dkr::runtime::spectators::link_encode(dkr::runtime::spectators::LinkKind::Leave,
+                                                                         leaving::notice(1, sender_id_));
+                send_with_key(host_address_, key_,
+                              static_cast<protocol::MessageType>(dkr::runtime::spectators::PartyMessageType), bytes);
+                const auto deadline = std::chrono::steady_clock::now() + leaving::CloseGrace;
+                do {
+                    flush_outbound_locked();
+                    pump_locked();
+                    if (leaving::acknowledged(this))
+                        break;
+                    std::this_thread::sleep_for(std::chrono::milliseconds(2));
+                } while (transport_->is_open() && std::chrono::steady_clock::now() < deadline);
+                log_locked("[lobby][leave] application close notice %s\n",
+                           leaving::acknowledged(this) ? "acknowledged"
+                                                       : "grace expired; host silence detection remains active");
+                leaving::forget(this);
+            }
+        }
+
         {
             auto party = dkr::runtime::spectators::party_link(this);
             std::scoped_lock party_lock(party->mutex);
-            notify = party->enabled && party->admitted && !is_host_ && bool(host_address_) && transport_->is_open();
-        }
-        if (notify) {
-            leaving::begin(this, sender_id_);
-            const auto bytes = dkr::runtime::spectators::link_encode(dkr::runtime::spectators::LinkKind::Leave,
-                                                                     leaving::notice(1, sender_id_));
-            send_with_key(host_address_, key_,
-                          static_cast<protocol::MessageType>(dkr::runtime::spectators::PartyMessageType), bytes);
-            const auto deadline = std::chrono::steady_clock::now() + leaving::CloseGrace;
-            do {
-                flush_outbound_locked();
-                pump_locked();
-                if (leaving::acknowledged(this))
-                    break;
-                std::this_thread::sleep_for(std::chrono::milliseconds(2));
-            } while (transport_->is_open() && std::chrono::steady_clock::now() < deadline);
-            std::fprintf(stderr, "[lobby][leave] application close notice %s\n",
-                         leaving::acknowledged(this) ? "acknowledged"
-                                                     : "grace expired; host silence detection remains active");
-            leaving::forget(this);
-        }
-    }
-
-    {
-        auto party = dkr::runtime::spectators::party_link(this);
-        std::scoped_lock party_lock(party->mutex);
-        if (party->enabled && transport_->is_open()) {
-            const auto bytes = dkr::runtime::spectators::link_encode(dkr::runtime::spectators::LinkKind::Leave);
-            if (is_host_)
-                for (const auto& p : party->peers)
-                    send_with_key(p.address, p.key,
+            if (party->enabled && transport_->is_open()) {
+                const auto bytes = dkr::runtime::spectators::link_encode(dkr::runtime::spectators::LinkKind::Leave);
+                if (is_host_)
+                    for (const auto& p : party->peers)
+                        send_with_key(p.address, p.key,
+                                      static_cast<protocol::MessageType>(dkr::runtime::spectators::PartyMessageType),
+                                      bytes);
+                else if (host_address_)
+                    send_with_key(host_address_, key_,
                                   static_cast<protocol::MessageType>(dkr::runtime::spectators::PartyMessageType),
                                   bytes);
+                flush_outbound_locked();
+            }
+            party->reset_connection();
+            dkr::runtime::party_start::forget(this);
+        }
+        if (transport_->is_open() && state_ != ConnectionState::Offline) {
+            // An empty disconnect used to erase the only useful evidence when a
+            // guest cleared a locally failed session.  The host then reported an
+            // unexplained departure and could not distinguish a transport fault
+            // from a deliberate leave. Preserve the terminal cause when one is
+            // known and give orderly process shutdown an explicit meaning.
+            const std::string notification = !reason.empty() ? std::string(reason)
+                                             : state_ == ConnectionState::Failed && !status_.empty()
+                                                 ? status_
+                                                 : "The racer application closed.";
+            const std::vector<std::uint8_t> payload(notification.begin(), notification.end());
+            if (is_host_)
+                broadcast(protocol::MessageType::Disconnect, payload);
             else if (host_address_)
-                send_with_key(host_address_, key_,
-                              static_cast<protocol::MessageType>(dkr::runtime::spectators::PartyMessageType), bytes);
+                send_to(host_address_, protocol::MessageType::Disconnect, payload);
+            // Unlike normal traffic, the final control packet cannot be left on
+            // the worker queue because the socket is about to close.
             flush_outbound_locked();
         }
-        party->reset_connection();
-        dkr::runtime::party_start::forget(this);
-    }
-    if (transport_->is_open() && state_ != ConnectionState::Offline) {
-        // An empty disconnect used to erase the only useful evidence when a
-        // guest cleared a locally failed session.  The host then reported an
-        // unexplained departure and could not distinguish a transport fault
-        // from a deliberate leave. Preserve the terminal cause when one is
-        // known and give orderly process shutdown an explicit meaning.
-        const std::string notification = !reason.empty() ? std::string(reason)
-                                         : state_ == ConnectionState::Failed && !status_.empty()
-                                             ? status_
-                                             : "The racer application closed.";
-        const std::vector<std::uint8_t> payload(notification.begin(), notification.end());
-        if (is_host_)
-            broadcast(protocol::MessageType::Disconnect, payload);
-        else if (host_address_)
-            send_to(host_address_, protocol::MessageType::Disconnect, payload);
-        // Unlike normal traffic, the final control packet cannot be left on
-        // the worker queue because the socket is about to close.
-        flush_outbound_locked();
-    }
-    if (replay_.active()) {
-        if (!replay_writer_started_) {
-            replay_writer_.start([] {}, [] {});
-            replay_writer_started_ = true;
+        if (replay_.active()) {
+            if (!replay_writer_started_) {
+                replay_writer_.start([] {}, [] {});
+                replay_writer_started_ = true;
+            }
+            auto recording = std::make_shared<ReplayRecorder>(replay_.detach());
+            auto result = std::make_shared<std::promise<std::string>>();
+            replay_writes_.push_back(result->get_future());
+            if (!replay_writer_.post([recording, result] {
+                    std::string error;
+                    try {
+                        recording->finalize(error);
+                    } catch (...) {
+                        error = "Replay finalization failed unexpectedly.";
+                    }
+                    result->set_value(std::move(error));
+                }))
+                result->set_value("Replay storage queue is unavailable. The recording could not be saved.");
         }
-        auto recording = std::make_shared<ReplayRecorder>(replay_.detach());
-        auto result = std::make_shared<std::promise<std::string>>();
-        replay_writes_.push_back(result->get_future());
-        if (!replay_writer_.post([recording, result] {
-                std::string error;
-                try {
-                    recording->finalize(error);
-                } catch (...) {
-                    error = "Replay finalization failed unexpectedly.";
-                }
-                result->set_value(std::move(error));
-            }))
-            result->set_value("Replay storage queue is unavailable. The recording could not be saved.");
+        retire_transport_locked();
+        transport_ = dkr::relay::wrap(this, make_udp_session_transport());
+        quick_join_bootstrap_pending_ = false;
+        lobby_ = {};
+        room_view_ = {};
+        timeline_.reset();
+        peers_ = {};
+        completed_releases_.clear();
+        checkpoint_encoding_.reset();
+        duplicate_retries_coalesced_ = 0U;
+        checkpoint_encoding_cache_hits_ = 0U;
+        maximum_network_pump_us_ = 0U;
+        pending_joins_ = {};
+        mod_offer_.reset();
+        mod_inbound_.clear();
+        mod_inbound_bytes_ = 0;
+        mod_manifest_bytes_ = 0;
+        manifest_.mod_manifest_hash.clear();
+        manifest_.owned_resources_hash.clear();
+        received_sequences_.clear();
+        blocked_senders_.clear();
+        blocked_sources_.clear();
+        state_hashes_.clear();
+        bootstrap_hashes_ = {};
+        bootstrap_hash_present_ = {};
+        runtime_save_hashes_ = {};
+        runtime_save_generations_ = {};
+        runtime_save_present_ = {};
+        clear_input_history_locked();
+        frame_commits_.clear();
+        commit_history_.clear();
+        authoritative_states_.clear();
+        authoritative_acknowledgements_.clear();
+        fully_acknowledged_states_.clear();
+        snapshot_assemblies_.clear();
+        live_replica_states_.clear();
+        racer_orientation_states_.clear();
+        live_replica_assemblies_.clear();
+        live_replica_keyframe_frame_.reset();
+        live_replica_keyframe_state_.clear();
+        critical_outbound_.clear();
+        repair_outbound_.clear();
+        high_priority_outbound_.clear();
+        commit_outbound_.clear();
+        authority_outbound_.clear();
+        normal_priority_outbound_.clear();
+        bulk_outbound_.clear();
+        rollback_inbound_.clear();
+        owned_inbound_.clear();
+        owned_inbound_bytes_ = 0;
+        owned_match_end_.reset();
+        ++save_job_token_;
+        save_jobs_.clear();
+        host_start_verified_ = false;
+        last_save_offer_ = {};
+        retired_owned_generation_ = 0;
+        owned_last_host_packet_ = {};
+        authoritative_phase_active_ = false;
+        authority_lifecycle_ = AuthorityLifecycle::Inactive;
+        finish_seal_frame_.reset();
+        recovery_stage_ = RecoveryStage::Idle;
+        scene_epoch_ = 0U;
+        last_host_scene_epoch_ = 0U;
+        recovery_frame_.reset();
+        completed_recovery_frame_.reset();
+        completed_recovery_epoch_ = 0U;
+        recovery_acks_ = {};
+        recovery_resumed_ = false;
+        last_recovery_broadcast_ = {};
+        recovery_resume_until_ = {};
+        transition_barrier_.reset();
+        last_transition_broadcast_ = {};
+        transition_resume_until_ = {};
+        gameplay_barrier_.reset();
+        last_gameplay_barrier_broadcast_ = {};
+        gameplay_resume_until_ = {};
+        last_gameplay_ready_announcement_ = {};
+        last_gameplay_resume_ack_ = {};
+        gameplay_resume_ack_until_ = {};
+        gameplay_handoff_.reset();
+        last_gameplay_handoff_send_ = {};
+        last_authoritative_request_ = {};
+        last_authoritative_request_frame_ = 0U;
+        state_ = ConnectionState::Offline;
+        is_host_ = false;
+        // A retired transport will not pump the directory owner again.
+        retire_directory_room(this);
+        lobby_locked_ = false;
+        launch_requested_ = false;
+        reset_launch_transaction_locked();
+        reset_connection_test_locked();
+        terminal_connection_test_id_ = 0U;
+        last_admission_response_ = {};
+        connection_test_results_ = {};
+        compatibility_sync_offer_.reset();
+        launch_countdown_generation_ = 0U;
+        next_launch_epoch_ = 1U;
+        committed_launch_epoch_ = 0U;
+        launch_commit_rebroadcast_until_ = {};
+        last_launch_commit_send_ = {};
+        local_loaded_ = false;
+        local_bootstrap_hash_ = 0U;
+        local_runtime_save_hash_ = 0U;
+        local_runtime_save_generation_ = 0U;
+        local_online_save_ready_ = false;
+        local_online_save_acknowledged_ = false;
+        run_signal_sent_ = false;
+        online_save_status_.reset();
+        launch_descriptor_.reset();
+        last_verified_frame_ = 0U;
+        last_authoritative_frame_ = 0U;
+        authoritative_corrections_ = 0U;
+        consecutive_authoritative_frames_ = 0U;
+        next_commit_frame_ = 0U;
+        native_completed_frame_.reset();
+        last_consumed_input_frame_.reset();
+        last_consumed_inputs_ = {};
+        input_epoch_ = 1U;
+        retired_authority_epoch_ = 0U;
+        pending_authority_epoch_ = 0U;
+        stale_epoch_packets_ = 0U;
+        future_epoch_packets_ = 0U;
+        frame_correction_generation_ = 0U;
+        applied_frame_correction_generation_ = 0U;
+        frame_correction_assembly_.reset();
+        frame_correction_transmission_.reset();
+        deferred_frame_commits_.clear();
+        last_consumed_commit_hash_ = 0U;
+        pending_input_correction_.reset();
+        local_input_submitted_frame_ = 0U;
+        local_input_submitted_ = {};
+        pending_local_submission_frame_.reset();
+        last_input_history_send_ = {};
+        reset_pending_commit_wait_locked();
+        prediction_failsafe_active_ = false;
+        host_input_accepted_frame_ = 0U;
+        host_input_first_missing_frame_ = 0U;
+        peer_input_first_missing_frame_ = {};
+        authoritative_input_frame_ = 0U;
+        authoritative_inputs_ = {};
+        authoritative_inputs_valid_ = false;
+        authoritative_input_revision_ = 0U;
+        authoritative_predicted_mask_ = 0U;
+        input_corrections_ = 0U;
+        commit_repair_requests_sent_ = 0U;
+        commit_repair_requests_received_ = 0U;
+        commit_repair_batches_sent_ = 0U;
+        forced_prediction_frames_ = 0U;
+        late_inputs_discarded_ = 0U;
+        live_replica_requests_sent_ = 0U;
+        live_replica_request_misses_ = 0U;
+        live_replica_window_rejections_ = 0U;
+        live_replica_decode_failures_ = 0U;
+        desired_ready_.reset();
+        next_ready_request_id_ = 1U;
+        pending_ready_request_id_ = 0U;
+        last_connect_request_ = {};
+        connect_started_ = {};
+        last_client_request_ = {};
+        last_lobby_broadcast_ = {};
+        failure_broadcast_until_ = {};
+        last_failure_broadcast_ = {};
+        failure_payload_.clear();
+        next_sequence_ = 1U;
+        packets_sent_ = 0U;
+        packets_received_ = 0U;
+        bytes_sent_ = 0U;
+        bytes_received_ = 0U;
+        authority_checkpoints_sent_ = 0U;
+        authority_checkpoints_acknowledged_ = 0U;
+        authority_wait_timeouts_ = 0U;
+        input_stalls_ = 0U;
+        longest_input_stall_ms_ = 0U;
+        network_rtt_ms_ = 0U;
+        network_jitter_ms_ = 0U;
+        network_loss_percent_ = 0.0F;
+        outbound_packets_dropped_ = 0U;
+        outbound_queue_high_water_ = 0U;
+        rollback_queue_high_water_ = 0U;
+        transport_queue_failures_ = 0U;
+        invite_.clear();
+        advertised_host_.clear();
+        client_friend_admission_ = {};
+        clear_friend_admissions_locked();
+        status_ = reason.empty() ? "Offline." : std::string(reason);
+        presentation_view_.store(std::make_shared<const SessionView>(view_locked()), std::memory_order_release);
+        worker_wake_ = true;
+        state_changed_.notify_all();
     }
-    retire_transport_locked();
-    transport_ = dkr::relay::wrap(this, make_udp_session_transport());
-    quick_join_bootstrap_pending_ = false;
-    lobby_ = {};
-    room_view_ = {};
-    timeline_.reset();
-    peers_ = {};
-    completed_releases_.clear();
-    checkpoint_encoding_.reset();
-    duplicate_retries_coalesced_ = 0U;
-    checkpoint_encoding_cache_hits_ = 0U;
-    maximum_network_pump_us_ = 0U;
-    pending_joins_ = {};
-    mod_offer_.reset();
-    mod_inbound_.clear();
-    mod_inbound_bytes_ = 0;
-    mod_manifest_bytes_ = 0;
-    manifest_.mod_manifest_hash.clear();
-    manifest_.owned_resources_hash.clear();
-    received_sequences_.clear();
-    blocked_senders_.clear();
-    blocked_sources_.clear();
-    state_hashes_.clear();
-    bootstrap_hashes_ = {};
-    bootstrap_hash_present_ = {};
-    runtime_save_hashes_ = {};
-    runtime_save_generations_ = {};
-    runtime_save_present_ = {};
-    clear_input_history_locked();
-    frame_commits_.clear();
-    commit_history_.clear();
-    authoritative_states_.clear();
-    authoritative_acknowledgements_.clear();
-    fully_acknowledged_states_.clear();
-    snapshot_assemblies_.clear();
-    live_replica_states_.clear();
-    racer_orientation_states_.clear();
-    live_replica_assemblies_.clear();
-    live_replica_keyframe_frame_.reset();
-    live_replica_keyframe_state_.clear();
-    critical_outbound_.clear();
-    repair_outbound_.clear();
-    high_priority_outbound_.clear();
-    commit_outbound_.clear();
-    authority_outbound_.clear();
-    normal_priority_outbound_.clear();
-    bulk_outbound_.clear();
-    rollback_inbound_.clear();
-    owned_inbound_.clear();
-    owned_inbound_bytes_ = 0;
-    owned_match_end_.reset();
-    ++save_job_token_;
-    save_jobs_.clear();
-    host_start_verified_ = false;
-    last_save_offer_ = {};
-    retired_owned_generation_ = 0;
-    owned_last_host_packet_ = {};
-    authoritative_phase_active_ = false;
-    authority_lifecycle_ = AuthorityLifecycle::Inactive;
-    finish_seal_frame_.reset();
-    recovery_stage_ = RecoveryStage::Idle;
-    scene_epoch_ = 0U;
-    last_host_scene_epoch_ = 0U;
-    recovery_frame_.reset();
-    completed_recovery_frame_.reset();
-    completed_recovery_epoch_ = 0U;
-    recovery_acks_ = {};
-    recovery_resumed_ = false;
-    last_recovery_broadcast_ = {};
-    recovery_resume_until_ = {};
-    transition_barrier_.reset();
-    last_transition_broadcast_ = {};
-    transition_resume_until_ = {};
-    gameplay_barrier_.reset();
-    last_gameplay_barrier_broadcast_ = {};
-    gameplay_resume_until_ = {};
-    last_gameplay_ready_announcement_ = {};
-    last_gameplay_resume_ack_ = {};
-    gameplay_resume_ack_until_ = {};
-    gameplay_handoff_.reset();
-    last_gameplay_handoff_send_ = {};
-    last_authoritative_request_ = {};
-    last_authoritative_request_frame_ = 0U;
-    state_ = ConnectionState::Offline;
-    is_host_ = false;
-    // A retired transport will not pump the directory owner again.
-    retire_directory_room(this);
-    lobby_locked_ = false;
-    launch_requested_ = false;
-    reset_launch_transaction_locked();
-    reset_connection_test_locked();
-    terminal_connection_test_id_ = 0U;
-    last_admission_response_ = {};
-    connection_test_results_ = {};
-    compatibility_sync_offer_.reset();
-    launch_countdown_generation_ = 0U;
-    next_launch_epoch_ = 1U;
-    committed_launch_epoch_ = 0U;
-    launch_commit_rebroadcast_until_ = {};
-    last_launch_commit_send_ = {};
-    local_loaded_ = false;
-    local_bootstrap_hash_ = 0U;
-    local_runtime_save_hash_ = 0U;
-    local_runtime_save_generation_ = 0U;
-    local_online_save_ready_ = false;
-    local_online_save_acknowledged_ = false;
-    run_signal_sent_ = false;
-    online_save_status_.reset();
-    launch_descriptor_.reset();
-    last_verified_frame_ = 0U;
-    last_authoritative_frame_ = 0U;
-    authoritative_corrections_ = 0U;
-    consecutive_authoritative_frames_ = 0U;
-    next_commit_frame_ = 0U;
-    native_completed_frame_.reset();
-    last_consumed_input_frame_.reset();
-    last_consumed_inputs_ = {};
-    input_epoch_ = 1U;
-    retired_authority_epoch_ = 0U;
-    pending_authority_epoch_ = 0U;
-    stale_epoch_packets_ = 0U;
-    future_epoch_packets_ = 0U;
-    frame_correction_generation_ = 0U;
-    applied_frame_correction_generation_ = 0U;
-    frame_correction_assembly_.reset();
-    frame_correction_transmission_.reset();
-    deferred_frame_commits_.clear();
-    last_consumed_commit_hash_ = 0U;
-    pending_input_correction_.reset();
-    local_input_submitted_frame_ = 0U;
-    local_input_submitted_ = {};
-    pending_local_submission_frame_.reset();
-    last_input_history_send_ = {};
-    reset_pending_commit_wait_locked();
-    prediction_failsafe_active_ = false;
-    host_input_accepted_frame_ = 0U;
-    host_input_first_missing_frame_ = 0U;
-    peer_input_first_missing_frame_ = {};
-    authoritative_input_frame_ = 0U;
-    authoritative_inputs_ = {};
-    authoritative_inputs_valid_ = false;
-    authoritative_input_revision_ = 0U;
-    authoritative_predicted_mask_ = 0U;
-    input_corrections_ = 0U;
-    commit_repair_requests_sent_ = 0U;
-    commit_repair_requests_received_ = 0U;
-    commit_repair_batches_sent_ = 0U;
-    forced_prediction_frames_ = 0U;
-    late_inputs_discarded_ = 0U;
-    live_replica_requests_sent_ = 0U;
-    live_replica_request_misses_ = 0U;
-    live_replica_window_rejections_ = 0U;
-    live_replica_decode_failures_ = 0U;
-    desired_ready_.reset();
-    next_ready_request_id_ = 1U;
-    pending_ready_request_id_ = 0U;
-    last_connect_request_ = {};
-    connect_started_ = {};
-    last_client_request_ = {};
-    last_lobby_broadcast_ = {};
-    failure_broadcast_until_ = {};
-    last_failure_broadcast_ = {};
-    failure_payload_.clear();
-    next_sequence_ = 1U;
-    packets_sent_ = 0U;
-    packets_received_ = 0U;
-    bytes_sent_ = 0U;
-    bytes_received_ = 0U;
-    authority_checkpoints_sent_ = 0U;
-    authority_checkpoints_acknowledged_ = 0U;
-    authority_wait_timeouts_ = 0U;
-    input_stalls_ = 0U;
-    longest_input_stall_ms_ = 0U;
-    network_rtt_ms_ = 0U;
-    network_jitter_ms_ = 0U;
-    network_loss_percent_ = 0.0F;
-    outbound_packets_dropped_ = 0U;
-    outbound_queue_high_water_ = 0U;
-    rollback_queue_high_water_ = 0U;
-    transport_queue_failures_ = 0U;
-    invite_.clear();
-    advertised_host_.clear();
-    client_friend_admission_ = {};
-    clear_friend_admissions_locked();
-    status_ = reason.empty() ? "Offline." : std::string(reason);
-    presentation_view_.store(std::make_shared<const SessionView>(view_locked()), std::memory_order_release);
-    worker_wake_ = true;
-    state_changed_.notify_all();
+    // Queued lines (the leave notice among them) go out once the lock is released.
+    flush_log();
 }
 
 void DirectSession::pump() {
@@ -1129,6 +1164,8 @@ void DirectSession::network_loop() {
         if (state_ != ConnectionState::Failed)
             worker_fault = false;
         if (!worker_fault) {
+            // Stderr writes from the pump and its callees are queued, not made under mutex_.
+            dkr::runtime::session_log::Scope log_scope(&log_queue_);
             try {
                 service_save_jobs_locked();
                 if (transport_->is_open())
@@ -1150,6 +1187,12 @@ void DirectSession::network_loop() {
             std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - pump_started)
                 .count();
         maximum_network_pump_us_ = (std::max)(maximum_network_pump_us_, static_cast<std::uint64_t>(pump_us));
+        if (!log_queue_.lines.empty() || log_queue_.dropped != 0U) {
+            // stderr may block (a full pipe nobody drains): never write it while holding mutex_.
+            lock.unlock();
+            flush_log();
+            lock.lock();
+        }
         const auto now = std::chrono::steady_clock::now();
         if (now - last_view_publication_ >= std::chrono::milliseconds(50)) {
             presentation_view_.store(std::make_shared<const SessionView>(view_locked()), std::memory_order_release);
@@ -1213,6 +1256,8 @@ void DirectSession::network_loop() {
         if (receive_signal_->generation.load(std::memory_order_acquire) == received_generation)
             consecutive_receive_drains = 0;
     }
+    lock.unlock();
+    flush_log();
 }
 
 bool DirectSession::set_ready(bool ready, std::string& error) {
@@ -3356,8 +3401,8 @@ void DirectSession::begin_owned_match_end_locked(std::string reason) {
         }
     state_ = is_host_ ? ConnectionState::Hosting : ConnectionState::Lobby;
     status_ = reason + " Returning to the lobby...";
-    std::fprintf(stderr, "[rollback][match-end] begin host=%d launch=%llu reason=%s\n", is_host_,
-                 static_cast<unsigned long long>(hash), reason.c_str());
+    log_locked("[rollback][match-end] begin host=%d launch=%llu reason=%s\n", is_host_,
+               static_cast<unsigned long long>(hash), reason.c_str());
     worker_wake_ = true;
     state_changed_.notify_all();
 }
@@ -5865,8 +5910,8 @@ void DirectSession::pump_locked() {
         } else
             party->status = name + (racer ? " left the lobby." : " stopped spectating.");
         status_ = party->status;
-        std::fprintf(stderr, "[lobby][departure] role=%s live=%u cause=%s; roster retired\n",
-                     racer ? "racer" : "spectator", unsigned(live), cause);
+        log_locked("[lobby][departure] role=%s live=%u cause=%s; roster retired\n", racer ? "racer" : "spectator",
+                   unsigned(live), cause);
         return true;
     };
 
@@ -5904,13 +5949,12 @@ void DirectSession::pump_locked() {
             for (const auto& peer : peers_)
                 if (peer.active && peer.address == departed) {
                     const auto name = room_view_.players[peer.slot].display_name;
-                    std::fprintf(stderr, "[rollback][match-end] admitted client transport closed slot=%u\n",
-                                 unsigned(peer.slot));
+                    log_locked("[rollback][match-end] admitted client transport closed slot=%u\n", unsigned(peer.slot));
                     remove_owned_peer_locked(peer.sender_id, name + " disconnected. The match has ended.");
                     break;
                 }
         } else if (departed == host_address_) {
-            std::fprintf(stderr, "[rollback][match-end] admitted host transport closed\n");
+            log_locked("[rollback][match-end] admitted host transport closed\n");
             fail_locked("The host disconnected. The lobby has closed.");
             return;
         }
@@ -6181,7 +6225,7 @@ void DirectSession::pump_locked() {
                         party->running = false;
                         party->status = (identity ? identity->name : std::string("A racer")) +
                                         " returned to the lobby. The match has ended.";
-                        std::fprintf(stderr, "[lobby][departure] racer returned; match retirement requested\n");
+                        log_locked("[lobby][departure] racer returned; match retirement requested\n");
                     }
                     break;
                 case watch::LinkKind::Leave: {
@@ -6238,8 +6282,7 @@ void DirectSession::pump_locked() {
                     party->status = "Joined the lobby";
                     state_ = ConnectionState::Lobby;
                     local_slot_ = 255;
-                    std::fprintf(stderr,
-                                 "[lobby][admission] party accepted; awaiting authenticated roster and settings\n");
+                    log_locked("[lobby][admission] party accepted; awaiting authenticated roster and settings\n");
                     local_online_save_ready_ = local_online_save_acknowledged_ = true;
                     session_save_generation_ = accepted.online_save_generation;
                     manifest_.session_save_hash = accepted.online_save_hash;
@@ -6271,8 +6314,7 @@ void DirectSession::pump_locked() {
                             room_view_.phase = room.phase;
                             input_delay_ = room.input_delay_frames;
                             if (changed)
-                                std::fprintf(
-                                    stderr,
+                                log_locked(
                                     "[lobby][room] synchronized generation=%llu mode=Rollback delay=%u window=%u\n",
                                     static_cast<unsigned long long>(room.generation), unsigned(input_delay_),
                                     unsigned(room.rules.rollback_window));
@@ -6288,7 +6330,7 @@ void DirectSession::pump_locked() {
                         using StartPhase = dkr::runtime::party_start::Phase;
                         if (!protocol::decode_start(message.body, start, reason)) {
                             party->status = "The host sent an invalid starting grid. Please recreate the lobby.";
-                            std::fprintf(stderr, "[lobby][start-reject] invalid descriptor: %s\n", reason.c_str());
+                            log_locked("[lobby][start-reject] invalid descriptor: %s\n", reason.c_str());
                         } else {
                             const auto& launch = start.descriptor;
                             const auto& roster = party->party.snapshot();
@@ -6313,8 +6355,7 @@ void DirectSession::pump_locked() {
                                 // silently start; the host retries and its bounded gate names failure.
                                 if (gate->hash != start.descriptor_hash) {
                                     gate->hash = start.descriptor_hash;
-                                    std::fprintf(
-                                        stderr,
+                                    log_locked(
                                         "[lobby][start-wait] roster=%llu room=%llu racers=%u/%u manifest=%u seed=%u\n",
                                         static_cast<unsigned long long>(roster.generation),
                                         static_cast<unsigned long long>(room_view_.generation), count,
@@ -6337,8 +6378,7 @@ void DirectSession::pump_locked() {
                                         gate->save_hash = manifest_.session_save_hash;
                                         gate->phase = StartPhase::Countdown;
                                         gate->deadline = std::chrono::steady_clock::now() + std::chrono::seconds(35);
-                                        std::fprintf(
-                                            stderr,
+                                        log_locked(
                                             "[lobby][start-prepare] starting grid verified; awaiting countdown and commit\n");
                                     }
                                     party->enqueue({host_sender_id_, watch::LinkKind::Start,
@@ -6370,8 +6410,8 @@ void DirectSession::pump_locked() {
                                         launch_requested_ = true;
                                         state_ = ConnectionState::Loading;
                                         party->status = status_ = "Preparing the online game";
-                                        std::fprintf(stderr, "[lobby][launch] accepted committed stage=1 racers=%u\n",
-                                                     unsigned(launch.player_count));
+                                        log_locked("[lobby][launch] accepted committed stage=1 racers=%u\n",
+                                                   unsigned(launch.player_count));
                                     }
                                 }
                             }
@@ -6408,7 +6448,7 @@ void DirectSession::pump_locked() {
                             party->status = status_ =
                                 "The host cancelled the synchronized start. Racers must ready again.";
                             state_ = ConnectionState::Lobby;
-                            std::fprintf(stderr, "[lobby][start-cancel] host cancelled\n");
+                            log_locked("[lobby][start-cancel] host cancelled\n");
                         }
                     } else if (message.kind == watch::LinkKind::Stop) {
                         {
@@ -6565,7 +6605,7 @@ void DirectSession::pump_locked() {
                     party->ready.clear();
                     party->advertised = {};
                     party->status = status_ = std::move(reason);
-                    std::fprintf(stderr, "[lobby][start-cancel] %s\n", status_.c_str());
+                    log_locked("[lobby][start-cancel] %s\n", status_.c_str());
                 };
                 if (party->start_requested) {
                     party->start_requested = false;
@@ -6644,7 +6684,7 @@ void DirectSession::pump_locked() {
                                     ++launch_countdown_generation_;
                                 party->advertised = {};
                                 party->status = status_ = "DKR-R Online starts in five seconds.";
-                                std::fprintf(stderr, "[lobby][countdown] five seconds; racers=%u\n", count);
+                                log_locked("[lobby][countdown] five seconds; racers=%u\n", count);
                             } else
                                 reason = "The lobby settings cannot start this race.";
                         } else if (reason.empty())
@@ -6697,8 +6737,8 @@ void DirectSession::pump_locked() {
                             local_slot_ = me && me->port ? *me->port : 255;
                             party->status = status_ =
                                 "Every racer accepted the launch. Preparing the synchronized game.";
-                            std::fprintf(stderr, "[lobby][start-release] all required racers acknowledged; racers=%u\n",
-                                         unsigned(gate->launch->player_count));
+                            log_locked("[lobby][start-release] all required racers acknowledged; racers=%u\n",
+                                       unsigned(gate->launch->player_count));
                         } else if (now >= gate->retry) {
                             // Control is reliable; retries also make validation insensitive to
                             // roster/Room delivery order and duplicate messages idempotent.
@@ -6751,8 +6791,7 @@ void DirectSession::pump_locked() {
                     queue(0, watch::LinkKind::Roster, watch::wire::roster(party->party.snapshot()));
                     const auto room_bytes = protocol::encode_lobby_state(room);
                     if (room_bytes.empty()) {
-                        std::fprintf(stderr,
-                                     "[lobby][wire-error] room serialization failed; no empty settings packet sent\n");
+                        log_locked("[lobby][wire-error] room serialization failed; no empty settings packet sent\n");
                         stop("The lobby settings could not be published. Please recreate the lobby.");
                         party->launch.reset();
                     } else
@@ -6762,15 +6801,15 @@ void DirectSession::pump_locked() {
                         const auto bytes =
                             protocol::encode_start({1, *party->launch, launch_descriptor_hash(*party->launch)});
                         if (bytes.empty()) {
-                            std::fprintf(stderr, "[lobby][wire-error] committed launch serialization failed\n");
+                            log_locked("[lobby][wire-error] committed launch serialization failed\n");
                             stop("The lobby start message could not be published. Please recreate the lobby.");
                             party->launch.reset();
                         } else {
                             queue(0, watch::LinkKind::Launch, bytes);
                             if (!party->launch_sent) {
                                 party->launch_sent = true;
-                                std::fprintf(stderr, "[lobby][launch] committed stage=1 racers=%u\n",
-                                             unsigned(party->launch->player_count));
+                                log_locked("[lobby][launch] committed stage=1 racers=%u\n",
+                                           unsigned(party->launch->player_count));
                             }
                         }
                     }
@@ -8066,14 +8105,13 @@ void DirectSession::handle_client_packet(const protocol::Datagram& packet) {
             compatibility_sync_offer_ = acknowledgement.compatibility_offer;
             state_ = ConnectionState::Failed;
             status_ = acknowledgement.message;
-            std::fprintf(stderr, "[online][admission] rejected reason=%s settings-sync-offered=%u\n", status_.c_str(),
-                         unsigned(compatibility_sync_offer_.has_value()));
+            log_locked("[online][admission] rejected reason=%s settings-sync-offered=%u\n", status_.c_str(),
+                       unsigned(compatibility_sync_offer_.has_value()));
             if (compatibility_sync_offer_)
-                std::fprintf(
-                    stderr, "[online][admission] host architecture=%s contract=%s; local architecture=%s contract=%s\n",
-                    compatibility_sync_offer_->architecture.c_str(),
-                    compatibility_sync_offer_->floating_point_mode.c_str(), manifest_.architecture.c_str(),
-                    manifest_.floating_point_mode.c_str());
+                log_locked("[online][admission] host architecture=%s contract=%s; local architecture=%s contract=%s\n",
+                           compatibility_sync_offer_->architecture.c_str(),
+                           compatibility_sync_offer_->floating_point_mode.c_str(), manifest_.architecture.c_str(),
+                           manifest_.floating_point_mode.c_str());
             std::fflush(stderr);
             return;
         }

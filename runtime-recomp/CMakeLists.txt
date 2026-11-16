@@ -2878,7 +2878,21 @@ if(BUILD_TESTING)
     target_include_directories(DKRWidescreenPolicyTests PRIVATE "${CMAKE_CURRENT_LIST_DIR}/src/game")
     add_test(NAME DKRWidescreenPolicy COMMAND DKRWidescreenPolicyTests)
 
+    add_executable(DKRSoundSettingsTests tests/sound_settings_tests.cpp)
+    target_compile_features(DKRSoundSettingsTests PRIVATE cxx_std_20)
+    target_include_directories(DKRSoundSettingsTests PRIVATE "${CMAKE_CURRENT_LIST_DIR}/src/game")
+    add_test(NAME DKRSoundSettings COMMAND DKRSoundSettingsTests)
+
     if(DKR_RUNTIME_BUILD_RT64 AND TARGET DKRPortGame)
+        # The settings file through the real LoadSettings and SaveSettings; the
+        # host preset does not compile runtime_ui.cpp, so this needs the game.
+        add_test(
+            NAME DKRSettingsRoundTrip
+            COMMAND
+                "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_LIST_DIR}/tests/settings_round_trip_tests.py"
+                "$<TARGET_FILE:DKRPortGame>" "${CMAKE_CURRENT_LIST_DIR}/../tests/fixtures/settings-round-trip"
+        )
+        set_tests_properties(DKRSettingsRoundTrip PROPERTIES LABELS "runtime" TIMEOUT 180)
         add_executable(DKRSplitScreenRT64Tests tests/split_screen_rt64_tests.cpp)
         target_include_directories(
             DKRSplitScreenRT64Tests
@@ -3397,6 +3411,11 @@ if(BUILD_TESTING)
     add_executable(DKRInputProfileTests tests/input_profile_tests.cpp src/game/runtime_input.cpp)
     target_include_directories(DKRInputProfileTests PRIVATE "${CMAKE_CURRENT_LIST_DIR}/src/game")
     target_compile_definitions(DKRInputProfileTests PRIVATE DKR_RUNTIME_HAS_RT64=0)
+    if(MSVC)
+        target_compile_options(DKRInputProfileTests PRIVATE /UNDEBUG)
+    else()
+        target_compile_options(DKRInputProfileTests PRIVATE -UNDEBUG)
+    endif()
     add_test(NAME DKRInputProfile COMMAND DKRInputProfileTests)
 
     add_executable(DKRModStoreHistoryTests tests/mod_store_history_tests.cpp)

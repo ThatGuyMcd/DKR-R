@@ -178,13 +178,13 @@ GameplayStateDigest canonical_gameplay_state_digest(const std::uint8_t* rdram, s
     GameplayStateDigest digest{};
     HashBuilder globals;
     globals.word(0x444B5247U); // DKRG
-    hash_word(globals, memory, revision_addresses::CurrentMapId);
+    hash_word(globals, memory, revision_addresses::current().CurrentMapId);
     for (const std::uint32_t address : authored_contract::global_words()) {
         hash_word(globals, memory, address);
     }
-    hash_byte(globals, memory, revision_addresses::RaceEndTimer + 0U);
-    hash_byte(globals, memory, revision_addresses::RaceEndTimer + 1U);
-    hash_byte(globals, memory, revision_addresses::RaceEndStage);
+    hash_byte(globals, memory, revision_addresses::current().RaceEndTimer + 0U);
+    hash_byte(globals, memory, revision_addresses::current().RaceEndTimer + 1U);
+    hash_byte(globals, memory, revision_addresses::current().RaceEndStage);
 
     HashBuilder roster;
     roster.word(0x444B5252U); // DKRR
@@ -194,10 +194,10 @@ GameplayStateDigest canonical_gameplay_state_digest(const std::uint8_t* rdram, s
 
     HashBuilder racers;
     racers.word(0x444B5253U); // DKRS
-    const std::uint32_t raw_count = memory.word(revision_addresses::NumberOfRacers).value_or(0U);
+    const std::uint32_t raw_count = memory.word(revision_addresses::current().NumberOfRacers).value_or(0U);
     const std::uint32_t racer_count = (std::min)(raw_count, static_cast<std::uint32_t>(kMaximumRacers));
     racers.word(racer_count);
-    const std::uint32_t racer_array = memory.word(revision_addresses::Racers).value_or(0U);
+    const std::uint32_t racer_array = memory.word(revision_addresses::current().Racers).value_or(0U);
     const bool array_valid = memory.pointer(racer_array, kMaximumRacers * sizeof(std::uint32_t));
     racers.byte(array_valid ? 1U : 0U);
     for (std::uint32_t index = 0U; array_valid && index < racer_count; ++index) {
@@ -227,25 +227,25 @@ std::uint64_t canonical_frontend_state_hash(const std::uint8_t* rdram, std::size
     const RdramView memory(rdram, rdram_size);
     HashBuilder hash;
     hash.word(0x444B5246U); // Hash schema "DKRF".
-    hash_word(hash, memory, revision_addresses::CurrentMenuId);
-    hash_word(hash, memory, revision_addresses::CurrentMapId);
-    hash_word(hash, memory, revision_addresses::TracksMode);
-    hash_word(hash, memory, revision_addresses::NumberOfActivePlayers);
-    hash_word(hash, memory, revision_addresses::NumberOfReadyPlayers);
-    hash_word(hash, memory, revision_addresses::ActiveMagicCodes);
+    hash_word(hash, memory, revision_addresses::current().CurrentMenuId);
+    hash_word(hash, memory, revision_addresses::current().CurrentMapId);
+    hash_word(hash, memory, revision_addresses::current().TracksMode);
+    hash_word(hash, memory, revision_addresses::current().NumberOfActivePlayers);
+    hash_word(hash, memory, revision_addresses::current().NumberOfReadyPlayers);
+    hash_word(hash, memory, revision_addresses::current().ActiveMagicCodes);
     // Frontend animation, music selection and RNG consumption are local
     // presentation concerns. Gameplay is reseeded before a race starts, so
     // including those values here would reject otherwise-identical peers.
     // The authored contract is the active roster, its ready state and the
     // characters assigned to the four virtual controller ports.
     for (std::size_t slot = 0U; slot < 4U; ++slot) {
-        hash_byte(hash, memory, revision_addresses::ActivePlayersArray + static_cast<std::uint32_t>(slot));
-        hash_byte(hash, memory, revision_addresses::CharacterSelectStatus + static_cast<std::uint32_t>(slot));
-        hash_byte(hash, memory, revision_addresses::PlayerIdMap + static_cast<std::uint32_t>(slot));
+        hash_byte(hash, memory, revision_addresses::current().ActivePlayersArray + static_cast<std::uint32_t>(slot));
+        hash_byte(hash, memory, revision_addresses::current().CharacterSelectStatus + static_cast<std::uint32_t>(slot));
+        hash_byte(hash, memory, revision_addresses::current().PlayerIdMap + static_cast<std::uint32_t>(slot));
     }
     for (std::size_t slot = 0U; slot < 8U; ++slot) {
-        hash_byte(hash, memory, revision_addresses::PlayersCharacterArray + static_cast<std::uint32_t>(slot));
-        hash_byte(hash, memory, revision_addresses::CharacterIdSlots + static_cast<std::uint32_t>(slot));
+        hash_byte(hash, memory, revision_addresses::current().PlayersCharacterArray + static_cast<std::uint32_t>(slot));
+        hash_byte(hash, memory, revision_addresses::current().CharacterIdSlots + static_cast<std::uint32_t>(slot));
     }
     return hash.finish();
 }

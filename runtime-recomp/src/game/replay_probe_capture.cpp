@@ -42,7 +42,7 @@ void after_quiescence(std::uint8_t* rdram, std::size_t memory_bytes) {
         auto code = requested_memory ? dkr::runtime::code_mods::retire_bootstrap_checkpoint({rdram, memory_bytes})
                                      : std::vector<std::uint8_t>{};
         RuntimeState diagnostic;
-        repair_float_register_pointer(parked_cpu);
+        dkr::runtime::repair_float_odd_pointer(parked_cpu);
         diagnostic.register_context(&parked_cpu);
         std::vector<std::uint8_t> fixture(diagnostic.snapshot_size());
         if (!diagnostic.capture(rdram, parked_revision, fixture)) {
@@ -215,12 +215,12 @@ bool dkr_private_replay_boot(std::uint8_t* rdram, recomp_context* context) {
     invoke(payload->titlescreen_controller_assign, 0);
     invoke(payload->input_assign_players);
     for (int p = 0; p < 4; ++p) {
-        MEM_B(p, address(a::CharacterSelectStatus)) = p < players ? 2 : 0;
-        MEM_B(p, address(a::ActivePlayersArray)) = p < players ? 1 : 0;
+        MEM_B(p, address(a::current().CharacterSelectStatus)) = p < players ? 2 : 0;
+        MEM_B(p, address(a::current().ActivePlayersArray)) = p < players ? 1 : 0;
     }
-    MEM_W(0, address(a::NumberOfReadyPlayers)) = players;
-    MEM_W(0, address(a::NumberOfActivePlayers)) = players;
-    MEM_W(0, address(a::TracksMode)) = 1;
+    MEM_W(0, address(a::current().NumberOfReadyPlayers)) = players;
+    MEM_W(0, address(a::current().NumberOfActivePlayers)) = players;
+    MEM_W(0, address(a::current().TracksMode)) = 1;
     invoke(payload->set_time_trial_enabled, 0);
     const bool rev_a = a::gSelectedRevision == dkr::runtime::rom::Revision::UsV80;
     const unsigned table =
@@ -229,7 +229,7 @@ bool dkr_private_replay_boot(std::uint8_t* rdram, recomp_context* context) {
     MEM_W(0, address(capture.select_data)) = capture.tables[table];
     constexpr int characters[]{9, 0, 1, 2}; // Four distinct retail characters.
     for (int p = 0; p < players; ++p)
-        MEM_B(p, address(a::CharacterIdSlots)) = characters[p];
+        MEM_B(p, address(a::current().CharacterIdSlots)) = characters[p];
     invoke(payload->charselect_assign_ai, players);
     invoke(payload->init_racer_headers);
     MEM_W(0, address(capture.game_players)) = players - 1;
@@ -246,10 +246,10 @@ void dkr_private_replay_capture(std::uint8_t* rdram, recomp_context* context) {
     // init_game and its initial input/save read. No race or scripted menu input.
     // Workers still join before after_quiescence copies this continuation.
     if (requested_memory) {
-        if (MEM_W(0, address(a::GameMode)) != -1 || capture_ticks != 0)
+        if (MEM_W(0, address(a::current().GameMode)) != -1 || capture_ticks != 0)
             throw std::runtime_error("Owned cold boot missed the initial INTRO boundary.");
-    } else if (MEM_W(0, address(a::GameMode)) != 0 || MEM_W(0, address(a::NumberOfRacers)) <= 0 ||
-               MEM_W(0, address(a::LevelLoadTimer)) != 0) {
+    } else if (MEM_W(0, address(a::current().GameMode)) != 0 || MEM_W(0, address(a::current().NumberOfRacers)) <= 0 ||
+               MEM_W(0, address(a::current().LevelLoadTimer)) != 0) {
         capture_ticks = 0;
         return;
     }
