@@ -106,6 +106,14 @@ void set_controller_binding(Action action, int source);
 void set_keyboard_binding(std::size_t player, Action action, int scancode);
 void set_controller_binding(std::size_t player, Action action, int source);
 void set_secondary_controller_binding(std::size_t player, Action action, int source);
+// Install a saved controller binding exactly as written. The set_* calls above
+// move a source off whichever action held it, which is right when a player
+// picks one. The shipped defaults deliberately share sources between actions
+// that are never live together (the right stick: C buttons and camera orbit;
+// the triggers: Z, Accelerate and the analogue pedals), so reloading a saved
+// table must not re-resolve them.
+void restore_controller_binding(std::size_t player, Action action, int source);
+void restore_secondary_controller_binding(std::size_t player, Action action, int source);
 void reset_defaults();
 void reset_defaults(std::size_t player);
 void copy_bindings(std::size_t source_player, std::size_t target_player);

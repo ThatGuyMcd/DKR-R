@@ -124,7 +124,7 @@
     "runtime-recomp/symbols/detail_symbols.toml": "9f92da38d4e85278325bda85a51d9fa58ec0469da321f49ffbeaac91de52cc83",
     "runtime-recomp/symbols/display_list_symbols.toml": "ca298334140d074d1e40da0c2d9b369b268c96266ed566ce742d668aacf29929",
     "runtime-recomp/symbols/enhancements_symbols.toml": "1288f1dd49ae5f5bbf966fa8fcba69f67bc8edfb8e1cd28cd5e7db52eec473ea",
-    "runtime-recomp/symbols/hud_layout_code_symbols.toml": "0b4b3b1ca57b14a58dced1a43d96b19308cf53dbe15258863566fd42a1d7756c",
+    "runtime-recomp/symbols/hud_layout_code_symbols.toml": "f7b4d30b95a13f4af29bd77436cf8710f58953158856dce8f2d9776a9b542ece",
     "runtime-recomp/symbols/hud_layout_symbols.toml": "4fe06836aa97df68351cdb1db39f3b7bac1d79954be25be0becf5ebb41e2f1ba",
     "runtime-recomp/symbols/legacy_world_symbols.toml": "0a3451072470727f05744fd2cf3d6e4b26dec7f5f425376ad7328ccc38934b9c",
     "runtime-recomp/symbols/memory_symbols.toml": "ed6319c6e1a51683cbb6cee4714749c42a54c512ea98bdeacc6911c404697098",

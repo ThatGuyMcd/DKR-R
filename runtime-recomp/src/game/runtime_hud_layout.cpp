@@ -454,18 +454,11 @@ extern "C" void dkr_hud_text_begin(std::uint8_t* rdram, recomp_context* ctx) {
     const bool v80 =
         dkr::runtime::revision_addresses::current().CurrentHud == dkr::runtime::revision_addresses::kUsV80.CurrentHud;
     // Return addresses of the text calls inside hud_main_time_trial and
-    // hud_finish_position: the function from the symbol table plus the call
-    // offset (v80 inserted eight bytes into the first function).
+    // hud_finish_position, generated from the function tables (v80 inserted
+    // eight bytes into the first function).
     const auto& code = dkr::runtime::hud_layout_code_symbols::for_revision(v80);
-    constexpr std::array<std::uint32_t, 6> kStopwatch77{0xDD4, 0xE10, 0xE4C, 0xEA4, 0xEDC, 0xF14};
-    constexpr std::array<std::uint32_t, 6> kStopwatch80{0xDDC, 0xE18, 0xE54, 0xEAC, 0xEE4, 0xF1C};
-    constexpr std::array<std::uint32_t, 3> kFinish{0x174, 0x250, 0x32C};
-    std::array<std::uint32_t, 6> stopwatch;
-    for (std::size_t i = 0; i < stopwatch.size(); ++i)
-        stopwatch[i] = code.time_trial + (v80 ? kStopwatch80 : kStopwatch77)[i];
-    std::array<std::uint32_t, 3> finish;
-    for (std::size_t i = 0; i < finish.size(); ++i)
-        finish[i] = code.finish_position + kFinish[i];
+    const auto& stopwatch = code.stopwatch;
+    const auto& finish = code.finish;
     std::optional<dkr::runtime::hud::Widget> w;
     if (std::find(stopwatch.begin(), stopwatch.end(), ra) != stopwatch.end())
         w = dkr::runtime::hud::Widget::Stopwatch;

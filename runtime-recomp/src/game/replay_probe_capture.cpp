@@ -42,7 +42,7 @@ void after_quiescence(std::uint8_t* rdram, std::size_t memory_bytes) {
         auto code = requested_memory ? dkr::runtime::code_mods::retire_bootstrap_checkpoint({rdram, memory_bytes})
                                      : std::vector<std::uint8_t>{};
         RuntimeState diagnostic;
-        repair_float_register_pointer(parked_cpu);
+        dkr::runtime::repair_float_odd_pointer(parked_cpu);
         diagnostic.register_context(&parked_cpu);
         std::vector<std::uint8_t> fixture(diagnostic.snapshot_size());
         if (!diagnostic.capture(rdram, parked_revision, fixture)) {
