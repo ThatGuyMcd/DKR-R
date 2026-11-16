@@ -33,6 +33,7 @@
 #include "runtime_code_mods.hpp"
 #include "mods/online_mod_runtime.hpp"
 #include "host_task_lifetime.hpp"
+#include "crash_reports/signal_safe_text.hpp"
 #include "launcher_recovery_policy.hpp"
 #if defined(DKR_EXPERIMENTAL_RACE_TEST)
 #include "replay_probe_capture.hpp"
@@ -89,6 +90,10 @@
 #include <cerrno>
 #if defined(__linux__) && !defined(__ANDROID__)
 #include <execinfo.h>
+#endif
+#if defined(__APPLE__)
+#include <execinfo.h>
+#include <pthread.h>
 #endif
 #include <unistd.h>
 #endif
@@ -367,10 +372,42 @@ void RuntimeSignalHandler(int signal_number, siginfo_t* information, void* conte
 #if defined(__linux__) && !defined(__ANDROID__)
     dkr::crash_reports::fatal_signal(signal_number, information, context);
 #else
-    (void)information;
     (void)context;
-    std::fprintf(stderr, "[boot][crash] signal=%d\n", signal_number);
-    std::fflush(stderr);
+    // Only async-signal-safe calls from here on: preformatted buffers and write(2).
+    // backtrace() and backtrace_symbols_fd() are the usual accepted exceptions on Apple.
+    namespace text = dkr::crash_reports::signal_safe;
+    char line[256];
+    constexpr std::size_t capacity = sizeof line - 1;
+    std::size_t size = text::append_text(line, 0, capacity, "[boot][crash] signal=");
+    size = text::append_number(line, size, capacity, static_cast<std::uint64_t>(signal_number), 10);
+    if (information != nullptr) {
+        size = text::append_text(line, size, capacity, " memory-address=0x");
+        size = text::append_number(line, size, capacity, reinterpret_cast<std::uintptr_t>(information->si_addr), 16);
+    }
+#if defined(__APPLE__)
+    std::uint64_t thread_id = 0;
+    pthread_threadid_np(nullptr, &thread_id);
+    size = text::append_text(line, size, capacity, " thread=");
+    size = text::append_number(line, size, capacity, thread_id, 10);
+    size = text::append_text(line, size, capacity, pthread_main_np() != 0 ? " main=1" : " main=0");
+    char name[32] = {};
+    if (pthread_getname_np(pthread_self(), name, sizeof name) == 0 && name[0] != '\0') {
+        size = text::append_text(line, size, capacity, " thread-name=");
+        size = text::append_name(line, size, capacity, name, sizeof name - 1);
+    }
+#endif
+    line[size++] = '\n';
+    (void)!write(STDERR_FILENO, line, size);
+#if defined(__APPLE__)
+    // Innermost frame first, signal handler frames included. Names only: no
+    // image paths, so nothing here carries a user name.
+    static const char header[] = "[boot][crash] backtrace follows (image, address, symbol + offset)\n";
+    (void)!write(STDERR_FILENO, header, sizeof header - 1);
+    void* frames[64];
+    const int count = backtrace(frames, 64);
+    if (count > 0)
+        backtrace_symbols_fd(frames, count, STDERR_FILENO);
+#endif
     _exit(128 + signal_number);
 #endif
 }
