@@ -843,6 +843,7 @@ class DelayedUdp final : public n::SessionTransport {
             base_ = n::make_udp_session_transport();
     }
     n::PeerAddress delayed;
+    unsigned direct_checkpoints = 0; // checkpoint-lane sends that went straight to `delayed`
     bool open(std::uint16_t p, std::string& e) override {
         return base_->open(p, e);
     }
@@ -859,6 +860,8 @@ class DelayedUdp final : public n::SessionTransport {
     n::DatagramSendStatus send_status(const n::PeerAddress& a, std::span<const std::uint8_t> b,
                                       n::TransportTrafficClass c, std::string& e) override {
         if (a == delayed) {
+            if (c == n::TransportTrafficClass::Checkpoint)
+                ++direct_checkpoints;
             if (queue_.size() >= 1024)
                 return n::DatagramSendStatus::WouldBlock;
             queue_.push_back({a, Bytes(b.begin(), b.end()), c, Clock::now() + 70ms});
@@ -1004,7 +1007,7 @@ void socket_tests(bool rtc) {
             check(cipher.size() == MaxInner, "full-size original datagram fixture");
             check(sockets[2]->send_status(addresses[1], cipher, n::TransportTrafficClass::Checkpoint, error) ==
                       n::DatagramSendStatus::Sent,
-                  "full-size checkpoint uses relay without shrinking native datagrams");
+                  "full-size checkpoint goes direct without shrinking native datagrams");
         }
         if (received == expected)
             break;
@@ -1016,6 +1019,10 @@ void socket_tests(bool rtc) {
     check(selected && received == expected, rtc ? "real WebRTC extra leg and all five lanes relay original packets"
                                                 : "real UDP proxy and all five lanes relay original packets");
     check(view(&keys[3]).forwarded > 0, "proxy forwarding recorded");
+    // Both ends sent a checkpoint-lane packet while the proxy route was selected:
+    // each must have taken the direct (delayed) path, not the relay.
+    check(delayed[1]->direct_checkpoints >= 1 && delayed[2]->direct_checkpoints >= 1,
+          "checkpoint lane stays on the direct route while a proxy route is selected");
     Context withdraw;
     withdraw.room = 901;
     withdraw.host = 1;
