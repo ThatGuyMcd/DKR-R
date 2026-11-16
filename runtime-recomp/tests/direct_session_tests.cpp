@@ -105,6 +105,88 @@ struct DirectSessionTestAccess {
                                                 protocol::MessageType::PreflightControlProbe, probe));
         }
     }
+    // The pump logs from under mutex_ (and PartyLink::mutex), where a blocked
+    // stderr would stall every session call. Lines are queued there and written
+    // by the lock's owner afterwards, in order, with the lock released.
+    DKR_TEST_NOINLINE static void session_log_queue() {
+        std::vector<std::string> written;
+        const auto install_sink = [&written](DirectSession& session) {
+            session.log_sink_ = [&written, &session](std::string_view line) {
+                bool held = false;
+                std::thread([&session, &held] {
+                    if (session.mutex_.try_lock())
+                        session.mutex_.unlock();
+                    else
+                        held = true;
+                }).join();
+                assert(!held && "a session log line was written while mutex_ was held");
+                written.emplace_back(line);
+            };
+        };
+        {
+            DirectSession session;
+            stop_worker(session);
+            install_sink(session);
+            {
+                std::scoped_lock lock(session.mutex_);
+                session.log_locked("[a] %d\n", 1);
+                session.log_locked("[b] %s\n", "two");
+                session.log_locked("[c] %zu\n", std::size_t(3));
+                assert(written.empty());
+            }
+            assert(written.empty());
+            session.flush_log();
+            assert((written == std::vector<std::string>{"[a] 1\n", "[b] two\n", "[c] 3\n"}));
+            session.flush_log();
+            assert(written.size() == 3U);
+
+            // A stuck flusher cannot grow the queue: the oldest lines are dropped and counted.
+            written.clear();
+            {
+                std::scoped_lock lock(session.mutex_);
+                for (std::size_t i = 0; i < dkr::runtime::session_log::Queue::Capacity + 10U; ++i)
+                    session.log_locked("[n] %zu\n", i);
+                assert(session.log_queue_.lines.size() == dkr::runtime::session_log::Queue::Capacity);
+                assert(session.log_queue_.dropped == 10U);
+            }
+            session.flush_log();
+            assert(written.size() == dkr::runtime::session_log::Queue::Capacity + 1U);
+            assert(written.front() == "[session][log] dropped 10 older lines\n");
+            assert(written[1] == "[n] 10\n");
+            assert(written.back() == "[n] " + std::to_string(dkr::runtime::session_log::Queue::Capacity + 9U) + "\n");
+
+            // Other modules the pump calls write through session_log: queued inside a Scope,
+            // direct (here: untouched) outside one.
+            written.clear();
+            {
+                std::scoped_lock lock(session.mutex_);
+                {
+                    dkr::runtime::session_log::Scope scope(&session.log_queue_);
+                    dkr::runtime::session_log::write("[scoped] %s\n", "queued");
+                }
+                assert(written.empty() && session.log_queue_.lines.size() == 1U);
+            }
+            session.flush_log();
+            assert((written == std::vector<std::string>{"[scoped] queued\n"}));
+
+            // disconnect() flushes what is queued once its lock is released.
+            written.clear();
+            {
+                std::scoped_lock lock(session.mutex_);
+                session.log_locked("[before-disconnect]\n");
+            }
+            session.disconnect("test");
+            assert(!written.empty() && written.front() == "[before-disconnect]\n");
+
+            // Destruction flushes anything still queued.
+            written.clear();
+            {
+                std::scoped_lock lock(session.mutex_);
+                session.log_locked("[before-destruction]\n");
+            }
+        }
+        assert(!written.empty() && written.back() == "[before-destruction]\n");
+    }
     DKR_TEST_NOINLINE static void owned_lane_isolation() {
         DirectSession receiver;
         stop_worker(receiver);
@@ -1287,6 +1369,7 @@ void pump_sessions(const std::array<dkr::runtime::netplay::DirectSession*, Count
 } // namespace
 
 int main() {
+    dkr::runtime::netplay::DirectSessionTestAccess::session_log_queue();
     dkr::runtime::netplay::DirectSessionTestAccess::owned_lane_isolation();
     dkr::runtime::netplay::DirectSessionTestAccess::experimental_admission_isolation();
     dkr::runtime::netplay::DirectSessionTestAccess::input_freshness_regression();

@@ -253,8 +253,8 @@ std::size_t ResolveElementIndex(std::uint8_t* rdram, std::uint32_t element, int&
     constexpr std::uint32_t kHudDataSize =
         static_cast<std::uint32_t>(dkr::runtime::hud::kElements.size()) * kElementSize;
     for (int player = 0; player < 4; ++player) {
-        const std::uint32_t base =
-            static_cast<std::uint32_t>(MEM_W(player * 4, RdramAddress(dkr::runtime::revision_addresses::PlayerHud)));
+        const std::uint32_t base = static_cast<std::uint32_t>(
+            MEM_W(player * 4, RdramAddress(dkr::runtime::revision_addresses::current().PlayerHud)));
         if (IsRdramPointer(base, kHudDataSize) && element >= base && element < base + kHudDataSize &&
             ((element - base) % kElementSize) == 0U) {
             owner = player;
@@ -262,7 +262,7 @@ std::size_t ResolveElementIndex(std::uint8_t* rdram, std::uint32_t element, int&
         }
     }
     const std::uint32_t base =
-        static_cast<std::uint32_t>(MEM_W(0, RdramAddress(dkr::runtime::revision_addresses::CurrentHud)));
+        static_cast<std::uint32_t>(MEM_W(0, RdramAddress(dkr::runtime::revision_addresses::current().CurrentHud)));
     if (IsRdramPointer(base, kHudDataSize) && element >= base && element < base + kHudDataSize &&
         ((element - base) % kElementSize) == 0U) {
         return (element - base) / kElementSize;
@@ -333,7 +333,7 @@ extern "C" void dkr_hud_asset_load_failed(std::uint8_t* rdram, recomp_context* c
         return;
     reported[sprite] = true;
     const bool v80 =
-        dkr::runtime::revision_addresses::CurrentHud == dkr::runtime::revision_addresses::kUsV80.CurrentHud;
+        dkr::runtime::revision_addresses::current().CurrentHud == dkr::runtime::revision_addresses::kUsV80.CurrentHud;
     const auto read = [&](std::uint32_t address) {
         return static_cast<std::uint32_t>(MEM_W(0, RdramAddress(address)));
     };
@@ -359,7 +359,7 @@ extern "C" void dkr_hud_asset_load_failed(std::uint8_t* rdram, recomp_context* c
 namespace {
 int CurrentHudOwner(std::uint8_t* rdram) {
     const auto current =
-        static_cast<std::uint32_t>(MEM_W(0, RdramAddress(dkr::runtime::revision_addresses::CurrentHud)));
+        static_cast<std::uint32_t>(MEM_W(0, RdramAddress(dkr::runtime::revision_addresses::current().CurrentHud)));
     int owner = -1;
     ResolveElementIndex(rdram, current, owner);
     return owner;
@@ -381,7 +381,7 @@ bool BeginWidget(std::uint8_t* rdram, std::uint32_t holder, dkr::runtime::hud::W
                              ? dkr::display::view_aspect(state.viewport_width, state.viewport_height)
                              : 4.0F / 3.0F;
     const bool v80 =
-        dkr::runtime::revision_addresses::CurrentHud == dkr::runtime::revision_addresses::kUsV80.CurrentHud;
+        dkr::runtime::revision_addresses::current().CurrentHud == dkr::runtime::revision_addresses::kUsV80.CurrentHud;
     const auto transform = dkr::runtime::hud::reference::transform(
         state.mode, aspect,
         dkr::runtime::hud::reference::anchor(element, widget, g_scenario, g_frame_layout == 1, g_general_pass_active,
@@ -452,20 +452,13 @@ extern "C" void dkr_hud_text_begin(std::uint8_t* rdram, recomp_context* ctx) {
         return;
     const auto ra = static_cast<std::uint32_t>(ctx->r31);
     const bool v80 =
-        dkr::runtime::revision_addresses::CurrentHud == dkr::runtime::revision_addresses::kUsV80.CurrentHud;
+        dkr::runtime::revision_addresses::current().CurrentHud == dkr::runtime::revision_addresses::kUsV80.CurrentHud;
     // Return addresses of the text calls inside hud_main_time_trial and
-    // hud_finish_position: the function from the symbol table plus the call
-    // offset (v80 inserted eight bytes into the first function).
+    // hud_finish_position, generated from the function tables (v80 inserted
+    // eight bytes into the first function).
     const auto& code = dkr::runtime::hud_layout_code_symbols::for_revision(v80);
-    constexpr std::array<std::uint32_t, 6> kStopwatch77{0xDD4, 0xE10, 0xE4C, 0xEA4, 0xEDC, 0xF14};
-    constexpr std::array<std::uint32_t, 6> kStopwatch80{0xDDC, 0xE18, 0xE54, 0xEAC, 0xEE4, 0xF1C};
-    constexpr std::array<std::uint32_t, 3> kFinish{0x174, 0x250, 0x32C};
-    std::array<std::uint32_t, 6> stopwatch;
-    for (std::size_t i = 0; i < stopwatch.size(); ++i)
-        stopwatch[i] = code.time_trial + (v80 ? kStopwatch80 : kStopwatch77)[i];
-    std::array<std::uint32_t, 3> finish;
-    for (std::size_t i = 0; i < finish.size(); ++i)
-        finish[i] = code.finish_position + kFinish[i];
+    const auto& stopwatch = code.stopwatch;
+    const auto& finish = code.finish;
     std::optional<dkr::runtime::hud::Widget> w;
     if (std::find(stopwatch.begin(), stopwatch.end(), ra) != stopwatch.end())
         w = dkr::runtime::hud::Widget::Stopwatch;
@@ -502,19 +495,20 @@ void dkr::runtime::hud::begin_authored_frame(std::uint8_t* rdram) {
     if (!rdram || !g_frame_state)
         return;
     const auto read = [&](std::uint32_t a) { return static_cast<int>(MEM_W(0, RdramAddress(a))); };
-    g_frame_layout = read(revision_addresses::HudNumPlayers);
-    const int players = static_cast<unsigned char>(MEM_B(0, RdramAddress(revision_addresses::NumberOfGameplayPlayers)));
-    const int session = read(revision_addresses::NumberOfActivePlayers);
+    g_frame_layout = read(revision_addresses::current().HudNumPlayers);
+    const int players =
+        static_cast<unsigned char>(MEM_B(0, RdramAddress(revision_addresses::current().NumberOfGameplayPlayers)));
+    const int session = read(revision_addresses::current().NumberOfActivePlayers);
     g_group_frame = hg::eligible(enhancements::modern_presentation_enabled(), std::max(players, session),
-                                 g_frame_layout, read(revision_addresses::ViewportLayout));
-    const auto level = static_cast<std::uint32_t>(read(revision_addresses::CurrentLevelHeader));
+                                 g_frame_layout, read(revision_addresses::current().ViewportLayout));
+    const auto level = static_cast<std::uint32_t>(read(revision_addresses::current().CurrentLevelHeader));
     if (!IsRdramPointer(level, 0x50)) {
         g_group_frame = false;
         return;
     }
     const int type = static_cast<unsigned char>(MEM_B(0x4C, RdramAddress(level)));
     // Addresses independently verified against both decomp symbol maps.
-    const bool v80 = revision_addresses::CurrentHud == revision_addresses::kUsV80.CurrentHud;
+    const bool v80 = revision_addresses::current().CurrentHud == revision_addresses::kUsV80.CurrentHud;
     const bool trial = MEM_B(0, RdramAddress(hud_layout_symbols::for_revision(v80).time_trial_enabled)) != 0;
     // Match retail hud_init_element / Golden Balloon's mode predicates.
     // Taj challenges use the race layout, not the boss-only banana relocation.
@@ -733,7 +727,8 @@ void dkr::runtime::hud::begin_element(std::uint8_t* rdram, recomp_context* conte
     const auto state = g_published.load(std::memory_order_acquire);
     if (!state)
         return;
-    const int layout = static_cast<int>(MEM_W(0, RdramAddress(dkr::runtime::revision_addresses::ViewportLayout)));
+    const int layout =
+        static_cast<int>(MEM_W(0, RdramAddress(dkr::runtime::revision_addresses::current().ViewportLayout)));
     const bool expanded_split = (layout == 2 || layout == 3) && dkr::runtime::enhancements::fit_to_window_enabled() &&
                                 static_cast<float>(state->viewport_width) > state->viewport_height * kOriginalHudAspect;
     const std::uint32_t raw = static_cast<std::uint32_t>(context->r7);
@@ -754,7 +749,7 @@ void dkr::runtime::hud::begin_element(std::uint8_t* rdram, recomp_context* conte
         g_widget_active = BeginWidget(rdram, g_widget_holder, *widget, owner, index, MEM_H(6, address) != 40,
                                       *widget == Widget::CourseArrows ? ReadFloat(rdram, address, 0x0C) : 0.0F);
         if (g_widget_active) {
-            const auto colour = RdramAddress(revision_addresses::HudColour);
+            const auto colour = RdramAddress(revision_addresses::current().HudColour);
             // Keep unit textures inside their widget scope instead of the later
             // anonymous batch. Do not alter the scaled-animation alpha sentinel.
             g_counter_colour_changed = counter_requires_immediate_texture_draw(
@@ -781,7 +776,7 @@ void dkr::runtime::hud::begin_element(std::uint8_t* rdram, recomp_context* conte
             // Only the unit-scale texture path is deferred. Scaled animation
             // frames already draw immediately: preserve their alpha sentinel
             // so retail selects the transparency-enabled scaled render mode.
-            const auto colour = RdramAddress(revision_addresses::HudColour);
+            const auto colour = RdramAddress(revision_addresses::current().HudColour);
             g_counter_colour_changed = counter_requires_immediate_texture_draw(
                 ReadFloat(rdram, address, 0x08), static_cast<std::uint32_t>(MEM_W(0, colour)));
             if (g_counter_colour_changed)
@@ -810,7 +805,7 @@ void dkr::runtime::hud::begin_element(std::uint8_t* rdram, recomp_context* conte
 
 void dkr::runtime::hud::begin_minimap(std::uint8_t* rdram, recomp_context* context) {
     if (rdram && context && g_group_frame) {
-        g_map_holder = revision_addresses::HudDisplayList;
+        g_map_holder = revision_addresses::current().HudDisplayList;
         g_map_widget_active = BeginWidget(rdram, g_map_holder, Widget::Minimap, 0);
     }
 }
@@ -820,7 +815,7 @@ void dkr::runtime::hud::end_element(std::uint8_t* rdram, recomp_context* context
     EndHudPassForHolder(rdram, g_counter_pass_holder, g_counter_pass_active);
     g_counter_pass_holder = 0U;
     if (rdram != nullptr && g_counter_colour_changed) {
-        MEM_W(0, RdramAddress(revision_addresses::HudColour)) = 0xFFFFFFFEU;
+        MEM_W(0, RdramAddress(revision_addresses::current().HudColour)) = 0xFFFFFFFEU;
     }
     g_counter_colour_changed = false;
     if (!g_saved_element.active || rdram == nullptr)
@@ -943,8 +938,8 @@ extern "C" void dkr_refresh_combined_accessories(std::uint8_t* rdram, recomp_con
         connected[port] = status.connected;
         rumble_capable[port] = status.rumble;
     }
-    const std::uint8_t retail = MEM_B(0, RdramAddress(dkr::runtime::revision_addresses::RumblePresent));
-    MEM_B(0, RdramAddress(dkr::runtime::revision_addresses::RumblePresent)) =
+    const std::uint8_t retail = MEM_B(0, RdramAddress(dkr::runtime::revision_addresses::current().RumblePresent));
+    MEM_B(0, RdramAddress(dkr::runtime::revision_addresses::current().RumblePresent)) =
         dkr::runtime::pak::policy::combined_rumble_mask(dkr::runtime::platform::rumble_enabled(), retail, assigned,
                                                         connected, rumble_capable);
 }

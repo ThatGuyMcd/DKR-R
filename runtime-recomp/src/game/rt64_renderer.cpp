@@ -844,8 +844,8 @@ void dkr::runtime::RT64Renderer::record_track_performance(std::uint8_t* snapshot
         return value;
     };
     const auto scene = presentation::task_scene_generation();
-    const auto map = read_word(revision_addresses::CurrentMapId);
-    const auto menu = read_word(revision_addresses::CurrentMenuId);
+    const auto map = read_word(revision_addresses::current().CurrentMapId);
+    const auto menu = read_word(revision_addresses::current().CurrentMenuId);
     auto& capture = track_capture_;
     if (capture.count == 0U || capture.scene != scene || capture.map != map || capture.menu != menu) {
         capture.count = 0U;

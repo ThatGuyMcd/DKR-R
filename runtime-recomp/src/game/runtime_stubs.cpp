@@ -45,13 +45,27 @@ gpr RdramAddress(std::uint32_t address) {
 }
 
 #if DKR_RUNTIME_HAS_RT64
-const std::uint32_t& kOrthoMatrixAddress = dkr::runtime::revision_addresses::OrthoMatrix;
-const std::uint32_t& kViewProjectionMatrixAddress = dkr::runtime::revision_addresses::ViewProjectionMatrix;
-const std::uint32_t& kTrackDisplayListAddress = dkr::runtime::revision_addresses::TrackDisplayList;
-const std::uint32_t& kVoidLateralXAddress = dkr::runtime::revision_addresses::VoidLateralX;
-const std::uint32_t& kVoidLateralZAddress = dkr::runtime::revision_addresses::VoidLateralZ;
-const std::uint32_t& kVoidCentreXAddress = dkr::runtime::revision_addresses::VoidCentreX;
-const std::uint32_t& kVoidCentreZAddress = dkr::runtime::revision_addresses::VoidCentreZ;
+std::uint32_t ortho_matrix_address() {
+    return dkr::runtime::revision_addresses::current().OrthoMatrix;
+}
+std::uint32_t view_projection_matrix_address() {
+    return dkr::runtime::revision_addresses::current().ViewProjectionMatrix;
+}
+std::uint32_t track_display_list_address() {
+    return dkr::runtime::revision_addresses::current().TrackDisplayList;
+}
+std::uint32_t void_lateral_x_address() {
+    return dkr::runtime::revision_addresses::current().VoidLateralX;
+}
+std::uint32_t void_lateral_z_address() {
+    return dkr::runtime::revision_addresses::current().VoidLateralZ;
+}
+std::uint32_t void_centre_x_address() {
+    return dkr::runtime::revision_addresses::current().VoidCentreX;
+}
+std::uint32_t void_centre_z_address() {
+    return dkr::runtime::revision_addresses::current().VoidCentreZ;
+}
 constexpr float kOriginalAspect = 4.0F / 3.0F;
 using dkr::runtime::presentation::PresentationMarkerKind;
 constexpr float kSplitViewportCoverQuantisation = 1024.0F;
@@ -122,9 +136,11 @@ bool PostraceFullViewScope(std::uint8_t* rdram, float cover) {
         return static_cast<std::int32_t>(MEM_W(0, RdramAddress(address)));
     };
     return dkr::runtime::presentation::postrace_full_view_scope(
-        dkr::runtime::enhancements::modern_presentation_enabled(), cover > 1.0001F, word(addresses::GameMode) == 0,
-        static_cast<std::int8_t>(MEM_B(0, RdramAddress(addresses::PostRaceViewport))),
-        word(addresses::NumberOfActivePlayers), word(addresses::TrophyRaceWorldId), word(addresses::ViewportLayout));
+        dkr::runtime::enhancements::modern_presentation_enabled(), cover > 1.0001F,
+        word(addresses::current().GameMode) == 0,
+        static_cast<std::int8_t>(MEM_B(0, RdramAddress(addresses::current().PostRaceViewport))),
+        word(addresses::current().NumberOfActivePlayers), word(addresses::current().TrophyRaceWorldId),
+        word(addresses::current().ViewportLayout));
 }
 
 bool AppendPresentationGroupCommand(std::uint8_t* rdram, gpr display_list_pointer, PresentationGroupMode mode,
@@ -147,7 +163,7 @@ void EnsureLevelSegmentInterpolation(std::uint8_t* rdram) {
         return;
     }
     g_level_segment_interpolation_active = AppendPresentationGroupCommand(
-        rdram, RdramAddress(kTrackDisplayListAddress), PresentationGroupMode::LevelSegment,
+        rdram, RdramAddress(track_display_list_address()), PresentationGroupMode::LevelSegment,
         g_level_segment_pending_key.token, g_level_segment_pending_key.variant);
 }
 
@@ -214,7 +230,7 @@ void ResumeNativeSequence(void* user, std::uint8_t* rdram, std::uint32_t player)
     next->r4 = RdramAddress(player);
     // __CSPPostNextSeqEvent, checked retail maps. MusicPlayer is the v77 value only in v77.
     const std::uint32_t entry =
-        dkr::runtime::audio_queue_symbols::for_revision(dkr::runtime::revision_addresses::MusicPlayer !=
+        dkr::runtime::audio_queue_symbols::for_revision(dkr::runtime::revision_addresses::current().MusicPlayer !=
                                                         dkr::runtime::revision_addresses::kUsV77.MusicPlayer)
             .post_next_seq_event;
     get_function(static_cast<std::int32_t>(entry))(rdram, next.get());
@@ -242,8 +258,9 @@ extern "C" std::uint32_t dkr_audio_event_queue_next(std::uint8_t* rdram, recomp_
     unsigned status = DKR_AUDIO_QUEUE_INVALID;
     std::uint32_t delay = DKR_AUDIO_FRAME_US;
     if (rdram && context)
-        delay = dkr_audio_queue_next(rdram, &guard, destination, dkr::runtime::revision_addresses::MusicPlayer,
-                                     ResumeNativeSequence, context, &status);
+        delay =
+            dkr_audio_queue_next(rdram, &guard, destination, dkr::runtime::revision_addresses::current().MusicPlayer,
+                                 ResumeNativeSequence, context, &status);
     if (status == DKR_AUDIO_QUEUE_INVALID || status == DKR_AUDIO_QUEUE_EMPTY) {
         // A corrupt caller must not overwrite the queue/pool while returning
         // a harmless idle event. Apply the same output-alias fence as the
@@ -272,14 +289,14 @@ extern "C" void dkr_runtime_scene_reset(std::uint8_t* rdram, recomp_context* con
     // end hook runs. Restore any in-place matrix edit while the outgoing scene
     // still owns the backing storage, then clear every host-only draw scope.
     if (rdram != nullptr && g_transition_cover_active) {
-        WriteRdramFloat(rdram, kOrthoMatrixAddress, g_saved_transition_x);
-        WriteRdramFloat(rdram, kOrthoMatrixAddress + 5U * sizeof(float), g_saved_transition_y);
+        WriteRdramFloat(rdram, ortho_matrix_address(), g_saved_transition_x);
+        WriteRdramFloat(rdram, ortho_matrix_address() + 5U * sizeof(float), g_saved_transition_y);
     }
     if (rdram != nullptr && g_sky_cover_active) {
         for (std::uint32_t row = 0U; row < 4U; ++row) {
             for (std::uint32_t column = 0U; column < 2U; ++column) {
                 const std::uint32_t slot = row * 2U + column;
-                const std::uint32_t address = kViewProjectionMatrixAddress + (row * 4U + column) * sizeof(float);
+                const std::uint32_t address = view_projection_matrix_address() + (row * 4U + column) * sizeof(float);
                 WriteRdramFloat(rdram, address, g_saved_sky_projection_columns[slot]);
             }
         }
@@ -348,7 +365,7 @@ extern "C" void dkr_postrace_wooden_frame_draw(std::uint8_t* rdram, recomp_conte
     // This hook is the actual menu_element_render(4) call in postrace_viewport,
     // after retail has updated the rectangle; asset-loading/stage gates have
     // already passed. Merely entering postrace_start cannot trigger this.
-    const auto viewport = RdramAddress(dkr::runtime::revision_addresses::ScreenViewports);
+    const auto viewport = RdramAddress(dkr::runtime::revision_addresses::current().ScreenViewports);
     g_postrace_frame_gate.observe_wood(MEM_W(0, viewport), MEM_W(4, viewport), MEM_W(8, viewport), MEM_W(12, viewport),
                                        dkr::runtime::presentation::kCanonicalViWidth,
                                        dkr::runtime::presentation::kCanonicalViHeight);
@@ -383,7 +400,7 @@ extern "C" void dkr_split_screen_viewport_fill(std::uint8_t* rdram, recomp_conte
     }
     AppendPresentationGroupCommand(
         rdram, context->r17, PresentationGroupMode::World,
-        std::uint16_t(MEM_W(0, RdramAddress(dkr::runtime::revision_addresses::ActiveCameraId)) & 3U), 0U,
+        std::uint16_t(MEM_W(0, RdramAddress(dkr::runtime::revision_addresses::current().ActiveCameraId)) & 3U), 0U,
         PresentationMarkerKind::CameraWorldBegin);
     const float cover = ExpandedCoverScale();
     const bool postrace = PostraceFullViewScope(rdram, cover);
@@ -395,14 +412,15 @@ extern "C" void dkr_split_screen_viewport_fill(std::uint8_t* rdram, recomp_conte
                                        PresentationMarkerKind::PostraceFullViewport);
     }
     const int viewport_layout =
-        static_cast<std::int32_t>(MEM_W(0, RdramAddress(dkr::runtime::revision_addresses::ViewportLayout)));
+        static_cast<std::int32_t>(MEM_W(0, RdramAddress(dkr::runtime::revision_addresses::current().ViewportLayout)));
     if (!dkr::runtime::enhancements::needs_split_world_aspect_adjust(
             dkr::runtime::enhancements::modern_presentation_enabled(), cover > 1.0001F, viewport_layout)) {
         return;
     }
 
     const auto camera = static_cast<std::uint16_t>(
-        static_cast<std::uint32_t>(MEM_W(0, RdramAddress(dkr::runtime::revision_addresses::ActiveCameraId))) & 3U);
+        static_cast<std::uint32_t>(MEM_W(0, RdramAddress(dkr::runtime::revision_addresses::current().ActiveCameraId))) &
+        3U);
     const auto quantised_cover =
         static_cast<std::uint16_t>(std::clamp(std::lround(cover * kSplitViewportCoverQuantisation), 0L, 0x3FFFL));
     const auto token = static_cast<std::uint16_t>((quantised_cover << 2U) | camera);
@@ -422,7 +440,7 @@ extern "C" void dkr_split_screen_world_aspect_begin(std::uint8_t* rdram, recomp_
         return;
     }
     const int viewport_layout =
-        static_cast<std::int32_t>(MEM_W(0, RdramAddress(dkr::runtime::revision_addresses::ViewportLayout)));
+        static_cast<std::int32_t>(MEM_W(0, RdramAddress(dkr::runtime::revision_addresses::current().ViewportLayout)));
     const auto policy = dkr::runtime::enhancements::world_aspect_policy(
         dkr::runtime::enhancements::modern_presentation_enabled(), ExpandedCoverScale() > 1.0001F, viewport_layout);
     if (policy == dkr::runtime::enhancements::WorldAspectPolicy::AdjustToHost) {
@@ -449,7 +467,7 @@ extern "C" void dkr_split_screen_world_aspect_end(std::uint8_t* rdram, recomp_co
     }
     AppendPresentationGroupCommand(
         rdram, context->r17, PresentationGroupMode::World,
-        std::uint16_t(MEM_W(0, RdramAddress(dkr::runtime::revision_addresses::ActiveCameraId)) & 3U), 0U,
+        std::uint16_t(MEM_W(0, RdramAddress(dkr::runtime::revision_addresses::current().ActiveCameraId)) & 3U), 0U,
         PresentationMarkerKind::CameraWorldEnd);
     // Close in reverse order. Dedicated markers restore the exact renderer
     // state they captured, so they cannot consume an unrelated group scope.
@@ -532,11 +550,11 @@ extern "C" void dkr_track_select_lens_flare_tint_begin(std::uint8_t* rdram, reco
 #if DKR_RUNTIME_HAS_RT64
     g_track_select_lens_flare_scope_active = false;
     if (rdram == nullptr || context == nullptr ||
-        !IsRdramWordAddress(dkr::runtime::revision_addresses::ScreenViewports, 0x2FU)) {
+        !IsRdramWordAddress(dkr::runtime::revision_addresses::current().ScreenViewports, 0x2FU)) {
         return;
     }
 
-    const auto viewport = RdramAddress(dkr::runtime::revision_addresses::ScreenViewports);
+    const auto viewport = RdramAddress(dkr::runtime::revision_addresses::current().ScreenViewports);
     const auto read_viewport = [rdram, viewport](const std::uint32_t offset) {
         return static_cast<std::int32_t>(MEM_W(offset, viewport));
     };
@@ -545,7 +563,8 @@ extern "C" void dkr_track_select_lens_flare_tint_begin(std::uint8_t* rdram, reco
     const bool fullscreen_preview = dkr::runtime::enhancements::is_presented_fullscreen_track_preview(
         read_viewport(0x00U), read_viewport(0x04U), read_viewport(0x08U), read_viewport(0x0CU), read_viewport(0x20U),
         read_viewport(0x24U), read_viewport(0x28U), read_viewport(0x2CU), width, height);
-    const bool tracks_menu_active = MEM_W(0, RdramAddress(dkr::runtime::revision_addresses::IsInTracksMenu)) != 0;
+    const bool tracks_menu_active =
+        MEM_W(0, RdramAddress(dkr::runtime::revision_addresses::current().IsInTracksMenu)) != 0;
     const bool postrace_lens = PostraceFullViewScope(rdram, ExpandedCoverScale());
     if (!postrace_lens && !dkr::runtime::enhancements::preserve_track_select_lens_flare_tint(
                               dkr::runtime::enhancements::modern_presentation_enabled(), ExpandedCoverScale() > 1.0001F,
@@ -698,8 +717,8 @@ extern "C" void dkr_shadow_interpolation_begin(std::uint8_t* rdram, recomp_conte
     // StaticAuto can otherwise match this frame's reused shadow heap against
     // unrelated vertices from the preceding authored frame.
     const PresentationGroupMode mode = PresentationGroupMode::DynamicShadow;
-    g_shadow_interpolation_active =
-        AppendPresentationGroupCommand(rdram, RdramAddress(kTrackDisplayListAddress), mode, key.token, key.batch_count);
+    g_shadow_interpolation_active = AppendPresentationGroupCommand(rdram, RdramAddress(track_display_list_address()),
+                                                                   mode, key.token, key.batch_count);
 #else
     (void)rdram;
     (void)context;
@@ -893,7 +912,7 @@ extern "C" void dkr_shadow_interpolation_end(std::uint8_t* rdram, recomp_context
     if (!g_shadow_interpolation_active) {
         return;
     }
-    AppendPresentationGroupCommand(rdram, RdramAddress(kTrackDisplayListAddress), PresentationGroupMode::World);
+    AppendPresentationGroupCommand(rdram, RdramAddress(track_display_list_address()), PresentationGroupMode::World);
     g_shadow_interpolation_active = false;
 #else
     (void)rdram;
@@ -916,8 +935,9 @@ extern "C" void dkr_surface_interpolation_begin(std::uint8_t* rdram, recomp_cont
     if (key.token == 0U) {
         return;
     }
-    g_surface_interpolation_active = AppendPresentationGroupCommand(
-        rdram, RdramAddress(kTrackDisplayListAddress), PresentationGroupMode::DynamicSurface, key.token, key.variant);
+    g_surface_interpolation_active =
+        AppendPresentationGroupCommand(rdram, RdramAddress(track_display_list_address()),
+                                       PresentationGroupMode::DynamicSurface, key.token, key.variant);
 #else
     (void)rdram;
     (void)context;
@@ -944,7 +964,7 @@ extern "C" void dkr_surface_interpolation_end(std::uint8_t* rdram, recomp_contex
     if (!g_surface_interpolation_active) {
         return;
     }
-    AppendPresentationGroupCommand(rdram, RdramAddress(kTrackDisplayListAddress), PresentationGroupMode::World);
+    AppendPresentationGroupCommand(rdram, RdramAddress(track_display_list_address()), PresentationGroupMode::World);
     g_surface_interpolation_active = false;
 #else
     (void)rdram;
@@ -957,7 +977,7 @@ extern "C" void dkr_level_segment_interpolation_end(std::uint8_t* rdram, recomp_
     if (!g_level_segment_interpolation_active) {
         return;
     }
-    AppendPresentationGroupCommand(rdram, RdramAddress(kTrackDisplayListAddress), PresentationGroupMode::World);
+    AppendPresentationGroupCommand(rdram, RdramAddress(track_display_list_address()), PresentationGroupMode::World);
     g_level_segment_interpolation_active = false;
 #else
     (void)rdram;
@@ -965,8 +985,8 @@ extern "C" void dkr_level_segment_interpolation_end(std::uint8_t* rdram, recomp_
 }
 
 extern "C" void dkr_title_intro_audio_tail(std::uint8_t* rdram, recomp_context* context) {
-    const std::uint32_t kTitleDemoIndexAddress = dkr::runtime::revision_addresses::TitleDemoIndex;
-    const std::uint32_t kTitleRevealTimerAddress = dkr::runtime::revision_addresses::TitleRevealTimer;
+    const std::uint32_t kTitleDemoIndexAddress = dkr::runtime::revision_addresses::current().TitleDemoIndex;
+    const std::uint32_t kTitleRevealTimerAddress = dkr::runtime::revision_addresses::current().TitleRevealTimer;
     const bool cinematic_complete = context->r2 != 0;
     const bool first_title_demo = MEM_W(0, RdramAddress(kTitleDemoIndexAddress)) == 0;
     const bool title_revealed = MEM_W(0, RdramAddress(kTitleRevealTimerAddress)) != 0;
@@ -995,10 +1015,10 @@ extern "C" void dkr_transition_cover_begin(std::uint8_t* rdram, recomp_context* 
         g_transition_interpolation_active =
             AppendPresentationGroupCommand(rdram, context->r16, PresentationGroupMode::StaticAuto);
     }
-    g_saved_transition_x = ReadRdramFloat(rdram, kOrthoMatrixAddress);
-    g_saved_transition_y = ReadRdramFloat(rdram, kOrthoMatrixAddress + 5U * sizeof(float));
-    WriteRdramFloat(rdram, kOrthoMatrixAddress, g_saved_transition_x * cover_zoom);
-    WriteRdramFloat(rdram, kOrthoMatrixAddress + 5U * sizeof(float), g_saved_transition_y * cover_zoom);
+    g_saved_transition_x = ReadRdramFloat(rdram, ortho_matrix_address());
+    g_saved_transition_y = ReadRdramFloat(rdram, ortho_matrix_address() + 5U * sizeof(float));
+    WriteRdramFloat(rdram, ortho_matrix_address(), g_saved_transition_x * cover_zoom);
+    WriteRdramFloat(rdram, ortho_matrix_address() + 5U * sizeof(float), g_saved_transition_y * cover_zoom);
     g_transition_cover_active = true;
 #else
     (void)rdram;
@@ -1011,7 +1031,7 @@ extern "C" void dkr_widen_gradient_sky(std::uint8_t* rdram, recomp_context* cont
         return;
     }
     const int viewport_layout =
-        static_cast<std::int32_t>(MEM_W(0, RdramAddress(dkr::runtime::revision_addresses::ViewportLayout)));
+        static_cast<std::int32_t>(MEM_W(0, RdramAddress(dkr::runtime::revision_addresses::current().ViewportLayout)));
     const float cover_scale = ExpandedCoverScale();
     const float horizontal_scale =
         dkr::runtime::enhancements::split_sky_horizontal_cover_scale(cover_scale, viewport_layout);
@@ -1046,8 +1066,8 @@ extern "C" void dkr_transition_cover_end(std::uint8_t* rdram, recomp_context*) {
     if (!g_transition_cover_active) {
         return;
     }
-    WriteRdramFloat(rdram, kOrthoMatrixAddress, g_saved_transition_x);
-    WriteRdramFloat(rdram, kOrthoMatrixAddress + 5U * sizeof(float), g_saved_transition_y);
+    WriteRdramFloat(rdram, ortho_matrix_address(), g_saved_transition_x);
+    WriteRdramFloat(rdram, ortho_matrix_address() + 5U * sizeof(float), g_saved_transition_y);
     g_transition_cover_active = false;
 #else
     (void)rdram;
@@ -1087,7 +1107,7 @@ extern "C" void dkr_three_player_panel_begin(std::uint8_t* rdram, recomp_context
     g_three_player_panel_active = false;
     if (rdram == nullptr || context == nullptr || !dkr::runtime::enhancements::modern_presentation_enabled() ||
         ExpandedCoverScale() <= 1.0001F ||
-        MEM_W(0, RdramAddress(dkr::runtime::revision_addresses::ViewportLayout)) != 2)
+        MEM_W(0, RdramAddress(dkr::runtime::revision_addresses::current().ViewportLayout)) != 2)
         return;
     // Token two extends the fill from centre to right. Token one is the
     // unrelated full-width clear; a rect-aspect override alone cannot affect
@@ -1197,7 +1217,7 @@ extern "C" void dkr_widen_void_primitive(std::uint8_t* rdram, recomp_context* co
         return;
     }
     const int viewport_layout =
-        static_cast<std::int32_t>(MEM_W(0, RdramAddress(dkr::runtime::revision_addresses::ViewportLayout)));
+        static_cast<std::int32_t>(MEM_W(0, RdramAddress(dkr::runtime::revision_addresses::current().ViewportLayout)));
     const float cover_scale =
         dkr::runtime::enhancements::split_sky_horizontal_cover_scale(ExpandedCoverScale(), viewport_layout);
     if (cover_scale <= 1.0001F) {
@@ -1215,10 +1235,10 @@ extern "C" void dkr_widen_void_primitive(std::uint8_t* rdram, recomp_context* co
     if (!IsRdramWordAddress(static_cast<std::uint32_t>(vertices), 36U)) {
         return;
     }
-    const float lateral_x = ReadRdramFloat(rdram, kVoidLateralXAddress);
-    const float lateral_z = ReadRdramFloat(rdram, kVoidLateralZAddress);
-    const float centre_x = ReadRdramFloat(rdram, kVoidCentreXAddress);
-    const float centre_z = ReadRdramFloat(rdram, kVoidCentreZAddress);
+    const float lateral_x = ReadRdramFloat(rdram, void_lateral_x_address());
+    const float lateral_z = ReadRdramFloat(rdram, void_lateral_z_address());
+    const float centre_x = ReadRdramFloat(rdram, void_centre_x_address());
+    const float centre_z = ReadRdramFloat(rdram, void_centre_z_address());
     const float basis_length_sq = lateral_x * lateral_x + lateral_z * lateral_z;
     if (!std::isfinite(lateral_x) || !std::isfinite(lateral_z) || !std::isfinite(centre_x) ||
         !std::isfinite(centre_z) || basis_length_sq < 0.5F || basis_length_sq > 1.5F) {
@@ -1283,7 +1303,7 @@ extern "C" void dkr_skybox_cover_begin(std::uint8_t* rdram, recomp_context*) {
     for (std::uint32_t row = 0; row < 4U; ++row) {
         for (std::uint32_t column = 0; column < 2U; ++column) {
             const std::uint32_t slot = row * 2U + column;
-            const std::uint32_t address = kViewProjectionMatrixAddress + (row * 4U + column) * sizeof(float);
+            const std::uint32_t address = view_projection_matrix_address() + (row * 4U + column) * sizeof(float);
             g_saved_sky_projection_columns[slot] = ReadRdramFloat(rdram, address);
             WriteRdramFloat(rdram, address,
                             g_saved_sky_projection_columns[slot] *
@@ -1304,7 +1324,7 @@ extern "C" void dkr_skybox_cover_end(std::uint8_t* rdram, recomp_context*) {
     for (std::uint32_t row = 0; row < 4U; ++row) {
         for (std::uint32_t column = 0; column < 2U; ++column) {
             const std::uint32_t slot = row * 2U + column;
-            const std::uint32_t address = kViewProjectionMatrixAddress + (row * 4U + column) * sizeof(float);
+            const std::uint32_t address = view_projection_matrix_address() + (row * 4U + column) * sizeof(float);
             WriteRdramFloat(rdram, address, g_saved_sky_projection_columns[slot]);
         }
     }

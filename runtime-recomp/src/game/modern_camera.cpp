@@ -134,7 +134,7 @@ void reset_guest_state_if_needed() {
 }
 
 bool camera_slot(std::uint32_t camera, std::uint32_t& slot) {
-    const std::uint32_t base = dkr::runtime::revision_addresses::Cameras;
+    const std::uint32_t base = dkr::runtime::revision_addresses::current().Cameras;
     if (camera < base || (camera - base) % kCameraSize != 0U)
         return false;
     slot = (camera - base) / kCameraSize;
@@ -581,8 +581,8 @@ bool dkr::runtime::modern_camera::begin(std::uint8_t* rdram, recomp_context* con
     if (player_index > 3U)
         return false;
     // sPlayerID: the controller port driving this player (Adventure Two swaps).
-    const std::uint32_t port =
-        MEM_BU(static_cast<std::int32_t>(player_index), dkr_cam_addr(dkr::runtime::revision_addresses::PlayerIdMap));
+    const std::uint32_t port = MEM_BU(static_cast<std::int32_t>(player_index),
+                                      dkr_cam_addr(dkr::runtime::revision_addresses::current().PlayerIdMap));
     if (port >= kPorts)
         return false;
     Player& player = g_players[port];
@@ -605,7 +605,7 @@ bool dkr::runtime::modern_camera::begin(std::uint8_t* rdram, recomp_context* con
         // A new level has just set its own FOV; within a level, ours may be
         // the one in place, so keep the level's.
         if (scene.layout == 0U && (!g_fov.owned || g_fov.header != scene.header)) {
-            g_fov.level = read_float(rdram, dkr::runtime::revision_addresses::CurrentCameraFov);
+            g_fov.level = read_float(rdram, dkr::runtime::revision_addresses::current().CurrentCameraFov);
             g_fov.header = scene.header;
             g_fov.owned = false;
         }
@@ -633,7 +633,7 @@ bool dkr::runtime::modern_camera::begin(std::uint8_t* rdram, recomp_context* con
         }
         write_pose(rdram, scene.camera, player.pose, player.roll);
         if (scene.layout == 0U && std::isfinite(g_fov.level) && g_fov.level > 0.0F) {
-            const float current = read_float(rdram, dkr::runtime::revision_addresses::CurrentCameraFov);
+            const float current = read_float(rdram, dkr::runtime::revision_addresses::current().CurrentCameraFov);
             if (!(std::fabs(current - player.fov) < 0.01F))
                 set_fov(rdram, context, player.fov);
             g_fov.owned = true;

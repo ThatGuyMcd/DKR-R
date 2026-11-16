@@ -36,9 +36,9 @@ class CreditsSky {
     void begin(const RT64::State& state, float aspect, bool enabled) {
         begin_ = end_ = 0;
         if (!enabled || !std::isfinite(aspect) || aspect <= 4.F / 3.F ||
-            word(state.RDRAM, revision_addresses::ViewportLayout) != 0)
+            word(state.RDRAM, revision_addresses::current().ViewportLayout) != 0)
             return;
-        const bool v80 = revision_addresses::CurrentMenuId == revision_addresses::kUsV80.CurrentMenuId;
+        const bool v80 = revision_addresses::current().CurrentMenuId == revision_addresses::kUsV80.CurrentMenuId;
         const auto& symbols = credits_sky_symbols::for_revision(v80);
         if (!word(state.RDRAM, symbols.data))
             return; // gVoidData: allocation still alive.
@@ -55,10 +55,10 @@ class CreditsSky {
             (tail - first) % 10)
             return;
         const auto value = [&](std::uint32_t p) { return std::bit_cast<float>(word(state.RDRAM, p)); };
-        lateral_x_ = value(revision_addresses::VoidLateralX);
-        lateral_z_ = value(revision_addresses::VoidLateralZ);
-        centre_x_ = value(revision_addresses::VoidCentreX);
-        centre_z_ = value(revision_addresses::VoidCentreZ);
+        lateral_x_ = value(revision_addresses::current().VoidLateralX);
+        lateral_z_ = value(revision_addresses::current().VoidLateralZ);
+        centre_x_ = value(revision_addresses::current().VoidCentreX);
+        centre_z_ = value(revision_addresses::current().VoidCentreZ);
         length_ = lateral_x_ * lateral_x_ + lateral_z_ * lateral_z_;
         if (!std::isfinite(length_) || length_ < 0.5F || length_ > 1.5F || !std::isfinite(centre_x_) ||
             !std::isfinite(centre_z_))

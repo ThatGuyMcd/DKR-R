@@ -46,12 +46,12 @@ gpr guest(std::uint32_t address) {
 
 void set_song(std::uint8_t current, std::uint8_t next, std::int32_t state, std::int16_t bpm, std::uint8_t base = 127U) {
     std::uint8_t* rdram = g_memory.data();
-    MEM_W(0, guest(addresses::MusicPlayer)) = static_cast<std::int32_t>(kPlayer);
+    MEM_W(0, guest(addresses::current().MusicPlayer)) = static_cast<std::int32_t>(kPlayer);
     MEM_W(0x2C, guest(kPlayer)) = state;
-    MEM_BU(0, guest(addresses::CurrentSequence)) = current;
-    MEM_BU(0, guest(addresses::MusicNextSequence)) = next;
-    MEM_BU(0, guest(addresses::MusicBaseVolume)) = base;
-    MEM_H(0, guest(addresses::MusicTempo)) = bpm;
+    MEM_BU(0, guest(addresses::current().CurrentSequence)) = current;
+    MEM_BU(0, guest(addresses::current().MusicNextSequence)) = next;
+    MEM_BU(0, guest(addresses::current().MusicBaseVolume)) = base;
+    MEM_H(0, guest(addresses::current().MusicTempo)) = bpm;
 }
 
 float block_peak(std::size_t frames = 512U) {
@@ -233,15 +233,15 @@ int main() {
         constexpr std::uint32_t kRows = 0x80304000U;
         constexpr std::uint32_t kBuffer = 0x80310000U;
         constexpr std::uint32_t kPending = 0x80305000U;
-        MEM_W(0, guest(addresses::MusicPlayer)) = static_cast<std::int32_t>(kPlayer);
+        MEM_W(0, guest(addresses::current().MusicPlayer)) = static_cast<std::int32_t>(kPlayer);
         MEM_W(0x20, guest(kPlayer)) = static_cast<std::int32_t>(kBank);
         MEM_H(0, guest(kBank)) = 128;
         for (std::int32_t i = 0; i < 128; ++i) {
             MEM_W(0x0C + i * 4, guest(kBank)) = static_cast<std::int32_t>(0x80400000U + i * 16);
         }
-        MEM_W(0, guest(addresses::SequenceTable)) = static_cast<std::int32_t>(kSeqFile);
-        MEM_W(0, guest(addresses::SequenceLengths)) = static_cast<std::int32_t>(kLengths);
-        MEM_W(0, guest(addresses::SequenceSoundTable)) = static_cast<std::int32_t>(kRows);
+        MEM_W(0, guest(addresses::current().SequenceTable)) = static_cast<std::int32_t>(kSeqFile);
+        MEM_W(0, guest(addresses::current().SequenceLengths)) = static_cast<std::int32_t>(kLengths);
+        MEM_W(0, guest(addresses::current().SequenceSoundTable)) = static_cast<std::int32_t>(kRows);
         MEM_H(2, guest(kSeqFile)) = 66;
         for (std::int32_t i = 0; i < 66; ++i) {
             MEM_W(i * 4, guest(kLengths)) = i == 30 ? 13032 : 4000;

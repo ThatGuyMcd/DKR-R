@@ -13,8 +13,8 @@ using FlowFractions = std::array<std::array<float, 2>, 256>;
 inline FlowFractions capture_flow_fractions(const RT64::State& state) {
     FlowFractions result{};
     enhanced::Memory m(std::span<const std::uint8_t>(state.RDRAM, 0x800000));
-    const auto list = m.u32(revision_addresses::ObjectList);
-    const auto count = m.u32(revision_addresses::ObjectCount);
+    const auto list = m.u32(revision_addresses::current().ObjectList);
+    const auto count = m.u32(revision_addresses::current().ObjectCount);
     if (!list || count > 4096 || !m.valid(list, std::uint64_t(count) * 4))
         return result;
     for (std::uint32_t i = 0; i < count; ++i) {

@@ -333,6 +333,7 @@ add_library(
     src/game/netplay/gekko_direct_adapter.cpp
     src/game/netplay/lan_discovery.cpp
     src/game/netplay/netplay_lobby.cpp
+    src/game/netplay/netplay_manifest_builder.cpp
     src/game/netplay/online_input_broker.cpp
     src/game/netplay/netplay_protocol.cpp
     src/game/netplay/netplay_timeline.cpp
@@ -2385,6 +2386,11 @@ if(BUILD_TESTING)
     add_executable(DKRNetplayCoreTests tests/netplay_core_tests.cpp)
     target_link_libraries(DKRNetplayCoreTests PRIVATE DKRNetplayCore)
     add_test(NAME DKRNetplayCore COMMAND DKRNetplayCoreTests)
+
+    add_executable(DKRNetplayManifestBuilderTests tests/netplay_manifest_builder_tests.cpp)
+    target_include_directories(DKRNetplayManifestBuilderTests PRIVATE "${CMAKE_CURRENT_LIST_DIR}/src/game")
+    target_link_libraries(DKRNetplayManifestBuilderTests PRIVATE DKRNetplayCore)
+    add_test(NAME DKRNetplayManifestBuilder COMMAND DKRNetplayManifestBuilderTests)
 
     add_executable(DKRExperimentalConfirmedOutputTests tests/experimental_confirmed_output_tests.cpp)
     find_package(Threads REQUIRED)

@@ -527,10 +527,10 @@ extern "C" void dkr_custom_tracks_auto_boot(std::uint8_t* rdram, recomp_context*
     // The character-mod adapter shares charselect_assign_ai's native commit
     // boundary and expects every active player to have confirmed a character.
     for (int player = 0; player < 4; ++player) {
-        MEM_B(player, rdram_address(addresses::CharacterSelectStatus)) = player == 0 ? 2 : 0;
+        MEM_B(player, rdram_address(addresses::current().CharacterSelectStatus)) = player == 0 ? 2 : 0;
     }
-    MEM_W(0, rdram_address(addresses::NumberOfReadyPlayers)) = 1;
-    MEM_W(0, rdram_address(addresses::TracksMode)) = 1;
+    MEM_W(0, rdram_address(addresses::current().NumberOfReadyPlayers)) = 1;
+    MEM_W(0, rdram_address(addresses::current().TracksMode)) = 1;
     invoke(payload->set_time_trial_enabled, 0);
 
     // charselect_assign_ai needs the unlock-dependent table normally selected
@@ -542,12 +542,12 @@ extern "C" void dkr_custom_tracks_auto_boot(std::uint8_t* rdram, recomp_context*
     const auto& capture = dkr::runtime::capture_symbols::for_revision(rev_a);
     const unsigned table = unsigned(drumstick) | (unsigned(tt) << 1);
     write_word(rdram, capture.select_data, static_cast<std::int32_t>(capture.tables[table]));
-    MEM_B(0, rdram_address(addresses::CharacterIdSlots)) = kCharacterDiddy;
+    MEM_B(0, rdram_address(addresses::current().CharacterIdSlots)) = kCharacterDiddy;
     invoke(payload->charselect_assign_ai, 1);
     invoke(payload->init_racer_headers);
     std::fprintf(stderr, "[track-lab] single-player roster:");
     for (int racer = 0; racer < 8; ++racer) {
-        std::fprintf(stderr, " %d", int(MEM_B(racer, rdram_address(addresses::CharacterIdSlots))));
+        std::fprintf(stderr, " %d", int(MEM_B(racer, rdram_address(addresses::current().CharacterIdSlots))));
     }
     std::fprintf(stderr, "\n");
     // mode_menu's direct-level result uses players minus one.
@@ -859,7 +859,7 @@ extern "C" void dkr_custom_tracks_prepare_vehicle(std::uint8_t* rdram, recomp_co
     const auto players_minus_one = static_cast<std::int32_t>(context->r5);
     const auto armed = dkr::runtime::custom_tracks::track_override();
     if (armed < 0 || level != armed || players_minus_one < 0 || players_minus_one >= 4 ||
-        read_word(rdram, addresses::GameMode) != 0) { // GAMEMODE_INGAME
+        read_word(rdram, addresses::current().GameMode) != 0) { // GAMEMODE_INGAME
         return;
     }
     const auto* payload = dkr::runtime::active_payload();
@@ -882,7 +882,7 @@ extern "C" void dkr_custom_tracks_prepare_vehicle(std::uint8_t* rdram, recomp_co
         selected = (allowed & 1U) ? 0 : (allowed & 2U) ? 1 : (allowed & 4U) ? 2 : 0;
     }
     for (int player = 0; player <= players_minus_one; ++player) {
-        MEM_B(player, rdram_address(addresses::PlayerSelectVehicle)) = selected;
+        MEM_B(player, rdram_address(addresses::current().PlayerSelectVehicle)) = selected;
     }
     guest.reset(*context);
     call.r4 = vehicle;

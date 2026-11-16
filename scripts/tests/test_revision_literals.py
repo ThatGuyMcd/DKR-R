@@ -303,17 +303,31 @@ class MovedLiteralTests(unittest.TestCase):
                 if old is not None:
                     self.assertNotIn(f"0x{old:08x}", source, name)
 
-    @unittest.skipUnless(DECOMP.is_dir(), "extern/dkr-decomp is not checked out; call site check skipped")
-    def test_hud_call_sites_are_the_function_plus_the_recorded_offset(self):
+    def test_hud_call_sites_are_function_plus_offset_and_resolve_to_the_old_addresses(self):
+        request = requests()["hud_layout_code_symbols.hpp"]
+        self.assertEqual(request.table, "functions")
+        by_name = {site.name: site for site in request.sites}
+        functions = {revision: gen.function_table(revision, ROOT) for revision in gen.REVISIONS}
         source = (ROOT / GAME / "runtime_hud_layout.cpp").read_text(encoding="utf-8")
+        checked = 0
         for symbol, revisions in RECORDED_CALL_SITES.items():
             for revision, sites in revisions.items():
-                base = gen.table("decomp", revision, ROOT)[symbol]
+                base = functions[revision][symbol]
                 self.assertEqual(len(base), 1, symbol)
-                for offset, absolute in sites:
-                    self.assertEqual(base[0] + offset, absolute, f"{symbol}+{offset:#x} v{revision}")
-                    self.assertIn(f"0x{offset:X}", source, f"{symbol}+{offset:#x}")
+                prefix = "stopwatch" if symbol == "hud_main_time_trial" else "finish"
+                for index, (offset, absolute) in enumerate(sites):
+                    self.assertEqual(base[0][0] + offset, absolute, f"{symbol}+{offset:#x} v{revision}")
+                    # Per-revision offsets get a per-revision site; shared ones are one site for both.
+                    site = by_name.get(f"{prefix}{index}_{revision}") or by_name[f"{prefix}{index}"]
+                    self.assertEqual((site.function, site.offset), (symbol, offset))
+                    self.assertIn(revision, site.revisions)
                     self.assertNotIn(f"0x{absolute:08X}", source.upper().replace("0X", "0x"), f"{absolute:#x}")
+                    checked += 1
+        self.assertEqual(checked, 18)
+        self.assertEqual(len(request.sites), 6 + 6 + 3)
+        # The offsets live only in the request now, not in the source.
+        for offset in (0xDD4, 0xDDC, 0x174, 0x32C):
+            self.assertNotIn(f"0x{offset:X}", source)
 
 
 if __name__ == "__main__":

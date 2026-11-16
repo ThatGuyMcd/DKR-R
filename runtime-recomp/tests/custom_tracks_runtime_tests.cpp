@@ -46,9 +46,9 @@ bool rev80() {
 // commit, wrong revision table, uninitialised players or a clobbered context.
 void controller(std::uint8_t* rdram, recomp_context* ctx) {
     assert(stage++ == 0 && ctx->r4 == 0);
-    MEM_W(0, addr(addresses::NumberOfActivePlayers)) = 1;
+    MEM_W(0, addr(addresses::current().NumberOfActivePlayers)) = 1;
     for (int i = 0; i < 4; ++i)
-        MEM_B(i, addr(addresses::ActivePlayersArray)) = i == 0;
+        MEM_B(i, addr(addresses::current().ActivePlayersArray)) = i == 0;
     ctx->r4 = 999;
 }
 void inputs(std::uint8_t*, recomp_context*) {
@@ -56,7 +56,7 @@ void inputs(std::uint8_t*, recomp_context*) {
 }
 void time_trial(std::uint8_t* rdram, recomp_context* ctx) {
     assert(stage++ == 2 && ctx->r4 == 0);
-    assert(MEM_W(0, addr(addresses::TracksMode)) == 1);
+    assert(MEM_W(0, addr(addresses::current().TracksMode)) == 1);
 }
 void drumstick(std::uint8_t*, recomp_context* ctx) {
     ctx->r2 = unlocks & 1;
@@ -70,19 +70,19 @@ void ai(std::uint8_t* rdram, recomp_context* ctx) {
     const std::uint32_t tables80[] = {0x800E0350, 0x800E03C0, 0x800E0440, 0x800E04C0};
     assert(static_cast<std::uint32_t>(MEM_W(0, addr(rev80() ? 0x8012696C : 0x801263CC))) ==
            (rev80() ? tables80 : tables77)[unlocks]);
-    assert(MEM_W(0, addr(addresses::NumberOfActivePlayers)) == 1);
-    assert(MEM_W(0, addr(addresses::NumberOfReadyPlayers)) == 1);
+    assert(MEM_W(0, addr(addresses::current().NumberOfActivePlayers)) == 1);
+    assert(MEM_W(0, addr(addresses::current().NumberOfReadyPlayers)) == 1);
     for (int i = 0; i < 4; ++i)
-        assert(MEM_B(i, addr(addresses::CharacterSelectStatus)) == (i == 0 ? 2 : 0));
-    assert(MEM_B(0, addr(addresses::CharacterIdSlots)) == 9);
+        assert(MEM_B(i, addr(addresses::current().CharacterSelectStatus)) == (i == 0 ? 2 : 0));
+    assert(MEM_B(0, addr(addresses::current().CharacterIdSlots)) == 9);
     for (int i = 1; i < 8; ++i)
-        MEM_B(i, addr(addresses::CharacterIdSlots)) = i - 1;
+        MEM_B(i, addr(addresses::current().CharacterIdSlots)) = i - 1;
     ctx->r2 = 999;
 }
 void headers(std::uint8_t* rdram, recomp_context*) {
     assert(stage++ == 4);
     for (int i = 0; i < 8; ++i)
-        committed[i] = MEM_B(i, addr(addresses::CharacterIdSlots));
+        committed[i] = MEM_B(i, addr(addresses::current().CharacterIdSlots));
 }
 void default_vehicle(std::uint8_t*, recomp_context* ctx) {
     assert(ctx->r4 == static_cast<gpr>(tracks::track_override()));
@@ -179,14 +179,14 @@ int main() {
                 assert(committed[i] == i - 1);
             assert(MEM_W(0, addr(rev80() ? 0x80123A80 : 0x80123500)) == 0);
             // This is a HUD byte, not gGameNumPlayers; never overwrite it.
-            assert(static_cast<unsigned char>(MEM_B(0, addr(addresses::NumberOfGameplayPlayers))) == 0xA5);
+            assert(static_cast<unsigned char>(MEM_B(0, addr(addresses::current().NumberOfGameplayPlayers))) == 0xA5);
             const auto booted = memory;
             dkr_custom_tracks_auto_boot(rdram, &context);
             assert(memory == booted && stage == 5);
         }
         // Cars, hovercraft and planes replace stale selections on every load,
         // including restarts and multiplayer tests; the roster stays intact.
-        MEM_W(0, addr(addresses::GameMode)) = 0;
+        MEM_W(0, addr(addresses::current().GameMode)) = 0;
         for (vehicle = 0; vehicle < 3; ++vehicle) {
             for (int players = 1; players <= 4; ++players) {
                 recomp_context context{};
@@ -197,12 +197,12 @@ int main() {
                 auto expected = context;
                 expected.r7 = vehicle;
                 for (int i = 0; i < 4; ++i)
-                    MEM_B(i, addr(addresses::PlayerSelectVehicle)) = 99;
+                    MEM_B(i, addr(addresses::current().PlayerSelectVehicle)) = 99;
                 dkr_custom_tracks_prepare_vehicle(rdram, &context);
                 assert(std::memcmp(&context, &expected, sizeof(context)) == 0);
                 assert(saved_vehicle == vehicle);
                 for (int i = 0; i < 4; ++i)
-                    assert(MEM_B(i, addr(addresses::PlayerSelectVehicle)) == (i < players ? vehicle : 99));
+                    assert(MEM_B(i, addr(addresses::current().PlayerSelectVehicle)) == (i < players ? vehicle : 99));
                 const auto prepared = memory;
                 dkr_custom_tracks_prepare_vehicle(rdram, &context);
                 assert(memory == prepared);
@@ -215,7 +215,7 @@ int main() {
         recomp_context context{};
         context.r4 = tracks::track_override();
         dkr_custom_tracks_prepare_vehicle(rdram, &context);
-        assert(context.r7 == 7 && MEM_B(0, addr(addresses::PlayerSelectVehicle)) == 2);
+        assert(context.r7 == 7 && MEM_B(0, addr(addresses::current().PlayerSelectVehicle)) == 2);
 
         // Unrelated levels, menu-style player counts and disarmed testing must
         // leave both guest memory and every register untouched.
@@ -226,7 +226,7 @@ int main() {
                 tracks::arm_track_override("");
             if (inactive == 3) {
                 tracks::arm_track_override("test");
-                MEM_W(0, addr(addresses::GameMode)) = 1; // menu preview with racers
+                MEM_W(0, addr(addresses::current().GameMode)) = 1; // menu preview with racers
             }
             const auto before = memory;
             const auto registers = context;
