@@ -4,7 +4,12 @@ function(dkr_add_session_chat)
     # another function, whose scope a file-level variable would not outlive.
     get_filename_component(_dkr_chat_root "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/.." ABSOLUTE)
     if(NOT TARGET DKRSessionChat)
-        add_library(DKRSessionChat STATIC "${_dkr_chat_root}/src/game/netplay/session_chat/chat.cpp")
+        add_library(
+            DKRSessionChat
+            STATIC
+            "${_dkr_chat_root}/src/game/netplay/session_chat/chat.cpp"
+            "${_dkr_chat_root}/src/game/netplay/session_chat/owner_glue.cpp"
+        )
         target_compile_features(DKRSessionChat PUBLIC cxx_std_20)
         target_include_directories(DKRSessionChat PUBLIC "${_dkr_chat_root}/src/game")
         if(MSVC)
@@ -12,8 +17,11 @@ function(dkr_add_session_chat)
         endif()
         add_executable(DKRSessionChatTests "${_dkr_chat_root}/tests/session_chat_tests.cpp")
         target_link_libraries(DKRSessionChatTests PRIVATE DKRSessionChat)
+        add_executable(DKRSessionChatGlueTests "${_dkr_chat_root}/tests/session_chat_glue_tests.cpp")
+        target_link_libraries(DKRSessionChatGlueTests PRIVATE DKRSessionChat)
         if(BUILD_TESTING)
             add_test(NAME DKRSessionChat COMMAND DKRSessionChatTests)
+            add_test(NAME DKRSessionChatGlue COMMAND DKRSessionChatGlueTests)
         endif()
     endif()
 endfunction()

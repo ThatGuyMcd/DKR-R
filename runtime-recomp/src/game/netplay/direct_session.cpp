@@ -1,5 +1,6 @@
 #include "setup_policy.hpp"
 #include "netplay/session_chat/chat.hpp"
+#include "netplay/session_chat/owner_glue.hpp"
 #include "netplay/session_chat/settings.hpp"
 #include "netplay/peer_relay/transport.hpp"
 #include "online_stability/qualification_delivery.hpp"
@@ -5844,6 +5845,69 @@ void DirectSession::broadcast(protocol::MessageType type, std::span<const std::u
     for (const PeerRecord& peer : peers_) {
         if (peer.active)
             send_with_key(peer.address, peer.key, type, payload, frame);
+    }
+}
+
+// Session chat's share of the pump, after the essential lobby and delay messages.
+// Requires mutex_ and party.mutex. The roster and routing decisions are
+// chat::build_context and chat::route (session_chat/owner_glue.hpp); this fills
+// their inputs from session and party state and performs the sends.
+void DirectSession::service_chat_locked(dkr::runtime::spectators::PartyLink& party) {
+    namespace chat = dkr::chat;
+    namespace watch = dkr::runtime::spectators;
+    chat::RosterSnapshot roster;
+    roster.room = match_id_;
+    roster.local = sender_id_;
+    roster.host = host_sender_id_;
+    roster.is_host = is_host_;
+    roster.connected = state_ == ConnectionState::Hosting || state_ == ConnectionState::Lobby ||
+                       state_ == ConnectionState::Loading || state_ == ConnectionState::Running;
+    roster.allowed = chat::host_enabled.load();
+    roster.local_name = local_name_;
+    for (const auto& player : room_view_.players)
+        roster.slots.push_back({player.occupied, player.peer_id, player.display_name});
+    if (party.enabled) {
+        roster.source = chat::RosterSnapshot::Source::Party;
+        for (const auto& member : party.party.snapshot().members)
+            roster.party.push_back({member.id, member.name});
+    } else if (is_host_) {
+        roster.source = chat::RosterSnapshot::Source::HostLobby;
+        for (const auto& peer : peers_)
+            roster.peers.push_back({peer.sender_id, peer.active, peer.slot});
+    } else {
+        roster.source = chat::RosterSnapshot::Source::ClientLobby;
+        for (const auto& member : dkr::relay::view(this).lobby)
+            roster.relay.push_back({member.endpoint, member.name});
+    }
+    auto messages = chat::channel(this);
+    messages->configure(chat::build_context(roster));
+    // Backpressure in the existing control channel takes precedence over chat.
+    if (transport_->buffered_bytes(TransportTrafficClass::Control) >= 16 * 1024)
+        return;
+    chat::RouteTable table;
+    table.is_host = is_host_;
+    table.host = host_sender_id_;
+    if (is_host_) {
+        if (party.enabled) {
+            for (const auto& peer : party.peers)
+                table.reachable.push_back(peer.id);
+        } else {
+            for (const auto& peer : peers_)
+                if (peer.active)
+                    table.reachable.push_back(peer.sender_id);
+        }
+    }
+    for (auto& send : chat::route(messages->outgoing(), table)) {
+        auto payload = watch::link_encode(watch::LinkKind::Extension, send.bytes);
+        const auto type = protocol::MessageType(watch::PartyMessageType);
+        if (!is_host_) {
+            send_with_key(host_address_, key_, type, payload);
+        } else if (party.enabled) {
+            if (const auto* peer = party.peer(send.target))
+                send_with_key(peer->address, peer->key, type, payload);
+        } else if (const auto* peer = peer_by_sender(send.target)) {
+            send_with_key(peer->address, peer->key, type, payload);
+        }
     }
 }
 

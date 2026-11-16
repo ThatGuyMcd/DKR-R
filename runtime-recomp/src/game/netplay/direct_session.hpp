@@ -33,6 +33,9 @@
 #include <unordered_set>
 #include <vector>
 
+namespace dkr::runtime::spectators {
+struct PartyLink;
+}
 namespace dkr::runtime::rollback_check {
 struct Context;
 }
@@ -627,6 +630,8 @@ class DirectSession final {
     bool send_join_request();
     void broadcast(protocol::MessageType type, std::span<const std::uint8_t> payload, std::uint32_t frame = 0U);
     void pump_locked();
+    // Session chat's share of the pump. Requires mutex_ and party.mutex.
+    void service_chat_locked(dkr::runtime::spectators::PartyLink& party);
     // Log from code that runs under mutex_ (the pump and everything it calls).
     // The line is formatted here, exactly as fprintf would, and queued; the
     // owner of the lock flushes the queue to stderr after releasing it. The
