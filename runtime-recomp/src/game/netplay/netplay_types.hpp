@@ -208,6 +208,8 @@ std::uint64_t manifest_class_hash(const CompatibilityManifest& manifest);
 std::uint64_t launch_compatibility_hash(const CompatibilityManifest& host, bool spans_architectures);
 // A racer accepts either form computed over its own manifest.
 bool launch_hash_accepted(std::uint64_t hash, const CompatibilityManifest& own);
+// "class" when a launch hash is the architecture-free form, else "full" (for logs).
+std::string_view launch_hash_form(std::uint64_t hash, const CompatibilityManifest& host);
 bool valid_mod_manifest_hash(std::string_view hash);
 
 enum class OnlineFailureCode : std::uint8_t {

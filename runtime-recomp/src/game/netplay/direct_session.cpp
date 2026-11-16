@@ -4,6 +4,7 @@
 #include "netplay/session_chat/settings.hpp"
 #include "netplay/peer_relay/owner_glue.hpp"
 #include "netplay/peer_relay/transport.hpp"
+#include "start_cancel_message.hpp"
 #include "online_stability/qualification_delivery.hpp"
 #include "../policy.hpp"
 #include "../owner_state.hpp"
@@ -6859,7 +6860,8 @@ void DirectSession::pump_locked() {
                                     ++launch_countdown_generation_;
                                 party->advertised = {};
                                 party->status = status_ = "DKR-R Online starts in five seconds.";
-                                log_locked("[lobby][countdown] five seconds; racers=%u\n", count);
+                                log_locked("[lobby][countdown] five seconds; racers=%u launch-hash=%s\n", count,
+                                           std::string(launch_hash_form(launch.compatibility_hash, manifest_)).c_str());
                             } else
                                 reason = "The lobby settings cannot start this race.";
                         } else if (reason.empty())
@@ -6883,10 +6885,17 @@ void DirectSession::pump_locked() {
                     else if (party->stop_requested) {
                         party->stop_requested = false;
                         cancel_start("The synchronized start was cancelled. Racers must ready again.");
-                    } else if (now >= gate->deadline)
-                        cancel_start(
-                            "A racer did not acknowledge the synchronized start in time. The lobby is still open; check the connection and try again.");
-                    else {
+                    } else if (now >= gate->deadline) {
+                        const auto& acknowledged =
+                            gate->phase == StartPhase::Countdown ? gate->prepared : gate->committed;
+                        std::vector<std::string> silent;
+                        for (const auto& m : party->party.snapshot().members)
+                            if ((m.role == watch::Role::Racer || m.host) && m.id != sender_id_ &&
+                                !acknowledged.contains(m.id))
+                                silent.push_back(m.name);
+                        const bool spans = launch_hash_form(gate->launch->compatibility_hash, manifest_) == "class";
+                        cancel_start(dkr::runtime::party_start::unacknowledged_start_message(silent, spans));
+                    } else {
                         if (gate->phase == StartPhase::Countdown && now >= launch_countdown_deadline_ &&
                             required_start(gate->prepared)) {
                             gate->phase = StartPhase::Committing;
