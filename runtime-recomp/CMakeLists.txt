@@ -2902,6 +2902,10 @@ if(BUILD_TESTING)
     target_include_directories(DKRSoundSettingsTests PRIVATE "${CMAKE_CURRENT_LIST_DIR}/src/game")
     add_test(NAME DKRSoundSettings COMMAND DKRSoundSettingsTests)
 
+    add_executable(DKRStartCancelMessageTests tests/start_cancel_message_tests.cpp)
+    target_link_libraries(DKRStartCancelMessageTests PRIVATE DKRNetplayCore)
+    add_test(NAME DKRStartCancelMessage COMMAND DKRStartCancelMessageTests)
+
     add_executable(DKROverlaySettingsTests tests/overlay_settings_tests.cpp)
     target_compile_features(DKROverlaySettingsTests PRIVATE cxx_std_20)
     target_include_directories(DKROverlaySettingsTests PRIVATE "${CMAKE_CURRENT_LIST_DIR}/src/game")

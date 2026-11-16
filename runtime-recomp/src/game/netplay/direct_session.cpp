@@ -4,6 +4,7 @@
 #include "netplay/session_chat/settings.hpp"
 #include "netplay/peer_relay/owner_glue.hpp"
 #include "netplay/peer_relay/transport.hpp"
+#include "start_cancel_message.hpp"
 #include "online_stability/qualification_delivery.hpp"
 #include "../policy.hpp"
 #include "../owner_state.hpp"
@@ -219,7 +220,7 @@ DirectSession::DirectSession()
       network_worker_(&DirectSession::network_loop, this) {}
 
 DirectSession::~DirectSession() {
-    disconnect("The racer application closed.");
+    disconnect_locally("The racer application closed.", false);
     {
         std::scoped_lock lock(mutex_);
         worker_stop_.store(true, std::memory_order_release);
@@ -849,6 +850,14 @@ bool DirectSession::join_friend_invite(std::string_view invite, std::string play
 }
 
 void DirectSession::disconnect(std::string_view reason) {
+    disconnect_locally(reason, true);
+}
+
+// announce=false is local teardown only: nothing is sent and nothing is pumped.
+// ~DirectSession uses it, because a namespace-scope session is destroyed during
+// static destruction, when the transport's libraries may already have torn down
+// their own statics. Callers that want the departure notices call disconnect().
+void DirectSession::disconnect_locally(std::string_view reason, bool announce) {
     {
         std::scoped_lock lock(mutex_);
         // disconnect already owns DirectSession::mutex_. No PartyLink lock is retained
@@ -856,7 +865,7 @@ void DirectSession::disconnect(std::string_view reason) {
         {
             namespace leaving = dkr::runtime::party_departure;
             bool notify = false;
-            {
+            if (announce) {
                 auto party = dkr::runtime::spectators::party_link(this);
                 std::scoped_lock party_lock(party->mutex);
                 notify = party->enabled && party->admitted && !is_host_ && bool(host_address_) && transport_->is_open();
@@ -886,7 +895,7 @@ void DirectSession::disconnect(std::string_view reason) {
         {
             auto party = dkr::runtime::spectators::party_link(this);
             std::scoped_lock party_lock(party->mutex);
-            if (party->enabled && transport_->is_open()) {
+            if (announce && party->enabled && transport_->is_open()) {
                 const auto bytes = dkr::runtime::spectators::link_encode(dkr::runtime::spectators::LinkKind::Leave);
                 if (is_host_)
                     for (const auto& p : party->peers)
@@ -902,7 +911,7 @@ void DirectSession::disconnect(std::string_view reason) {
             party->reset_connection();
             dkr::runtime::party_start::forget(this);
         }
-        if (transport_->is_open() && state_ != ConnectionState::Offline) {
+        if (announce && transport_->is_open() && state_ != ConnectionState::Offline) {
             // An empty disconnect used to erase the only useful evidence when a
             // guest cleared a locally failed session.  The host then reported an
             // unexplained departure and could not distinguish a transport fault
@@ -6851,7 +6860,8 @@ void DirectSession::pump_locked() {
                                     ++launch_countdown_generation_;
                                 party->advertised = {};
                                 party->status = status_ = "DKR-R Online starts in five seconds.";
-                                log_locked("[lobby][countdown] five seconds; racers=%u\n", count);
+                                log_locked("[lobby][countdown] five seconds; racers=%u launch-hash=%s\n", count,
+                                           std::string(launch_hash_form(launch.compatibility_hash, manifest_)).c_str());
                             } else
                                 reason = "The lobby settings cannot start this race.";
                         } else if (reason.empty())
@@ -6875,10 +6885,17 @@ void DirectSession::pump_locked() {
                     else if (party->stop_requested) {
                         party->stop_requested = false;
                         cancel_start("The synchronized start was cancelled. Racers must ready again.");
-                    } else if (now >= gate->deadline)
-                        cancel_start(
-                            "A racer did not acknowledge the synchronized start in time. The lobby is still open; check the connection and try again.");
-                    else {
+                    } else if (now >= gate->deadline) {
+                        const auto& acknowledged =
+                            gate->phase == StartPhase::Countdown ? gate->prepared : gate->committed;
+                        std::vector<std::string> silent;
+                        for (const auto& m : party->party.snapshot().members)
+                            if ((m.role == watch::Role::Racer || m.host) && m.id != sender_id_ &&
+                                !acknowledged.contains(m.id))
+                                silent.push_back(m.name);
+                        const bool spans = launch_hash_form(gate->launch->compatibility_hash, manifest_) == "class";
+                        cancel_start(dkr::runtime::party_start::unacknowledged_start_message(silent, spans));
+                    } else {
                         if (gate->phase == StartPhase::Countdown && now >= launch_countdown_deadline_ &&
                             required_start(gate->prepared)) {
                             gate->phase = StartPhase::Committing;
