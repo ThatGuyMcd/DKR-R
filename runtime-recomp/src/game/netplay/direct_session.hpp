@@ -4,6 +4,7 @@
 
 #include "datagram_socket.hpp"
 #include "../atomic_snapshot.hpp"
+#include "../session_log.hpp"
 #include "session_transport.hpp"
 #include "latency_metrics.hpp"
 #include "netplay_lobby.hpp"
@@ -242,6 +243,10 @@ class DirectSession final {
         std::function<bool(bool, std::uint64_t, std::vector<std::uint8_t>&, std::filesystem::path&, std::string&)>;
     DirectSession();
     ~DirectSession();
+    // Writes the session's queued log lines to stderr, in the order they were
+    // queued. Never call it with mutex_ held: a blocked stderr must not stall
+    // the session.
+    void flush_log();
     DirectSession(const DirectSession&) = delete;
     DirectSession& operator=(const DirectSession&) = delete;
 
@@ -622,6 +627,16 @@ class DirectSession final {
     bool send_join_request();
     void broadcast(protocol::MessageType type, std::span<const std::uint8_t> payload, std::uint32_t frame = 0U);
     void pump_locked();
+    // Log from code that runs under mutex_ (the pump and everything it calls).
+    // The line is formatted here, exactly as fprintf would, and queued; the
+    // owner of the lock flushes the queue to stderr after releasing it. The
+    // queue holds at most session_log::Queue::Capacity lines; older ones are dropped and
+    // counted.
+#if defined(__GNUC__) || defined(__clang__)
+    __attribute__((format(printf, 2, 3)))
+#endif
+    void
+    log_locked(const char* format, ...);
     // Lock order for the rollback connection check, as it actually is:
     //   mutex_ -> PartyLink::mutex                 (rollback_context_locked,
     //                                               rollback_send_locked)
@@ -734,6 +749,14 @@ class DirectSession final {
     std::uint64_t& outbound_sequence(const PeerAddress& address, const secure::Key& key);
 
     mutable std::mutex mutex_;
+    // Lines queued by code that runs under mutex_ (session_log.hpp).
+    dkr::runtime::session_log::Queue log_queue_;
+    // Serialises writers so two flushers cannot reorder batches. Lock order:
+    // log_flush_mutex_ -> mutex_ (briefly, to take the queue). Nothing holds
+    // mutex_ while taking log_flush_mutex_.
+    std::mutex log_flush_mutex_;
+    // Test hook: receives each line instead of stderr.
+    std::function<void(std::string_view)> log_sink_;
     std::shared_ptr<TransportReceiveSignal> receive_signal_ = std::make_shared<TransportReceiveSignal>();
     std::condition_variable& state_changed_ = receive_signal_->changed;
     std::unique_ptr<SessionTransport> transport_;

@@ -570,6 +570,16 @@ void dkr::runtime::input::set_secondary_controller_binding(std::size_t player, A
     bindings[target].controller_secondary = source;
 }
 
+void dkr::runtime::input::restore_controller_binding(std::size_t player, Action action, int source) {
+    std::scoped_lock lock(g_binding_mutex);
+    g_bindings[PlayerIndex(player)][Index(action)].controller = source;
+}
+
+void dkr::runtime::input::restore_secondary_controller_binding(std::size_t player, Action action, int source) {
+    std::scoped_lock lock(g_binding_mutex);
+    g_bindings[PlayerIndex(player)][Index(action)].controller_secondary = source;
+}
+
 void dkr::runtime::input::reset_defaults() {
     {
         std::scoped_lock lock(g_binding_mutex);

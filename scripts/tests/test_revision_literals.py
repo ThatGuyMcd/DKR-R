@@ -199,6 +199,29 @@ RECORDED_CALL_SITES = {
 }
 
 
+# Patch sites of mods/legacy_behaviour.cpp: (site name, function, offset in it, old v77 address, old v80
+# address or None for a site only v77 has). The function tables must resolve each to exactly these.
+RECORDED_SITES = [
+    ("track_spawn_objects_30", "track_spawn_objects", 0x30, 0x8000C928, 0x8000C928),
+    ("track_spawn_objects_34", "track_spawn_objects", 0x34, 0x8000C92C, 0x8000C92C),
+    ("track_spawn_objects_7c", "track_spawn_objects", 0x7C, 0x8000C974, 0x8000C974),
+    ("trackmenu_set_records_d0", "trackmenu_set_records", 0xD0, 0x80082988, 0x80082DD8),
+    ("trackmenu_set_records_e8", "trackmenu_set_records", 0xE8, 0x800829A0, 0x80082DF0),
+    ("menu_track_select_init_5f8", "menu_track_select_init", 0x5F8, 0x8008ED98, 0x8008F250),
+    ("menu_track_select_init_650", "menu_track_select_init", 0x650, 0x8008EDF0, 0x8008F2A8),
+    ("menu_track_select_init_680", "menu_track_select_init", 0x680, 0x8008EE20, 0x8008F2D8),
+    ("menu_track_select_init_6b4", "menu_track_select_init", 0x6B4, 0x8008EE54, 0x8008F30C),
+    ("trackmenu_render_names_1dc", "trackmenu_render_names", 0x1DC, 0x800900F8, 0x800905B0),
+    ("trackmenu_render_names_210", "trackmenu_render_names", 0x210, 0x8009012C, 0x800905E4),
+    ("trackmenu_setup_render_a38", "trackmenu_setup_render", 0xA38, 0x80091968, None),
+    ("trackmenu_setup_render_1040", "trackmenu_setup_render", 0x1040, 0x80091F70, None),
+    ("trackmenu_setup_render_1098", "trackmenu_setup_render", 0x1098, 0x80091FC8, None),
+    ("func_80092188_4b0", "func_80092188", 0x4B0, 0x80092638, None),
+    ("is_tt_unlocked_4", "is_tt_unlocked", 0x4, 0x8009ECBC, 0x8009F200),
+    ("is_drumstick_unlocked_4", "is_drumstick_unlocked", 0x4, 0x8009ECD4, 0x8009F218),
+]
+
+
 def requests():
     return {gen.load(spec).header: gen.load(spec) for spec in gen.SPECS.glob("*.toml")}
 
@@ -255,6 +278,30 @@ class MovedLiteralTests(unittest.TestCase):
                 text = (ROOT / GAME / source).read_text(encoding="utf-8")
                 spelled = {int(m.group(1), 16) for m in re.finditer(r"0[xX](80[0-9A-Fa-f]{6})U?\b", text)}
                 self.assertEqual(spelled & old, set(), f"{source} still carries {header} literals")
+
+    def test_behaviour_patch_sites_are_function_plus_offset_and_resolve_to_the_old_addresses(self):
+        request = requests()["behaviour_site_symbols.hpp"]
+        self.assertEqual(request.table, "functions")
+        self.assertEqual(
+            [(site.name, site.function, site.offset, site.revisions) for site in request.sites],
+            [
+                (name, function, offset, ("77", "80") if old80 is not None else ("77",))
+                for name, function, offset, _old77, old80 in RECORDED_SITES
+            ],
+        )
+        functions = {revision: gen.function_table(revision, ROOT) for revision in gen.REVISIONS}
+        for name, function, offset, old77, old80 in RECORDED_SITES:
+            for revision, old in (("77", old77), ("80", old80)):
+                if old is None:
+                    continue
+                found = functions[revision][function]
+                self.assertEqual(len(found), 1, f"{function} v{revision}")
+                self.assertEqual(found[0][0] + offset, old, f"{name} v{revision}")
+        source = (ROOT / GAME / "mods/legacy_behaviour.cpp").read_text(encoding="utf-8").lower()
+        for name, _function, _offset, old77, old80 in RECORDED_SITES:
+            for old in (old77, old80):
+                if old is not None:
+                    self.assertNotIn(f"0x{old:08x}", source, name)
 
     @unittest.skipUnless(DECOMP.is_dir(), "extern/dkr-decomp is not checked out; call site check skipped")
     def test_hud_call_sites_are_the_function_plus_the_recorded_offset(self):
