@@ -40,6 +40,8 @@
 #include "runtime_enhancements.hpp"
 #include "netplay/check_names.hpp"
 #include "netplay/experimental_runtime.hpp"
+#include "netplay/session_chat/chat.hpp"
+#include "netplay/session_chat/settings.hpp"
 #include <cwchar>
 #endif
 #if defined(__ANDROID__)
@@ -78,6 +80,7 @@
 #include <filesystem>
 #include <fstream>
 #include <limits>
+#include <set>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -977,6 +980,21 @@ int DkrMain(int argc, char** argv) {
              accepted = false;
         bool connection_test_requested = false, connection_tested = false;
         auto connection_test_deadline = std::chrono::steady_clock::now();
+        // DKR_OWNED_CHECK_CHAT=1: once the lobby chat is up each peer sends one fixed message
+        // and logs what it receives; the host waits for the exchange before starting the race.
+        // DKR_OWNED_CHECK_CHAT=off does the same with the host's chat switched off (expect no
+        // chat packets and no received lines).
+        const char* chat_check = std::getenv("DKR_OWNED_CHECK_CHAT");
+        const bool check_chat =
+            chat_check && (std::string_view(chat_check) == "1" || std::string_view(chat_check) == "off");
+        const bool chat_off = check_chat && std::string_view(chat_check) == "off";
+        if (chat_off && launch.owned_check_host)
+            dkr::chat::host_enabled = false;
+        bool chat_sent = false;
+        std::set<std::uint64_t> chat_seen;
+        unsigned chat_received = 0;
+        const auto chat_started = std::chrono::steady_clock::now();
+        std::optional<std::chrono::steady_clock::time_point> chat_release;
         auto report_at = std::chrono::steady_clock::now();
         const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(60);
         while (std::chrono::steady_clock::now() < deadline && !accepted) {
@@ -1014,6 +1032,35 @@ int DkrMain(int argc, char** argv) {
                         break;
                     joined = true;
                 }
+            }
+            if (check_chat) {
+                const auto channel = dkr::chat::channel(&online);
+                const auto view = channel->view();
+                if (!chat_sent && view.active && view.known && view.members.size() > 1) {
+                    chat_sent = true;
+                    const char* role = launch.owned_check_host ? "host" : "joiner";
+                    const std::string text =
+                        launch.owned_check_host ? "check-chat from the host" : "check-chat from the joiner";
+                    std::string chat_error;
+                    if (channel->send(text, chat_error))
+                        std::fprintf(stderr, "[check][chat] sent role=%s text=\"%s\"\n", role, text.c_str());
+                    else
+                        std::fprintf(stderr, "[check][chat] send-refused role=%s error=\"%s\"\n", role,
+                                     chat_error.c_str());
+                }
+                for (const auto& message : view.messages)
+                    if (message.author != view.local && chat_seen.insert(message.id).second) {
+                        ++chat_received;
+                        std::fprintf(stderr, "[check][chat] received from=%s text=\"%s\"\n",
+                                     view.host ? "joiner" : "host", message.text.c_str());
+                    }
+                // The host starts the race once it has the joiner's message (or, with chat off,
+                // has tried to send), plus a moment for its own message to arrive; or after 25 s.
+                if (launch.owned_check_host && !chat_release && chat_sent && (chat_off || chat_received > 0))
+                    chat_release = std::chrono::steady_clock::now() + std::chrono::seconds(3);
+                if (launch.owned_check_host && !chat_release &&
+                    std::chrono::steady_clock::now() - chat_started >= std::chrono::seconds(25))
+                    chat_release = std::chrono::steady_clock::now();
             }
             if (launch.owned_check_host)
                 for (const auto& pending : state.pending_joins)
@@ -1063,7 +1110,10 @@ int DkrMain(int argc, char** argv) {
                             }
                         }
                     }
-                    if (connection_tested || !(connection_test && std::string_view(connection_test) == "1"))
+                    const bool chat_ready =
+                        !check_chat || (chat_release && std::chrono::steady_clock::now() >= *chat_release);
+                    if (chat_ready &&
+                        (connection_tested || !(connection_test && std::string_view(connection_test) == "1")))
                         started = online.request_start(rom_error);
                 }
             }
