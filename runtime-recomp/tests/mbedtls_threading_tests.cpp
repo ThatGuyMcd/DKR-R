@@ -51,7 +51,8 @@ int main() {
     for (auto& thread : threads)
         thread.join();
     if (failures.load() != 0) {
-        std::fprintf(stderr, "%u of %u threads failed psa_crypto_init or psa_generate_random\n", failures.load(), thread_count);
+        std::fprintf(stderr, "%u of %u threads failed psa_crypto_init or psa_generate_random\n", failures.load(),
+                     thread_count);
         return 1;
     }
     std::puts("Mbed TLS PSA initialisation is thread safe");

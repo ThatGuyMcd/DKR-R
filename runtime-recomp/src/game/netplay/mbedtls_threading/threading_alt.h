@@ -19,18 +19,15 @@ typedef struct mbedtls_threading_mutex_t {
     SRWLOCK srw;
 } mbedtls_threading_mutex_t;
 
-static inline void dkrr_mbedtls_mutex_init(mbedtls_threading_mutex_t *mutex)
-{
+static inline void dkrr_mbedtls_mutex_init(mbedtls_threading_mutex_t* mutex) {
     InitializeSRWLock(&mutex->srw);
 }
 
-static inline void dkrr_mbedtls_mutex_free(mbedtls_threading_mutex_t *mutex)
-{
-    (void) mutex;
+static inline void dkrr_mbedtls_mutex_free(mbedtls_threading_mutex_t* mutex) {
+    (void)mutex;
 }
 
-static inline int dkrr_mbedtls_mutex_lock(mbedtls_threading_mutex_t *mutex)
-{
+static inline int dkrr_mbedtls_mutex_lock(mbedtls_threading_mutex_t* mutex) {
     if (mutex == NULL) {
         return MBEDTLS_ERR_THREADING_BAD_INPUT_DATA;
     }
@@ -38,8 +35,7 @@ static inline int dkrr_mbedtls_mutex_lock(mbedtls_threading_mutex_t *mutex)
     return 0;
 }
 
-static inline int dkrr_mbedtls_mutex_unlock(mbedtls_threading_mutex_t *mutex)
-{
+static inline int dkrr_mbedtls_mutex_unlock(mbedtls_threading_mutex_t* mutex) {
     if (mutex == NULL) {
         return MBEDTLS_ERR_THREADING_BAD_INPUT_DATA;
     }
