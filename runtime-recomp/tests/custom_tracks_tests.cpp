@@ -124,6 +124,41 @@ std::int32_t served_minimap_sprite(std::uint32_t offset, std::int32_t size) {
                                      (static_cast<std::uint32_t>(at[2]) << 8) | at[3]);
 }
 
+// An inflated object map: a 16-byte header (the entries' byte count, big endian) then `entries`
+// entries of `step` bytes each, whose second byte carries the step as track_spawn_objects reads it.
+std::string object_map(std::uint32_t count, unsigned entries = 0U, unsigned step = 8U) {
+    std::string map(16U, '\0');
+    for (int shift = 24, at = 0; shift >= 0; shift -= 8, ++at)
+        map[at] = static_cast<char>((count >> shift) & 0xFFU);
+    for (unsigned entry = 0; entry < entries; ++entry) {
+        std::string body(step, '\0');
+        body[1] = static_cast<char>(step);
+        map += body;
+    }
+    return map;
+}
+
+// The five-byte container the game inflates, then one stored DEFLATE block holding `map`.
+std::string object_map_container(const std::string& map, std::uint32_t declared_size = 0U) {
+    const std::uint32_t size = declared_size ? declared_size : static_cast<std::uint32_t>(map.size());
+    std::string out;
+    for (int shift = 0; shift <= 24; shift += 8)
+        out += static_cast<char>((size >> shift) & 0xFFU);
+    out += '\x09';
+    out += '\x01';
+    const auto length = static_cast<std::uint16_t>(map.size());
+    out += static_cast<char>(length & 0xFFU);
+    out += static_cast<char>(length >> 8);
+    out += static_cast<char>(~length & 0xFFU);
+    out += static_cast<char>((~length >> 8) & 0xFFU);
+    return out + map;
+}
+
+// A map the game's spawn loop finishes: empty (a collectables map with nothing in it).
+std::string empty_object_map() {
+    return object_map_container(object_map(0U));
+}
+
 // A header that names retail object maps, so a track needs ship none.
 std::string minimal_header() {
     std::string header(200U, '\0');
@@ -297,8 +332,8 @@ void level_link_tests(const std::filesystem::path& base) {
         std::string boss_header(200U, '\0');
         boss_header[0x4C] = static_cast<char>(kRaceTypeBoss);
         write_file(hub / "h.bin", boss_header);
-        write_file(hub / "s.bin", std::string(48U, 's'));
-        write_file(hub / "o.bin", std::string(64U, 'o'));
+        write_file(hub / "s.bin", object_map_container(object_map(40U, 5U)));
+        write_file(hub / "o.bin", empty_object_map());
         write_track(links / "race.dkrmap", "race", 128U);
         const std::filesystem::path bad = links / "bad.dkrmap";
         std::filesystem::create_directories(bad);
@@ -365,9 +400,63 @@ void level_link_tests(const std::filesystem::path& base) {
     }
 }
 
+// track_spawn_objects trusts the map's own byte count and each entry's size byte. A package whose
+// maps the spawn loop would not finish inside their own bytes is refused whole.
+void object_map_walk_tests(const std::filesystem::path& base) {
+    const auto bytes = [](const std::string& text) { return std::vector<std::uint8_t>(text.begin(), text.end()); };
+    std::string reason;
+    // The shapes the exporter writes: empty, and a few entries whose sizes add up to the count.
+    assert(inspect_object_map_payload(bytes(empty_object_map()), reason));
+    assert(inspect_object_map_payload(bytes(object_map_container(object_map(40U, 5U))), reason));
+    // The count runs past the entries, including the 0x7FFFFFFF a hostile map would carry.
+    assert(!inspect_object_map_payload(bytes(object_map_container(object_map(48U, 5U))), reason));
+    assert(!reason.empty());
+    assert(!inspect_object_map_payload(bytes(object_map_container(object_map(0x7FFFFFFFU, 5U))), reason));
+    // An entry of size 0 never advances the loop.
+    assert(!inspect_object_map_payload(bytes(object_map_container(object_map(16U, 2U, 0U) + std::string(16U, '\0'))),
+                                       reason));
+    {
+        std::string map = object_map(8U, 1U);
+        map[16U + 1U] = '\0';
+        assert(!inspect_object_map_payload(bytes(object_map_container(map)), reason));
+    }
+    // An entry whose size reaches past the end of the map.
+    {
+        std::string map = object_map(8U, 1U);
+        map[16U + 1U] = 0x3F;
+        assert(!inspect_object_map_payload(bytes(object_map_container(map)), reason));
+    }
+    // Not the container, or bigger than the game's 0x3000-byte buffer, or a size that lies about the inflate.
+    assert(!inspect_object_map_payload(bytes(std::string(48U, 's')), reason));
+    assert(!inspect_object_map_payload(bytes(object_map_container(std::string(0x3001U, '\0'))), reason));
+    assert(!inspect_object_map_payload(bytes(object_map_container(object_map(0U), 32U)), reason));
+
+    const std::filesystem::path root = base / "object-map-walk";
+    std::filesystem::remove_all(root);
+    set_working_directory({});
+    const auto package = [&](const std::string& id, const std::string& structure) {
+        const std::filesystem::path dir = root / (id + ".dkrmap");
+        std::filesystem::create_directories(dir);
+        write_file(dir / "manifest.json",
+                   "{\"schemaVersion\":1,\"id\":\"" + id + "\",\"name\":\"" + id +
+                       "\",\"adds\":[{\"section\":\"LEVEL_HEADERS\",\"file\":\"h.bin\"},"
+                       "{\"section\":\"LEVEL_OBJECT_MAPS\",\"slot\":\"structure\",\"file\":\"s.bin\"},"
+                       "{\"section\":\"LEVEL_OBJECT_MAPS\",\"slot\":\"collectables\",\"file\":\"o.bin\"}]}");
+        write_file(dir / "h.bin", std::string(200U, 'h'));
+        write_file(dir / "s.bin", structure);
+        write_file(dir / "o.bin", empty_object_map());
+    };
+    package("sound", object_map_container(object_map(40U, 5U)));
+    package("huge", object_map_container(object_map(0x7FFFFFFFU, 5U)));
+    package("spins", object_map_container(object_map(8U, 1U) + std::string()));
+    scan(root);
+    assert(tracks().size() == 2U); // "huge" is refused; "spins" is well formed here, so it stays.
+}
+
 int main() {
     const TemporaryDirectory temporary("dkrr-custom-tracks-tests");
     level_link_tests(temporary.path());
+    object_map_walk_tests(temporary.path());
     const std::filesystem::path root = temporary.path() / "fixtures";
     std::filesystem::remove_all(root);
     write_track(root / "beta.dkrmap", "beta", 192U);
@@ -448,8 +537,8 @@ int main() {
                                            "{\"section\":\"LEVEL_OBJECT_MAPS\",\"slot\":\"collectables\","
                                            "\"file\":\"o.bin\"}]}");
         write_file(pair / "h.bin", std::string(200U, 'h'));
-        write_file(pair / "s.bin", std::string(48U, 's'));
-        write_file(pair / "o.bin", std::string(64U, 'o'));
+        write_file(pair / "s.bin", object_map_container(object_map(40U, 5U)));
+        write_file(pair / "o.bin", empty_object_map());
     }
     scan(root);
     assert(tracks().size() == 1U);
@@ -490,7 +579,7 @@ int main() {
         // Zero-filled, which is what the exporter writes into 0x36 and 0xBA
         // because the real indices are assigned at load.
         write_file(half / "h.bin", std::string(200U, '\0'));
-        write_file(half / "s.bin", std::string(48U, 's'));
+        write_file(half / "s.bin", object_map_container(object_map(40U, 5U)));
     }
     scan(root);
     for (const Track& track : tracks()) {

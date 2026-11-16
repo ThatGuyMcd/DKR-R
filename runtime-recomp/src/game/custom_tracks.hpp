@@ -292,6 +292,12 @@ struct MusicInfo {
 // The game's object map buffer (OBJECT_MAP_SIZE in objects.c): track_spawn_objects
 // inflates every map into one of these. A link's offset must land inside it.
 inline constexpr std::uint32_t kObjectMapBufferBytes = 0x3000U;
+// track_spawn_objects spawns entries until the header's byte count is used up, stepping by each
+// entry's own size byte, and trusts both. A map whose count outruns its entries, or whose entry
+// size is 0 (the loop never advances), makes the game spawn from whatever follows the buffer, or
+// spin forever. This inflates a LEVEL_OBJECT_MAPS payload (five-byte container, raw DEFLATE) and
+// walks it the way the game does; it refuses a map the walk would not finish inside its own bytes.
+[[nodiscard]] bool inspect_object_map_payload(const std::vector<std::uint8_t>& bytes, std::string& error);
 // Native preview and selection store level ids in signed bytes.
 inline constexpr std::int32_t kMaxLevelId = 127;
 struct LevelLink {
