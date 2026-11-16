@@ -37,6 +37,7 @@
 #include "water_style/appearance.hpp"
 #include "display_settings/policy.hpp"
 #include "sound_settings/policy.hpp"
+#include "overlay_settings/policy.hpp"
 #include "session_content/policy.hpp"
 #include "analog_driving/settings.hpp"
 #include "look_behind/policy.hpp"
@@ -1630,6 +1631,53 @@ void ApplyLoadedSound(const dkr::sound::Loaded& loaded) {
     }
 }
 
+dkr::overlay::Settings OverlaySettingsSnapshot() {
+    const auto colour = [](const ImVec4& value) { return dkr::overlay::Colour{value.x, value.y, value.z, value.w}; };
+    dkr::overlay::Settings settings;
+    settings.fps_enabled = g_fps_overlay_enabled;
+    settings.fps_position = g_fps_overlay_position;
+    settings.fps_detail = g_fps_overlay_detail;
+    settings.fps_single_row = g_fps_overlay_single_row;
+    settings.fps_custom = {g_fps_custom_frame_time, g_fps_custom_simulation,    g_fps_custom_graphics,
+                           g_fps_custom_vi,         g_fps_custom_interpolation, g_fps_custom_audio,
+                           g_fps_custom_target,     g_fps_custom_resolution};
+    settings.fps_font_size = g_fps_font_size;
+    settings.fps_fill = colour(g_fps_fill_colour);
+    settings.fps_outline = colour(g_fps_outline_colour);
+    settings.network_enabled = g_network_overlay_enabled;
+    settings.network_position = g_network_overlay_position;
+    settings.network_detail = g_network_overlay_detail;
+    settings.network_single_row = g_network_overlay_single_row;
+    settings.controller_input_enabled = g_controller_input_overlay_enabled;
+    settings.controller_input_position = g_controller_input_overlay_position;
+    return settings;
+}
+
+void ApplyLoadedOverlays(const dkr::overlay::Settings& loaded) {
+    const auto colour = [](const dkr::overlay::Colour& value) { return ImVec4{value.r, value.g, value.b, value.a}; };
+    g_fps_overlay_enabled = loaded.fps_enabled;
+    g_fps_overlay_position = loaded.fps_position;
+    g_fps_overlay_detail = loaded.fps_detail;
+    g_fps_overlay_single_row = loaded.fps_single_row;
+    g_fps_custom_frame_time = loaded.fps_custom[0];
+    g_fps_custom_simulation = loaded.fps_custom[1];
+    g_fps_custom_graphics = loaded.fps_custom[2];
+    g_fps_custom_vi = loaded.fps_custom[3];
+    g_fps_custom_interpolation = loaded.fps_custom[4];
+    g_fps_custom_audio = loaded.fps_custom[5];
+    g_fps_custom_target = loaded.fps_custom[6];
+    g_fps_custom_resolution = loaded.fps_custom[7];
+    g_fps_font_size = loaded.fps_font_size;
+    g_fps_fill_colour = colour(loaded.fps_fill);
+    g_fps_outline_colour = colour(loaded.fps_outline);
+    g_network_overlay_enabled = loaded.network_enabled;
+    g_network_overlay_position = loaded.network_position;
+    g_network_overlay_detail = loaded.network_detail;
+    g_network_overlay_single_row = loaded.network_single_row;
+    g_controller_input_overlay_enabled = loaded.controller_input_enabled;
+    g_controller_input_overlay_position = loaded.controller_input_position;
+}
+
 void SaveSettings() {
     std::error_code error;
     std::filesystem::create_directories(g_config_directory, error);
@@ -1677,33 +1725,7 @@ void SaveSettings() {
         output << "modern_generate_texture_mipmaps="
                << (dkr::runtime::enhancements::generated_mipmaps_requested() ? 1 : 0) << '\n';
         output << "gpu_keep_awake=" << (dkr::runtime::render_power::gpu_keep_awake.load() ? 1 : 0) << '\n';
-        output << "fps_overlay_enabled=" << (g_fps_overlay_enabled ? 1 : 0) << '\n';
-        output << "fps_overlay_position=" << g_fps_overlay_position << '\n';
-        output << "fps_overlay_detail=" << g_fps_overlay_detail << '\n';
-        output << "fps_overlay_single_row=" << (g_fps_overlay_single_row ? 1 : 0) << '\n';
-        output << "fps_custom_frame_time=" << (g_fps_custom_frame_time ? 1 : 0) << '\n';
-        output << "fps_custom_simulation=" << (g_fps_custom_simulation ? 1 : 0) << '\n';
-        output << "fps_custom_graphics=" << (g_fps_custom_graphics ? 1 : 0) << '\n';
-        output << "fps_custom_vi=" << (g_fps_custom_vi ? 1 : 0) << '\n';
-        output << "fps_custom_interpolation=" << (g_fps_custom_interpolation ? 1 : 0) << '\n';
-        output << "fps_custom_audio=" << (g_fps_custom_audio ? 1 : 0) << '\n';
-        output << "fps_custom_target=" << (g_fps_custom_target ? 1 : 0) << '\n';
-        output << "fps_custom_resolution=" << (g_fps_custom_resolution ? 1 : 0) << '\n';
-        output << "fps_font_size=" << g_fps_font_size << '\n';
-        output << "fps_fill_r=" << static_cast<int>(g_fps_fill_colour.x * 255.0F) << '\n';
-        output << "fps_fill_g=" << static_cast<int>(g_fps_fill_colour.y * 255.0F) << '\n';
-        output << "fps_fill_b=" << static_cast<int>(g_fps_fill_colour.z * 255.0F) << '\n';
-        output << "fps_fill_a=" << static_cast<int>(g_fps_fill_colour.w * 255.0F) << '\n';
-        output << "fps_outline_r=" << static_cast<int>(g_fps_outline_colour.x * 255.0F) << '\n';
-        output << "fps_outline_g=" << static_cast<int>(g_fps_outline_colour.y * 255.0F) << '\n';
-        output << "fps_outline_b=" << static_cast<int>(g_fps_outline_colour.z * 255.0F) << '\n';
-        output << "fps_outline_a=" << static_cast<int>(g_fps_outline_colour.w * 255.0F) << '\n';
-        output << "network_overlay_enabled=" << (g_network_overlay_enabled ? 1 : 0) << '\n';
-        output << "network_overlay_position=" << g_network_overlay_position << '\n';
-        output << "network_overlay_detail=" << g_network_overlay_detail << '\n';
-        output << "network_overlay_single_row=" << (g_network_overlay_single_row ? 1 : 0) << '\n';
-        output << "controller_input_overlay_enabled=" << (g_controller_input_overlay_enabled ? 1 : 0) << '\n';
-        output << "controller_input_overlay_position=" << g_controller_input_overlay_position << '\n';
+        dkr::overlay::save(output, OverlaySettingsSnapshot());
         output << "crt_enabled=" << (g_crt_enabled ? 1 : 0) << '\n';
         output << "crt_filter_index=" << g_crt_filter_index << '\n';
         output << "crt_scale_mode=" << g_crt_scale_mode << '\n';
@@ -1994,6 +2016,7 @@ void LoadSettings() {
     auto assignment_mode = dkr::runtime::platform::controller_assignment_mode();
     auto controller_assignments = dkr::runtime::platform::controller_assignment_keys();
     dkr::sound::Loaded sound_loaded;
+    dkr::overlay::Settings overlay_loaded = OverlaySettingsSnapshot();
     for (std::size_t channel = 0; channel < kSoundChannelCount; ++channel) {
         SetSoundMuted(channel, false);
     }
@@ -2162,6 +2185,10 @@ void LoadSettings() {
                 continue;
             if (dkr::display::load(key, number))
                 continue;
+            if (dkr::overlay::load(key, number, overlay_loaded))
+                continue;
+            if (dkr::runtime::driving::load(key, number))
+                continue;
             if (key == "session_mods") {
                 dkr::session_content::next_enabled = number != 0;
                 continue;
@@ -2230,9 +2257,6 @@ void LoadSettings() {
                 break;
             }
             if (shortcut_setting)
-                continue;
-            // Outside the long compatibility parser below (MSVC nesting limit).
-            if (dkr::runtime::driving::load(key, number))
                 continue;
             if (key == "standalone_look_behind") {
                 dkr::runtime::look_behind::enabled = number != 0;
@@ -2329,60 +2353,6 @@ void LoadSettings() {
                 dkr::runtime::enhancements::set_texture_lod_bias_hundredths(number);
             } else if (key == "modern_generate_texture_mipmaps") {
                 dkr::runtime::enhancements::set_generated_mipmaps_requested(number != 0);
-            } else if (key == "fps_overlay_enabled") {
-                g_fps_overlay_enabled = number != 0;
-            } else if (key == "fps_overlay_position") {
-                g_fps_overlay_position = std::clamp(number, 0, 3);
-            } else if (key == "fps_overlay_detail") {
-                g_fps_overlay_detail = std::clamp(number, 0, 3);
-            } else if (key == "fps_overlay_single_row") {
-                g_fps_overlay_single_row = number != 0;
-            } else if (key == "fps_custom_frame_time") {
-                g_fps_custom_frame_time = number != 0;
-            } else if (key == "fps_custom_simulation") {
-                g_fps_custom_simulation = number != 0;
-            } else if (key == "fps_custom_graphics") {
-                g_fps_custom_graphics = number != 0;
-            } else if (key == "fps_custom_vi") {
-                g_fps_custom_vi = number != 0;
-            } else if (key == "fps_custom_interpolation") {
-                g_fps_custom_interpolation = number != 0;
-            } else if (key == "fps_custom_audio") {
-                g_fps_custom_audio = number != 0;
-            } else if (key == "fps_custom_target") {
-                g_fps_custom_target = number != 0;
-            } else if (key == "fps_custom_resolution") {
-                g_fps_custom_resolution = number != 0;
-            } else if (key == "fps_font_size") {
-                g_fps_font_size = std::clamp(number, 16, 64);
-            } else if (key == "fps_fill_r") {
-                g_fps_fill_colour.x = std::clamp(number, 0, 255) / 255.0F;
-            } else if (key == "fps_fill_g") {
-                g_fps_fill_colour.y = std::clamp(number, 0, 255) / 255.0F;
-            } else if (key == "fps_fill_b") {
-                g_fps_fill_colour.z = std::clamp(number, 0, 255) / 255.0F;
-            } else if (key == "fps_fill_a") {
-                g_fps_fill_colour.w = std::clamp(number, 0, 255) / 255.0F;
-            } else if (key == "fps_outline_r") {
-                g_fps_outline_colour.x = std::clamp(number, 0, 255) / 255.0F;
-            } else if (key == "fps_outline_g") {
-                g_fps_outline_colour.y = std::clamp(number, 0, 255) / 255.0F;
-            } else if (key == "fps_outline_b") {
-                g_fps_outline_colour.z = std::clamp(number, 0, 255) / 255.0F;
-            } else if (key == "fps_outline_a") {
-                g_fps_outline_colour.w = std::clamp(number, 0, 255) / 255.0F;
-            } else if (key == "network_overlay_enabled") {
-                g_network_overlay_enabled = number != 0;
-            } else if (key == "network_overlay_position") {
-                g_network_overlay_position = std::clamp(number, 0, 3);
-            } else if (key == "network_overlay_detail") {
-                g_network_overlay_detail = std::clamp(number, 0, 2);
-            } else if (key == "network_overlay_single_row") {
-                g_network_overlay_single_row = number != 0;
-            } else if (key == "controller_input_overlay_enabled") {
-                g_controller_input_overlay_enabled = number != 0;
-            } else if (key == "controller_input_overlay_position") {
-                g_controller_input_overlay_position = std::clamp(number, 0, 3);
             } else if (key == "crt_enabled") {
                 g_crt_enabled = number != 0;
             } else if (key == "crt_filter_index") {
@@ -2528,6 +2498,7 @@ void LoadSettings() {
     g_online_automatic_backend = false;
     migrated |= migrated_rollback_backend; // Persist only after every setting owner has loaded.
     ApplyLoadedSound(sound_loaded);
+    ApplyLoadedOverlays(overlay_loaded);
     if (settings_version < 8) {
         // The former global gamepad map becomes the starting point for every
         // local player. Keyboard ownership remains Player 1, matching all
