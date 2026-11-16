@@ -206,7 +206,10 @@ A hub gate is two separate objects in a level's object map, not one:
 | | `keyID` | key requirement |
 | | `modelIndex`, `textID`, `scale` | appearance |
 
-`destinationMapId` is a `u8`. Retail uses 34 level ids, so roughly 220 remain.
+`destinationMapId` is a `u8`, but Track Lab's exporter and validator hold it to
+0 through 127, the same range the Track Select menu supports. A higher id, or a
+level name the asset tree does not know (which encodes as 255), is refused when
+the package is exported.
 
 An exit fires for a player inside its radius (the raw byte, in units; at least
 5) who has crossed the plane through the exit facing its `angleY`
@@ -244,7 +247,10 @@ byte to patch:
   which is 16 bytes in. So
   `offset = 16 + (bytes of the entries before the exit) + 8`, and 8 is
   `destinationMapId`'s place in `LevelObjectEntry_Exit`. It always falls in
-  `[16, 16 + entry bytes)`.
+  `[16, 16 + entry bytes)`. The game inflates a map into a buffer of `0x3000`
+  bytes, so the exporter refuses a link whose offset is not below `0x3000` (or
+  not inside the map), and `validate.py` flags the same in a manifest. A
+  manifest `level_id`, if one is ever written by hand, must be 0 to 127 as well.
 - `track` is the destination's manifest `id`.
 
 When the map loads, before the exit spawns, the runtime writes the level id it
@@ -253,7 +259,12 @@ the link and keeps the placeholder, so the exit leads to the Central Area hub
 and not to some other level. Only exits carry links. The source glTF keeps the
 destination as `destinationTrack` in the exit's extras, so a re-import keeps
 the link. The encoder writes only the entry's own fields, so the extra never
-reaches the game's bytes.
+never reaches the game's bytes.
+
+**Offline only.** Links are resolved by the offline runtime. Online, a hub exit
+to another installed `.dkrmap` is not resolved: the exit keeps its placeholder
+and leads to the Central Area hub, so do not rely on a link in an online
+session. Exits to retail levels are unaffected.
 
 ## Progression
 
@@ -486,8 +497,8 @@ appended level ID. The native menu supports IDs below 128; higher IDs remain
 available through Track Lab. Hub, boss and special level types are not added
 to the normal-race grid.
 
-Challenge (battle, bananas, eggs), boss and hub levels play from a `.dkrmap`
-through Track Lab's auto boot or a hub exit; retail decides everything from the
+Challenge (battle, bananas, eggs), boss and hub levels play offline from a
+`.dkrmap` through Track Lab's auto boot or a hub exit; retail decides everything from the
 header's race type. One retail lookup needs help. The first time a boss level
 loads, `level_load` swaps it for the boss's introduction scene, found by
 scanning `ASSET_MISC_67` for `{boss level, intro level}` pairs until the level
@@ -501,6 +512,11 @@ a test boot the hub of the world the game is served (Dino Domain for
 `WORLD_CUSTOM_TRACKS`). A boss level never runs a silver coin race, so the
 cleared bit unlocks nothing; the log shows
 `boss race runs without the retail intro and outro scenes`.
+
+**Boss levels are offline only.** The retail boss intro and outro lookups are
+what the hook above bypasses, and the bypass is not part of the online
+contract, so an online session refuses a `.dkrmap` boss level. Play it from
+Track Lab's auto boot or a hub exit in an offline game.
 
 **Shadows on busy floors.** Every racer's shadow is built from the floor
 triangles under it (`shadow_generate`, `func_8002E904` in `tracks.c`) into
@@ -890,8 +906,12 @@ ceiling: a gate's place in the table lives in signed bytes
 before comparing it with the count, so the count may not exceed 127. Nothing
 else in the game or the runtime sizes anything by checkpoint count: the AI and
 homing-rocket splines take four or five consecutive gates and wrap their index,
-`courseCheckpoint` is an `s16`, and the netplay state hash hashes racer fields,
-not the table. Track Lab reports a set over 127 as an error and one over 60 as
+`courseCheckpoint` is an `s16`, and the netplay state checksum (the portable
+authoritative state, `determinism_state_hash.cpp` and `authoritative_state.cpp`)
+does not read the table. It covers racer fields, including each racer's
+`nextCheckpoint` (`Object_Racer` `0x192`, inside the word at `0x190`), plus
+authored actors and a few globals. The table's contents are fixed by the map,
+which every peer must already match. Track Lab reports a set over 127 as an error and one over 60 as
 a warning, since older DKR-R builds and original hardware still load only 60.
 
 **`mods/` belongs to librecomp.** N64ModernRuntime ships its own mod system,
@@ -921,3 +941,6 @@ regenerating, or Rev A silently loses its uncontended DMA fast path.
    required on every peer; local arming is not an online bypass. Playing custom
    courses selects Modern with a notice, while Accurate remains the original
    presentation reference.
+   This covers normal races. Boss levels are offline only, and a hub exit to
+   another installed `.dkrmap` is not resolved online (see *Exits to other
+   custom tracks* and the boss note above).
