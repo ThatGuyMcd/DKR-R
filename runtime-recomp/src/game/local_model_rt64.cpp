@@ -431,8 +431,9 @@ void LocalModelRT64Pass::prepare(std::span<const dkr_owned_draw_event> events, s
             std::sort(view.begin(), view.end());
         if (std::all_of(drawn.begin(), drawn.end(), [](const auto& view) { return view.empty(); }))
             return;
-        const auto count = r.word(revision_addresses::ObjectCount), start = r.word(revision_addresses::ObjectListStart),
-                   list = r.word(revision_addresses::ObjectList);
+        const auto count = r.word(revision_addresses::current().ObjectCount),
+                   start = r.word(revision_addresses::current().ObjectListStart),
+                   list = r.word(revision_addresses::current().ObjectList);
         if (count > 2048 || start > count)
             throw std::runtime_error("local scenery object count");
         r.offset(list, count * 4, 4);

@@ -209,7 +209,7 @@ RspExitReason EmptyAudioTask(std::uint8_t*, std::uint32_t) {
 }
 
 RspUcodeFunc* GetRspMicrocode(const OSTask* task) {
-    if (task->t.type == M_AUDTASK && task->t.ucode == dkr::runtime::revision_addresses::AspMainTextStart) {
+    if (task->t.type == M_AUDTASK && task->t.ucode == dkr::runtime::revision_addresses::current().AspMainTextStart) {
         // DKR can submit a zero-command audio frame when the host-reported AI
         // queue already satisfies the synthesizer's requested frame size. The
         // original scheduler treats that as completed work; entering the ABI

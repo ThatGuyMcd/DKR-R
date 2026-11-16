@@ -25,7 +25,8 @@ constexpr gpr kInitialCodeAddress = static_cast<gpr>(static_cast<std::int32_t>(0
 void InitialiseEntrypointContext(std::uint8_t*, recomp_context* context) {
     // The CIC 6103/bootstrap path clears BSS and establishes this stack before
     // tail-calling mainproc. RDRAM is already zeroed by N64ModernRuntime.
-    context->r29 = static_cast<gpr>(static_cast<std::int32_t>(dkr::runtime::revision_addresses::EntrypointStackTop));
+    context->r29 =
+        static_cast<gpr>(static_cast<std::int32_t>(dkr::runtime::revision_addresses::current().EntrypointStackTop));
     dkr::runtime::netplay::register_runtime_context(nullptr, context);
 }
 

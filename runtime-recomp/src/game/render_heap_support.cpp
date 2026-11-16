@@ -23,7 +23,7 @@ gpr guest(std::uint32_t at) {
 // existing 8 MiB guest RAM. No host allocation, save routing or GPU completion.
 extern "C" void dkr_render_heap_reserve(std::uint8_t* rdram, recomp_context*) {
     using namespace dkr::runtime;
-    const bool v80 = revision_addresses::CurrentHud == revision_addresses::kUsV80.CurrentHud;
+    const bool v80 = revision_addresses::current().CurrentHud == revision_addresses::kUsV80.CurrentHud;
     const auto pool = v80 ? render_heap_addresses::Pool80 : render_heap_addresses::Pool77;
     const auto read = [&](std::uint32_t at) { return std::uint32_t(MEM_W(0, guest(at))); };
     const auto write = [&](std::uint32_t at, std::uint32_t value) { MEM_W(0, guest(at)) = value; };

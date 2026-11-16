@@ -20,8 +20,8 @@ int main() {
     for (const auto revision : {rom::Revision::UsV77, rom::Revision::UsV80}) {
         assert(revision_addresses::select(revision));
         const gpr timer = static_cast<std::int32_t>(revision == rom::Revision::UsV80 ? 0x801269F0U : 0x80126450U);
-        const gpr index = static_cast<std::int32_t>(revision_addresses::TitleDemoIndex);
-        const gpr reveal = static_cast<std::int32_t>(revision_addresses::TitleRevealTimer);
+        const gpr index = static_cast<std::int32_t>(revision_addresses::current().TitleDemoIndex);
+        const gpr reveal = static_cast<std::int32_t>(revision_addresses::current().TitleRevealTimer);
         const gpr base = static_cast<std::int32_t>(0x80010000U);
         for (const auto destination : {startup::Destination::StartMenu, startup::Destination::CharacterSelect})
             for (const bool online : {false, true}) {
@@ -34,9 +34,9 @@ int main() {
                 ctx->r2 = base;
                 ctx->r4 = 0x1234;
                 const auto table_before = MEM_W(0, base);
-                MEM_W(0, static_cast<std::int32_t>(revision_addresses::MenuDelay)) = 0;
+                MEM_W(0, static_cast<std::int32_t>(revision_addresses::current().MenuDelay)) = 0;
                 startup::prepare_launch(true, online, false, destination);
-                const gpr music_lock = static_cast<std::int32_t>(revision_addresses::BlockMusicChange);
+                const gpr music_lock = static_cast<std::int32_t>(revision_addresses::current().BlockMusicChange);
                 const gpr fade =
                     static_cast<std::int32_t>(revision == rom::Revision::UsV80 ? 0x800DCBC0U : 0x800DC650U);
                 const gpr fade_timer =
@@ -66,14 +66,15 @@ int main() {
                 assert(MEM_W(0, base) == table_before); // never rewrite the retail table
                 dkr_skip_intro_character_select(rdram, ctx);
                 const bool selected = !online && destination == startup::Destination::CharacterSelect;
-                const auto delay = static_cast<std::int32_t>(revision_addresses::MenuDelay);
+                const auto delay = static_cast<std::int32_t>(revision_addresses::current().MenuDelay);
                 assert(MEM_W(0, delay) == (selected ? 31 : 0));
                 if (selected) {
-                    assert(MEM_W(0, static_cast<std::int32_t>(revision_addresses::NumberOfActivePlayers)) == 1);
+                    assert(MEM_W(0, static_cast<std::int32_t>(revision_addresses::current().NumberOfActivePlayers)) ==
+                           1);
                     for (int i = 0; i < 4; ++i) {
-                        assert(MEM_B(i, static_cast<std::int32_t>(revision_addresses::PlayersCharacterArray)) ==
-                               (i == 0 ? 1 : -1));
-                        assert(MEM_B(i, static_cast<std::int32_t>(revision_addresses::ActivePlayersArray)) ==
+                        assert(MEM_B(i, static_cast<std::int32_t>(
+                                            revision_addresses::current().PlayersCharacterArray)) == (i == 0 ? 1 : -1));
+                        assert(MEM_B(i, static_cast<std::int32_t>(revision_addresses::current().ActivePlayersArray)) ==
                                (i == 0 ? 1 : 0));
                     }
                     MEM_W(0, delay) = 0;
