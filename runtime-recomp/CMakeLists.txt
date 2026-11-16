@@ -2377,6 +2377,10 @@ if(BUILD_TESTING)
     target_link_libraries(DKRNetplayManifestBuilderTests PRIVATE DKRNetplayCore)
     add_test(NAME DKRNetplayManifestBuilder COMMAND DKRNetplayManifestBuilderTests)
 
+    add_executable(DKRSignalSafeTextTests tests/signal_safe_text_tests.cpp)
+    target_include_directories(DKRSignalSafeTextTests PRIVATE "${CMAKE_CURRENT_LIST_DIR}/src/game")
+    add_test(NAME DKRSignalSafeText COMMAND DKRSignalSafeTextTests)
+
     add_executable(DKRExperimentalConfirmedOutputTests tests/experimental_confirmed_output_tests.cpp)
     find_package(Threads REQUIRED)
     target_link_libraries(DKRExperimentalConfirmedOutputTests PRIVATE DKRNetplayCore Threads::Threads)
