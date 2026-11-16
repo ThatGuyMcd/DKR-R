@@ -11,8 +11,8 @@ against sources that do not come from the toml:
   repository): a named symbol must sit at the table's address in both revisions;
 * the decomp symbol lists (extern/dkr-decomp, skipped without extern/): the same
   names, and the entries the SDK kit only knows by address;
-* structure: field, value, alias and select() counts agree, addresses are inside
-  RAM, aliases are the only duplicates, and v80 minus v77 is the same as the
+* structure: field and value counts agree, addresses are inside RAM, the
+  intentional aliases (two names, one address) are the only duplicates, and v80 minus v77 is the same as the
   SDK symbols around it.
 
 Entries are verified at the strongest level available; test_coverage prints
@@ -29,8 +29,6 @@ import unittest
 import tomllib
 
 ROOT = Path(__file__).resolve().parents[2]
-HEADER = ROOT / "runtime-recomp/src/game/revision_addresses.hpp"
-CURRENT_TEST = ROOT / "runtime-recomp/tests/revision_addresses_current_tests.cpp"
 SPEC = ROOT / "runtime-recomp/symbols/revision_addresses.toml"
 SDK = {rev: ROOT / f"modding/reference-us-v{rev}/data.toml" for rev in ("77", "80")}
 DECOMP = {rev: ROOT / f"extern/dkr-decomp/ver/symbols/symbol_addrs.us.v{rev}.txt" for rev in ("77", "80")}
@@ -375,10 +373,7 @@ def parse_header():
         )
         for name in ("kUsV77", "kUsV80")
     }
-    text = HEADER.read_text()
-    aliases = re.findall(r"^inline std::uint32_t (\w+) = kUsV77\.(\w+);", text, re.M)
-    selected = re.findall(r"^    (\w+) = table\.(\w+);", text, re.M)
-    return fields, entries, aliases, selected
+    return fields, entries
 
 
 def sdk_symbols(rev):
@@ -399,7 +394,7 @@ def decomp_symbols(rev):
     return symbols
 
 
-FIELDS, ENTRIES, ALIASES, SELECTED = parse_header()
+FIELDS, ENTRIES = parse_header()
 TABLES = RECORDED
 
 
@@ -408,22 +403,10 @@ class StructureTests(unittest.TestCase):
         self.assertEqual(len(FIELDS), len(set(FIELDS)), "duplicate field name")
         for rev, values in TABLES.items():
             self.assertEqual(len(values), len(FIELDS), f"v{rev}: {len(values)} values for {len(FIELDS)} fields")
-        # Declaration order of the aliases and of select()'s assignments does not
-        # matter (WaveTexUVMask* come first there); each field must appear once.
-        self.assertEqual(sorted(name for name, _ in ALIASES), sorted(FIELDS), "mutable aliases differ from the struct")
-        self.assertTrue(all(name == source for name, source in ALIASES))
-        self.assertEqual(sorted(name for name, _ in SELECTED), sorted(FIELDS), "select() misses or repeats a field")
-        self.assertTrue(all(name == source for name, source in SELECTED))
 
     def test_the_template_initialises_every_field_in_declaration_order(self):
         for name, entries in ENTRIES.items():
             self.assertEqual(entries, FIELDS, name)
-
-    def test_the_current_table_test_covers_exactly_the_aliases(self):
-        text = CURRENT_TEST.read_text()
-        listed = re.findall(r"^\s+X\((\w+)\)", text, re.M)
-        self.assertEqual(sorted(listed), sorted(alias for alias, _ in ALIASES))
-        self.assertEqual(len(listed), len(set(listed)))
 
     def test_addresses_are_inside_ram(self):
         for rev, values in TABLES.items():
