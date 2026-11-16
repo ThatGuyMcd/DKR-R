@@ -148,11 +148,25 @@ class Transport final : public net::SessionTransport {
     }
     void close() override {
         live_.reset();
-        // What this device relayed for others, at the end of the session.
-        if (const auto relayed = engine_.view(); relayed.forwarded || relayed.dropped)
-            dkr::runtime::session_log::write("[online][proxy] teardown forwarded-bytes=%llu dropped=%llu\n",
-                                             (unsigned long long)relayed.forwarded,
-                                             (unsigned long long)relayed.dropped);
+        // What this device relayed for others, at the end of the session. Written for
+        // every device that took part (even with nothing relayed), so a missing line
+        // means the process never got here. Per lane: forwarded bytes, then datagrams
+        // dropped as expired / forward-failed / deliver-full.
+        if (const auto relayed = engine_.view();
+            relayed.enabled || relayed.volunteer || relayed.forwarded || relayed.dropped) {
+            std::string lanes;
+            for (std::size_t lane = 0; lane < relayed.lane_forwarded.size(); ++lane) {
+                const auto& d = relayed.lane_dropped[lane];
+                char text[96];
+                std::snprintf(text, sizeof text, " lane%zu=%llu/%llu/%llu/%llu", lane,
+                              (unsigned long long)relayed.lane_forwarded[lane], (unsigned long long)d[0],
+                              (unsigned long long)d[1], (unsigned long long)d[2]);
+                lanes += text;
+            }
+            dkr::runtime::session_log::write("[online][proxy] teardown forwarded-bytes=%llu dropped=%llu%s\n",
+                                             (unsigned long long)relayed.forwarded, (unsigned long long)relayed.dropped,
+                                             lanes.c_str());
+        }
         engine_.reset();
         meter_.reset();
         deliveries_.clear();
@@ -461,8 +475,10 @@ class Transport final : public net::SessionTransport {
             }
         for (const auto& [peer, route] : selected_)
             if (!selected.contains(peer))
-                dkr::runtime::session_log::write("[online][proxy] endpoint=%llu event=direct-fallback\n",
-                                                 (unsigned long long)peer);
+                dkr::runtime::session_log::write(
+                    "[online][proxy] endpoint=%llu event=direct-fallback checkpoint-queued-bytes=%zu "
+                    "checkpoint-buffered-bytes=%zu\n",
+                    (unsigned long long)peer, v.lane_queued[4], buffered_bytes(net::TransportTrafficClass::Checkpoint));
         selected_ = std::move(selected);
         auto& state = registry();
         std::lock_guard lock(state.mutex);

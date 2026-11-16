@@ -230,6 +230,10 @@ void policy_tests() {
         }
         check(sim.delivered.empty() && !sim.selected(2),
               "a full receiving queue cannot issue successful delivery receipts");
+        const auto receiver = sim.nodes[1]->view(sim.now);
+        check(receiver.lane_dropped[2][std::size_t(Drop::DeliverFull)] > 0 &&
+                  receiver.lane_dropped[2][std::size_t(Drop::DeliverFull)] == receiver.dropped,
+              "a full receiving queue is counted on its lane as deliver-full");
     }
     {
         Simulation sim;
@@ -295,6 +299,15 @@ void policy_tests() {
         }
         check(sim.nodes[3]->view(sim.now).queued < 128 * 1024, "priority fixture below byte bound");
         check(rejected > 0, "a blocked route cannot consume every peer's queue space");
+        {
+            const auto proxy = sim.nodes[3]->view(sim.now);
+            std::uint64_t total = 0;
+            for (const auto& lane : proxy.lane_dropped)
+                for (const auto count : lane)
+                    total += count;
+            check(proxy.lane_dropped[1][std::size_t(Drop::ForwardFailed)] > 0 && total == proxy.dropped,
+                  "refused forwards are counted on their lane as forward-failed and add up");
+        }
         const auto dropped = sim.nodes[3]->view(sim.now).dropped;
         sim.block_forward = false;
         sim.repair_block = true;
@@ -611,6 +624,16 @@ void policy_tests() {
             check(sim.nodes[2]->send(1, cipher, lane, sim.now), "five traffic lanes accepted");
         sim.run(200ms);
         check(sim.delivered.size() == 5, "five lanes forwarded");
+        {
+            const auto proxy = sim.nodes[3]->view(sim.now);
+            std::uint64_t total = 0;
+            bool every_lane = true;
+            for (const auto bytes : proxy.lane_forwarded) {
+                total += bytes;
+                every_lane = every_lane && bytes > 0;
+            }
+            check(every_lane && total == proxy.forwarded, "forwarded bytes are counted per lane and add up");
+        }
         for (const auto& [origin, b] : sim.delivered) {
             Id from = 0, seq = 0;
             Bytes opened;
