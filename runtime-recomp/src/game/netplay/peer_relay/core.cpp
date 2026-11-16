@@ -223,9 +223,9 @@ void Engine::reset() {
     serial_ = signal_serial_ = control_serial_ = 0;
     tokens_at_ = {};
     tokens_ = 256 * 1024;
-    forwarded_ = dropped_ = 0;
-    lane_forwarded_ = {};
-    lane_dropped_ = {};
+    // forwarded_, dropped_ and the lane counters are the transport's lifetime
+    // totals. They survive a reset (a room change, or the session leaving its
+    // active states) so the teardown line can still report them.
     lobby_.clear();
     lobby_payload_.clear();
     lobby_serial_ = lobby_generation_ = 0;
@@ -257,6 +257,8 @@ void Engine::configure(Context next, Clock::time_point now) {
     context_ = std::move(next);
     if (!context_.active)
         return;
+    if (context_.allow || context_.volunteer)
+        participated_ = true;
     std::erase_if(recovery_at_, [&](const auto& item) { return !admitted(item.first); });
     if (context_.local == context_.host)
         policy_ = context_.allow;
@@ -1132,6 +1134,7 @@ std::vector<Control> Engine::controls() {
 }
 View Engine::view(Clock::time_point now) const {
     View out{policy_, context_.volunteer, {}, forwarded_, dropped_, queued_bytes_, context_.local, context_.host};
+    out.participated = participated_;
     out.lane_forwarded = lane_forwarded_;
     out.lane_dropped = lane_dropped_;
     for (std::size_t lane = 0; lane < queued_.size(); ++lane)

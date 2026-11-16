@@ -153,7 +153,7 @@ class Transport final : public net::SessionTransport {
         // means the process never got here. Per lane: forwarded bytes, then datagrams
         // dropped as expired / forward-failed / deliver-full.
         if (const auto relayed = engine_.view();
-            relayed.enabled || relayed.volunteer || relayed.forwarded || relayed.dropped) {
+            relayed.participated || relayed.enabled || relayed.volunteer || relayed.forwarded || relayed.dropped) {
             std::string lanes;
             for (std::size_t lane = 0; lane < relayed.lane_forwarded.size(); ++lane) {
                 const auto& d = relayed.lane_dropped[lane];

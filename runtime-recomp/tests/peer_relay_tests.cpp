@@ -612,6 +612,23 @@ void policy_tests() {
         check(received == MaxLobbyMembers - 1, "every client and spectator receives maximum lobby status");
     }
     {
+        // The session leaving its active states withdraws the relay context; the
+        // teardown line still needs what this device relayed.
+        Simulation sim;
+        sim.run(13s);
+        const auto cipher = secure::seal(Bytes{8, 7, 6, 5}, sim.original, 2, 778, 77);
+        for (unsigned lane = 0; lane < 5; ++lane)
+            check(sim.nodes[2]->send(1, cipher, lane, sim.now), "lanes accepted before the context is withdrawn");
+        sim.run(200ms);
+        const auto before = sim.nodes[3]->view(sim.now);
+        check(before.forwarded > 0, "proxy forwarded before the context is withdrawn");
+        sim.nodes[3]->configure(Context{}, sim.now);
+        const auto after = sim.nodes[3]->view(sim.now);
+        check(after.participated && after.forwarded == before.forwarded &&
+                  after.lane_forwarded == before.lane_forwarded,
+              "relay counters and participation survive the context being withdrawn");
+    }
+    {
         Simulation sim;
         sim.drop_control = true;
         sim.run(13s);
