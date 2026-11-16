@@ -1282,6 +1282,11 @@ extern "C" int dkr_legacy_track_menu(std::uint8_t* rdram, recomp_context* ctx, u
     // get_track_id_to_load can replace it, with or without legacy courses.
     if (!legacy::frozen_courses() && event == 12 && static_cast<std::uint32_t>(ctx->r4) == 2)
         custom_tracks::arm_track_override({});
+    // menu_track_select_init, load_level_game and menu_init: a custom boss
+    // race is over, so the courseFlags bits it borrowed go back before any
+    // save can pack them. A boss level being loaded borrows them again.
+    if(event==0 || event==14 || event==15)
+        custom_tracks::return_lent_boss_flags(rdram,ctx,-1);
     auto state = legacy::menu.load();
     try {
         if (!legacy::private_world && (event == 0 || event == 1 || event == 15)) {
