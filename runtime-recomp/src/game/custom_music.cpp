@@ -138,8 +138,8 @@ void restore_row(std::uint8_t* rdram) {
 // a slot the bank leaves null crashes the player.
 bool check_against_rom(std::uint8_t* rdram, std::uint32_t player, SequenceSong& song) {
     std::uint32_t capacity = 0;
-    const auto table = static_cast<std::uint32_t>(MEM_W(0, guest(addresses::SequenceTable)));
-    const auto lengths = static_cast<std::uint32_t>(MEM_W(0, guest(addresses::SequenceLengths)));
+    const auto table = static_cast<std::uint32_t>(MEM_W(0, guest(addresses::current().SequenceTable)));
+    const auto lengths = static_cast<std::uint32_t>(MEM_W(0, guest(addresses::current().SequenceLengths)));
     if (table != 0U && lengths != 0U) {
         const auto count = static_cast<std::int16_t>(MEM_H(kSeqFileCountOffset, guest(table)));
         for (std::int32_t index = 0; index < count; ++index) {
@@ -312,12 +312,12 @@ bool intercept_music_volume(std::uint8_t* rdram, std::int32_t requested) {
     // music_sequence_init sets the volume before it records the new song as
     // current, while the song is still the pending one; checking both covers
     // the first set as well as every later fade.
-    const std::uint8_t current = MEM_BU(0, guest(addresses::CurrentSequence));
-    const std::uint8_t next = MEM_BU(0, guest(addresses::MusicNextSequence));
+    const std::uint8_t current = MEM_BU(0, guest(addresses::current().CurrentSequence));
+    const std::uint8_t next = MEM_BU(0, guest(addresses::current().MusicNextSequence));
     if (current != carrier && next != carrier) {
         return false;
     }
-    const std::uint32_t base = MEM_BU(0, guest(addresses::MusicBaseVolume));
+    const std::uint32_t base = MEM_BU(0, guest(addresses::current().MusicBaseVolume));
     g_game_gain.store(game_gain(requested, base), std::memory_order_release);
     return true;
 }
@@ -328,10 +328,10 @@ void tick(std::uint8_t* rdram) {
     const std::uint8_t carrier = g_carrier.load(std::memory_order_acquire);
     bool playing = false;
     if (carrier != 0U) {
-        const auto player = static_cast<std::uint32_t>(MEM_W(0, guest(addresses::MusicPlayer)));
+        const auto player = static_cast<std::uint32_t>(MEM_W(0, guest(addresses::current().MusicPlayer)));
         if (player != 0U) {
             const auto state = static_cast<std::int32_t>(MEM_W(kPlayerStateOffset, guest(player)));
-            playing = state == kAlPlaying && MEM_BU(0, guest(addresses::CurrentSequence)) == carrier;
+            playing = state == kAlPlaying && MEM_BU(0, guest(addresses::current().CurrentSequence)) == carrier;
         }
     }
     if (playing && !g_was_playing) {
@@ -344,7 +344,7 @@ void tick(std::uint8_t* rdram) {
     }
     g_was_playing = playing;
     if (playing) {
-        const std::int32_t bpm = static_cast<std::int16_t>(MEM_H(0, guest(addresses::MusicTempo)));
+        const std::int32_t bpm = static_cast<std::int16_t>(MEM_H(0, guest(addresses::current().MusicTempo)));
         if (g_base_bpm <= 0 && bpm > 0) {
             g_base_bpm = bpm;
         }
@@ -422,7 +422,7 @@ void sequence_loaded(std::uint8_t* rdram, std::uint32_t player, std::uint32_t bu
         song = g_sequence;
     }
     if (!song || player == 0U || buffer == 0U ||
-        player != static_cast<std::uint32_t>(MEM_W(0, guest(addresses::MusicPlayer))) ||
+        player != static_cast<std::uint32_t>(MEM_W(0, guest(addresses::current().MusicPlayer))) ||
         MEM_BU(0, guest(sequence_id_address)) != song->info.carrier) {
         return; // A jingle, a menu song, or another level's music.
     }
@@ -449,7 +449,7 @@ void sequence_loaded(std::uint8_t* rdram, std::uint32_t player, std::uint32_t bu
     // music_sequence_init then sets the volume, tempo and reverb from the
     // carrier's row. The tempo matters most: almost every race song has one
     // there, and music_tempo_set would play this song at the carrier's.
-    const auto table = static_cast<std::uint32_t>(MEM_W(0, guest(addresses::SequenceSoundTable)));
+    const auto table = static_cast<std::uint32_t>(MEM_W(0, guest(addresses::current().SequenceSoundTable)));
     if (table != 0U) {
         g_saved_row.address = table + song->info.carrier * kMusicDataBytes;
         for (std::uint32_t index = 0; index < kMusicDataBytes; ++index) {

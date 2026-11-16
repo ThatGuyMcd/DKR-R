@@ -576,7 +576,8 @@ class InstrumentationTests(unittest.TestCase):
             "runtime-recomp/src/game/track_select_draw_guest.h":"053e11b284c433b88b19470534003519ad3d16bc3e625ce4bcc2b5f4f172041e",
             "runtime-recomp/src/game/audio_event_queue.h":"7899cd55f01c95221a71eac64857611a929bc19ff2d1603ca4c3e56a1a4ebf18",
             "runtime-recomp/src/game/audio_event_queue_state.h":"7e479c5c99dc4ab0d43c9ddfc1a082437d631adc688b14e86c7d5a3edf0f7ecf",
-            "runtime-recomp/src/game/runtime_hud_layout.cpp":"827c4604785a1e1b6137c94ea77c6fc31e5d41cc27bee3be15c46c17c36ed75d",
+            # Nov 17: reads the selected revision through revision_addresses::current(); same addresses, no new store, call or hook.
+            "runtime-recomp/src/game/runtime_hud_layout.cpp":"de4a56ce106bf5c089c8cfc88fbbf717824a5cc2b481c953ebf70c5060e3affc",
             # Audited camera-clearance metadata: read-only guest observations
             # and local matrix bindings; no simulation/checkpoint writes.
             # Preserve the already-shipped water camera-root/time metadata.
@@ -603,7 +604,8 @@ class InstrumentationTests(unittest.TestCase):
             # function plus offset from the function tables (same values,
             # recorded in scripts/tests/test_revision_literals.py). Same reads,
             # no new store.
-            "runtime-recomp/src/game/presentation_identity.cpp":"1ad27d1d0bae2a501152e413b99d9982ffb986038e5b2a70a3722180c58750d9",
+            # Nov 17: reads the selected revision through revision_addresses::current(); same addresses, no new store, call or hook.
+            "runtime-recomp/src/game/presentation_identity.cpp":"86661756c55a04b17a78aca1bd3636e0a3abb81a0bbe354dfed8b7182ac29da7",
             "runtime-recomp/src/game/widescreen_policy.hpp":"3c3ff51000c969d6c7a9628364345fe1293e1c26de057197120728e79f975f36",
             "extern/dkr-decomp/src/save_data.c":"898df1a185c17e1d6ba11302fc5c140a1d7bd10ff3d8b86ff937c834bb13a607",
             "extern/dkr-decomp/src/thread3_main.c":"437434837706ee88e91578ce9e1aa2cd960e65e1e3a6f1aa47ae3b6289892d8e",

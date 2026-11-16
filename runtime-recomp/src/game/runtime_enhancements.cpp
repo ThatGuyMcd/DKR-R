@@ -47,23 +47,51 @@ std::atomic<int> g_texture_lod_bias_hundredths{0};
 std::atomic<bool> g_generated_mipmaps_requested{false};
 std::atomic<bool> g_multiplayer_race_music_enabled{true};
 
-const std::uint32_t& kBlockMusicChangeAddress = dkr::runtime::revision_addresses::BlockMusicChange;
-const std::uint32_t& kMusicNextSequenceAddress = dkr::runtime::revision_addresses::MusicNextSequence;
-const std::uint32_t& kDynamicMusicChannelMaskAddress = dkr::runtime::revision_addresses::DynamicMusicChannelMask;
-const std::uint32_t& kMenuSelectedCharacterAddress = dkr::runtime::revision_addresses::MenuSelectedCharacter;
-const std::uint32_t& kMenuCurrentCharacterAddress = dkr::runtime::revision_addresses::MenuCurrentCharacter;
-const std::uint32_t& kMusicTempoAddress = dkr::runtime::revision_addresses::MusicTempo;
+std::uint32_t block_music_change_address() {
+    return dkr::runtime::revision_addresses::current().BlockMusicChange;
+}
+std::uint32_t music_next_sequence_address() {
+    return dkr::runtime::revision_addresses::current().MusicNextSequence;
+}
+std::uint32_t dynamic_music_channel_mask_address() {
+    return dkr::runtime::revision_addresses::current().DynamicMusicChannelMask;
+}
+std::uint32_t menu_selected_character_address() {
+    return dkr::runtime::revision_addresses::current().MenuSelectedCharacter;
+}
+std::uint32_t menu_current_character_address() {
+    return dkr::runtime::revision_addresses::current().MenuCurrentCharacter;
+}
+std::uint32_t music_tempo_address() {
+    return dkr::runtime::revision_addresses::current().MusicTempo;
+}
 constexpr std::uint16_t kTimeTrialGhostBehaviour = 0x003AU;
-const std::uint32_t& kFrustumReferenceAddress = dkr::runtime::revision_addresses::FrustumReference;
-const std::uint32_t& kViewportLayoutAddress = dkr::runtime::revision_addresses::ViewportLayout;
-const std::uint32_t& kCurrentLevelHeaderAddress = dkr::runtime::revision_addresses::CurrentLevelHeader;
+std::uint32_t frustum_reference_address() {
+    return dkr::runtime::revision_addresses::current().FrustumReference;
+}
+std::uint32_t viewport_layout_address() {
+    return dkr::runtime::revision_addresses::current().ViewportLayout;
+}
+std::uint32_t current_level_header_address() {
+    return dkr::runtime::revision_addresses::current().CurrentLevelHeader;
+}
 constexpr std::uint32_t kLevelHeaderRaceTypeOffset = 0x4CU;
-const std::uint32_t& kSceneActiveCameraAddress = dkr::runtime::revision_addresses::SceneActiveCamera;
-const std::uint32_t& kWaveControllerAddress = dkr::runtime::revision_addresses::WaveController;
+std::uint32_t scene_active_camera_address() {
+    return dkr::runtime::revision_addresses::current().SceneActiveCamera;
+}
+std::uint32_t wave_controller_address() {
+    return dkr::runtime::revision_addresses::current().WaveController;
+}
 constexpr std::uint32_t kWaveViewDistanceOffset = 0x24U;
-const std::uint32_t& kWaveSelectionMapAddress = dkr::runtime::revision_addresses::WaveSelectionMap;
-const std::uint32_t& kWaveModelAddress = dkr::runtime::revision_addresses::WaveModel;
-const std::uint32_t& kNumberOfLevelSegmentsAddress = dkr::runtime::revision_addresses::NumberOfLevelSegments;
+std::uint32_t wave_selection_map_address() {
+    return dkr::runtime::revision_addresses::current().WaveSelectionMap;
+}
+std::uint32_t wave_model_address() {
+    return dkr::runtime::revision_addresses::current().WaveModel;
+}
+std::uint32_t number_of_level_segments_address() {
+    return dkr::runtime::revision_addresses::current().NumberOfLevelSegments;
+}
 constexpr std::uint32_t kWaveModelStride = 0x1CU;
 constexpr std::uint32_t kWaveModelSelectionOffset = 0x0CU;
 constexpr std::uint32_t kWaveModelFadeOffset = 0x14U;
@@ -86,7 +114,8 @@ void WriteRdramFloat(std::uint8_t* rdram, std::uint32_t address, float value) {
 }
 
 int CurrentLevelRaceType(std::uint8_t* rdram) {
-    const std::uint32_t header_address = static_cast<std::uint32_t>(MEM_W(0, RdramAddress(kCurrentLevelHeaderAddress)));
+    const std::uint32_t header_address =
+        static_cast<std::uint32_t>(MEM_W(0, RdramAddress(current_level_header_address())));
     if (header_address < 0x80000000U || header_address >= 0x80800000U) {
         return -1;
     }
@@ -109,13 +138,13 @@ bool SeedCharacterMusicMask(std::uint8_t* rdram, std::uint32_t character_address
 
     // A blocked music_play intentionally leaves the current sequence running.
     // Do not leave a mask behind for an unrelated future sequence in that case.
-    if (MEM_BU(0, RdramAddress(kMusicNextSequenceAddress)) != kChooseYourRacerSequence) {
+    if (MEM_BU(0, RdramAddress(music_next_sequence_address())) != kChooseYourRacerSequence) {
         return false;
     }
 
     const int selected = static_cast<std::int8_t>(MEM_BU(0, RdramAddress(character_address)));
     const std::uint16_t mask = character_music_channel_mask(selected);
-    MEM_W(0, RdramAddress(kDynamicMusicChannelMaskAddress)) = mask;
+    MEM_W(0, RdramAddress(dynamic_music_channel_mask_address())) = mask;
     return true;
 }
 
@@ -314,7 +343,7 @@ extern "C" void dkr_character_select_music_unblock(std::uint8_t* rdram, recomp_c
     // The character-select initializer immediately starts its own sequence and
     // then restores DKR's music-change lock. Clear a stale lock only at that
     // ownership boundary so the intended sequence can replace intro/menu music.
-    MEM_W(0, RdramAddress(kBlockMusicChangeAddress)) = 0;
+    MEM_W(0, RdramAddress(block_music_change_address())) = 0;
 }
 
 extern "C" void dkr_character_select_music_mask(std::uint8_t* rdram, recomp_context*) {
@@ -323,7 +352,7 @@ extern "C" void dkr_character_select_music_mask(std::uint8_t* rdram, recomp_cont
     // the old sequence player. Seed the queued sequence explicitly so it
     // starts with only the shared backing channels and the selected racer's
     // arrangement. 0x64 is DKR's invalid/no-secondary-channel sentinel.
-    if (!SeedCharacterMusicMask(rdram, kMenuCurrentCharacterAddress)) {
+    if (!SeedCharacterMusicMask(rdram, menu_current_character_address())) {
         return;
     }
     // Character-select models are authored to dance to the music beat. Reset
@@ -337,14 +366,14 @@ extern "C" void dkr_character_menu_music_mask(std::uint8_t* rdram, recomp_contex
     // Game Select and File Select can each restart Choose Your Racer after
     // returning from another menu. Seed that queued sequence from the selected
     // character, but do not reset the character-select model animation phase.
-    SeedCharacterMusicMask(rdram, kMenuSelectedCharacterAddress);
+    SeedCharacterMusicMask(rdram, menu_selected_character_address());
 }
 
 extern "C" void dkr_character_select_animation_tick(std::uint8_t* rdram, recomp_context* context) {
     if (!g_character_select_animation_active) {
         return;
     }
-    const int tempo = static_cast<std::int16_t>(MEM_H(0, RdramAddress(kMusicTempoAddress)));
+    const int tempo = static_cast<std::int16_t>(MEM_H(0, RdramAddress(music_tempo_address())));
     g_character_select_animation_phase = dkr::runtime::enhancements::advance_character_select_phase(
         g_character_select_animation_phase, static_cast<std::int32_t>(context->r4), tempo);
 }
@@ -457,11 +486,11 @@ extern "C" void dkr_keep_local_multiplayer_scenery(std::uint8_t* rdram, recomp_c
 
 extern "C" void dkr_maximise_persistent_water_detail(std::uint8_t* rdram, recomp_context*) {
     const int authored =
-        static_cast<std::int32_t>(MEM_W(kWaveViewDistanceOffset, RdramAddress(kWaveControllerAddress)));
+        static_cast<std::int32_t>(MEM_W(kWaveViewDistanceOffset, RdramAddress(wave_controller_address())));
     const int effective = dkr::runtime::enhancements::effective_wave_view_distance(
         dkr::runtime::enhancements::presentation_profile(), dkr::runtime::enhancements::water_lava_detail_multiplier(),
         CurrentLevelRaceType(rdram), authored);
-    MEM_W(kWaveViewDistanceOffset, RdramAddress(kWaveControllerAddress)) = static_cast<gpr>(effective);
+    MEM_W(kWaveViewDistanceOffset, RdramAddress(wave_controller_address())) = static_cast<gpr>(effective);
 }
 
 extern "C" void dkr_anchor_persistent_water_to_camera(std::uint8_t* rdram, recomp_context* context) {
@@ -470,7 +499,7 @@ extern "C" void dkr_anchor_persistent_water_to_camera(std::uint8_t* rdram, recom
             dkr::runtime::enhancements::water_lava_detail_multiplier(), CurrentLevelRaceType(rdram))) {
         return;
     }
-    const std::uint32_t camera = static_cast<std::uint32_t>(MEM_W(0, RdramAddress(kSceneActiveCameraAddress)));
+    const std::uint32_t camera = static_cast<std::uint32_t>(MEM_W(0, RdramAddress(scene_active_camera_address())));
     if (camera < 0x80000000U || camera > 0x807FFFE8U) {
         return;
     }
@@ -491,9 +520,9 @@ extern "C" void dkr_stabilise_persistent_water_transition(std::uint8_t* rdram, r
         return;
     }
 
-    const std::uint32_t selections = static_cast<std::uint32_t>(MEM_W(0, RdramAddress(kWaveSelectionMapAddress)));
-    const std::uint32_t models = static_cast<std::uint32_t>(MEM_W(0, RdramAddress(kWaveModelAddress)));
-    const int segment_count = static_cast<std::int32_t>(MEM_W(0, RdramAddress(kNumberOfLevelSegmentsAddress)));
+    const std::uint32_t selections = static_cast<std::uint32_t>(MEM_W(0, RdramAddress(wave_selection_map_address())));
+    const std::uint32_t models = static_cast<std::uint32_t>(MEM_W(0, RdramAddress(wave_model_address())));
+    const int segment_count = static_cast<std::int32_t>(MEM_W(0, RdramAddress(number_of_level_segments_address())));
     if (selections < 0x80000000U || selections >= 0x80800000U || models < 0x80000000U || models >= 0x80800000U ||
         segment_count <= 0 || segment_count > 512 ||
         models > 0x80800000U - static_cast<std::uint32_t>(segment_count) * kWaveModelStride) {
@@ -559,7 +588,7 @@ extern "C" void dkr_extended_frustum_begin(std::uint8_t* rdram, recomp_context*)
     // widened state if a host-side exception or future call-site changes that.
     if (g_frustum_scope.active) {
         for (std::size_t index = 0; index < kSideReferenceOffsets.size(); ++index) {
-            WriteRdramFloat(rdram, kFrustumReferenceAddress + kSideReferenceOffsets[index],
+            WriteRdramFloat(rdram, frustum_reference_address() + kSideReferenceOffsets[index],
                             g_frustum_scope.saved[index]);
         }
         g_frustum_scope.active = false;
@@ -576,7 +605,7 @@ extern "C" void dkr_extended_frustum_begin(std::uint8_t* rdram, recomp_context*)
     if (width <= 0 || height <= 0) {
         return;
     }
-    const int layout = static_cast<std::int32_t>(MEM_W(0, RdramAddress(kViewportLayoutAddress)));
+    const int layout = static_cast<std::int32_t>(MEM_W(0, RdramAddress(viewport_layout_address())));
     float scale = dkr::runtime::enhancements::frustum_horizontal_scale(
         dkr::runtime::enhancements::presentation_profile(), dkr::runtime::enhancements::fit_to_window_enabled(),
         dkr::runtime::enhancements::extended_culling_enabled(), dkr::display::view_aspect(width, height), layout,
@@ -592,7 +621,7 @@ extern "C" void dkr_extended_frustum_begin(std::uint8_t* rdram, recomp_context*)
         return;
     }
     for (std::size_t index = 0; index < kSideReferenceOffsets.size(); ++index) {
-        const std::uint32_t address = kFrustumReferenceAddress + kSideReferenceOffsets[index];
+        const std::uint32_t address = frustum_reference_address() + kSideReferenceOffsets[index];
         g_frustum_scope.saved[index] = ReadRdramFloat(rdram, address);
         WriteRdramFloat(rdram, address, g_frustum_scope.saved[index] * scale);
     }
@@ -609,7 +638,8 @@ extern "C" void dkr_extended_frustum_end(std::uint8_t* rdram, recomp_context*) {
         return;
     }
     for (std::size_t index = 0; index < kSideReferenceOffsets.size(); ++index) {
-        WriteRdramFloat(rdram, kFrustumReferenceAddress + kSideReferenceOffsets[index], g_frustum_scope.saved[index]);
+        WriteRdramFloat(rdram, frustum_reference_address() + kSideReferenceOffsets[index],
+                        g_frustum_scope.saved[index]);
     }
     g_frustum_scope.active = false;
 }
