@@ -2,6 +2,7 @@
 #include "netplay/session_chat/chat.hpp"
 #include "netplay/session_chat/owner_glue.hpp"
 #include "netplay/session_chat/settings.hpp"
+#include "netplay/peer_relay/owner_glue.hpp"
 #include "netplay/peer_relay/transport.hpp"
 #include "online_stability/qualification_delivery.hpp"
 #include "../policy.hpp"
@@ -5845,6 +5846,107 @@ void DirectSession::broadcast(protocol::MessageType type, std::span<const std::u
     for (const PeerRecord& peer : peers_) {
         if (peer.active)
             send_with_key(peer.address, peer.key, type, payload, frame);
+    }
+}
+
+// The peer relay's share of the pump. Requires mutex_ and party.mutex. The roster
+// and routing decisions are relay::build_context and relay::route
+// (peer_relay/owner_glue.hpp); this reads session and party state into their
+// inputs, resolves addresses and keys, and performs the sends.
+void DirectSession::service_peer_relay_locked(dkr::runtime::spectators::PartyLink& party,
+                                              std::chrono::steady_clock::time_point now) {
+    namespace proxy = dkr::relay;
+    namespace watch = dkr::runtime::spectators;
+    proxy::RelayRoster roster;
+    roster.room = match_id_;
+    roster.local = sender_id_;
+    roster.host = host_sender_id_;
+    roster.is_host = is_host_;
+    roster.party_enabled = party.enabled;
+    roster.connected = state_ == ConnectionState::Hosting || state_ == ConnectionState::Lobby ||
+                       state_ == ConnectionState::Loading || state_ == ConnectionState::Running;
+    roster.forming = state_ == ConnectionState::Hosting || state_ == ConnectionState::Lobby;
+    roster.launch_pending = launch_descriptor_.has_value();
+    roster.allow = proxy::host_enabled.load();
+    roster.volunteer = proxy::volunteer_enabled.load();
+    roster.quick = transport_->quick_join();
+    roster.local_slot = local_slot_;
+    if (party.enabled)
+        roster.party_generation = party.party.snapshot().generation;
+    else
+        roster.room_generation = room_view_.generation;
+    const auto describe = [&](const PeerAddress& address) {
+        return roster.quick ? std::string{} : DatagramSocket::describe(address);
+    };
+    std::vector<proxy::Address> addresses;
+    const auto party_port = [&](proxy::RosterRow& row) {
+        if (party.enabled)
+            if (const auto* entry = party.party.find(row.id); entry && entry->port)
+                row.party_port = *entry->port;
+    };
+    if (is_host_) {
+        roster.rows.push_back({sender_id_, local_name_, {}, !party.local_watching()});
+        party_port(roster.rows.back());
+        if (party.enabled) {
+            for (const auto& peer : party.peers)
+                if (const auto* member = party.party.find(peer.id)) {
+                    proxy::RosterRow row{peer.id, member->name, describe(peer.address),
+                                         member->role == watch::Role::Racer};
+                    party_port(row);
+                    row.party_rtt = proxy::PartyRtt{peer.rtt_count, peer.rtt_index, peer.rtts, peer.rtt_at};
+                    roster.rows.push_back(std::move(row));
+                    addresses.push_back({peer.id, peer.address});
+                }
+        } else {
+            for (const auto& peer : peers_)
+                if (peer.active) {
+                    proxy::RosterRow row{peer.sender_id,
+                                         peer.slot < room_view_.players.size()
+                                             ? room_view_.players[peer.slot].display_name
+                                             : std::string{"Racer"},
+                                         describe(peer.address), true};
+                    row.peer_slot = peer.slot;
+                    row.classic_rtt =
+                        proxy::ClassicRtt{peer.rtt_sample_count,
+                                          peer.rtt_sample_times[(peer.rtt_sample_cursor + peer.rtt_samples.size() - 1) %
+                                                                peer.rtt_samples.size()],
+                                          peer.rtt_ms};
+                    roster.rows.push_back(std::move(row));
+                    addresses.push_back({peer.sender_id, peer.address});
+                }
+        }
+    } else {
+        roster.rows.push_back({sender_id_, "You", {}, !party.local_watching()});
+        party_port(roster.rows.back());
+        roster.rows.push_back({host_sender_id_, "Host", {}, true});
+        party_port(roster.rows.back());
+        addresses.push_back({host_sender_id_, host_address_});
+    }
+    proxy::configure(this, proxy::build_context(roster, now), std::move(addresses));
+    proxy::RouteTable table;
+    table.is_host = is_host_;
+    table.host = host_sender_id_;
+    if (is_host_) {
+        if (party.enabled) {
+            for (const auto& peer : party.peers)
+                table.reachable.push_back(peer.id);
+        } else {
+            for (const auto& peer : peers_)
+                if (peer.active)
+                    table.reachable.push_back(peer.sender_id);
+        }
+    }
+    for (auto& command : proxy::route(proxy::controls(this), table)) {
+        auto payload = watch::link_encode(watch::LinkKind::Extension, command.bytes);
+        const auto type = protocol::MessageType(watch::PartyMessageType);
+        if (!is_host_) {
+            send_with_key(host_address_, key_, type, payload);
+        } else if (party.enabled) {
+            if (const auto* peer = party.peer(command.target))
+                send_with_key(peer->address, peer->key, type, payload);
+        } else if (const auto* peer = peer_by_sender(command.target)) {
+            send_with_key(peer->address, peer->key, type, payload);
+        }
     }
 }
 

@@ -632,6 +632,10 @@ class DirectSession final {
     void pump_locked();
     // Session chat's share of the pump. Requires mutex_ and party.mutex.
     void service_chat_locked(dkr::runtime::spectators::PartyLink& party);
+    // The peer relay's share of the pump (lobby roster for the relay, its control packets).
+    // Requires mutex_ and party.mutex; `now` is the pump's clock reading.
+    void service_peer_relay_locked(dkr::runtime::spectators::PartyLink& party,
+                                   std::chrono::steady_clock::time_point now);
     // Log from code that runs under mutex_ (the pump and everything it calls).
     // The line is formatted here, exactly as fprintf would, and queued; the
     // owner of the lock flushes the queue to stderr after releasing it. The
