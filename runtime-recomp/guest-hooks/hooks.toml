@@ -44,6 +44,22 @@ entry = '''    uint32_t detail_event[19]={0};
 returns = '''dkr_detail_mesh_end(rdram,ctx,detail_event);
     '''
 
+# Track Lab hubs: a levelLinks exit names another .dkrmap track, whose level id
+# only exists once the installed set is known. Right after track_spawn_objects
+# inflates an object map (s0 = the map's asset offset, 0x48(sp) = the buffer),
+# the runtime writes the resolved id into the exit's byte. funcs only: the
+# owned world runs frozen retail resources, where the hook would return at once.
+[[hook]]
+id = "custom-track-object-map-links"
+function = "track_spawn_objects"
+payloads = ["funcs"]
+[[hook.edits]]
+match = '''    after_7:
+    // 0x8000CAC8: lw          $a0, 0x3C($sp)'''
+replace = '''    after_7:
+    { extern void dkr_custom_tracks_object_map_links(uint8_t*,recomp_context*); dkr_custom_tracks_object_map_links(rdram,ctx); }
+    // 0x8000CAC8: lw          $a0, 0x3C($sp)'''
+
 # Custom vehicles: character events around model and wheel draws.
 [[hook]]
 id = "vehicle-model-scope"
