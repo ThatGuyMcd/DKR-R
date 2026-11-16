@@ -286,10 +286,11 @@ void prepare_presentation(CharacterState& state, std::uint8_t* ram, const recomp
     // Character select admits these, and an armed custom track's auto boot
     // starts the race without it. Admitting allocates nothing in the guest,
     // so the heap order prepare() relies on is the same either way.
-    if(!state.presentation.ready()) {
+    if (!state.presentation.ready()) {
         std::vector<std::uint32_t> samples;
-        for(unsigned j=0;j<entries.size();++j)samples.push_back(assets->character_race_sample_address(j));
-        state.presentation.initialize({ram,guest_memory_size()},ctx,presentation_calls(*p),entries,samples);
+        for (unsigned j = 0; j < entries.size(); ++j)
+            samples.push_back(assets->character_race_sample_address(j));
+        state.presentation.initialize({ram, guest_memory_size()}, ctx, presentation_calls(*p), entries, samples);
     }
     state.presentation.prepare({ram, guest_memory_size()}, ctx, presentation_calls(*p), entries, i,
                                assets->character_race_sample_address(i), audio);
