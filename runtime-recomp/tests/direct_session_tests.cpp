@@ -1790,6 +1790,45 @@ int main() {
         assert(!guarded_host.view().room.players[1].occupied);
     }
     {
+        // ~DirectSession is local teardown only. A joiner destroyed without disconnect()
+        // sends no departure notice and does not sit out CloseGrace; one that calls
+        // disconnect() first still tells the host promptly.
+        for (const bool announce : {false, true}) {
+            DirectSession leaving_host;
+            auto leaving_client = std::make_unique<DirectSession>();
+            configure_online_session(leaving_host);
+            configure_online_session(*leaving_client);
+            Rules leaving_rules = rollback_policy::default_rules();
+            std::string leaving_error;
+            assert(leaving_host.enable_owned_backend(true)); // v1.0.11: Rollback lobbies need the owned engines
+            assert(leaving_host.host(0U, test_host_address(), "Leaving Lobby", ConnectionMethod::Lan, "Host",
+                                     leaving_rules, leaving_error));
+            assert(leaving_client->join(leaving_host.view().invite, "Leaver", leaving_error));
+            pump_pair_until(leaving_host, *leaving_client, "leaving join request",
+                            [&] { return !leaving_host.view().pending_joins.empty(); });
+            assert(leaving_host.approve_join(leaving_host.view().pending_joins[0].request_id, leaving_error));
+            pump_pair_until(leaving_host, *leaving_client, "leaving lobby",
+                            [&] { return leaving_client->view().state == ConnectionState::Lobby; });
+            assert(leaving_host.view().room.players[1].occupied);
+            const auto started = std::chrono::steady_clock::now();
+            if (announce)
+                leaving_client->disconnect("The test client left.");
+            leaving_client.reset();
+            const auto took = std::chrono::steady_clock::now() - started;
+            if (!announce)
+                assert(took < std::chrono::milliseconds(250)); // CloseGrace alone is 400 ms
+            bool gone = false;
+            const auto deadline = std::chrono::steady_clock::now() +
+                                  (announce ? std::chrono::seconds(2) : std::chrono::milliseconds(300));
+            while (std::chrono::steady_clock::now() < deadline && !gone) {
+                leaving_host.pump();
+                gone = !leaving_host.view().room.players[1].occupied;
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            }
+            assert(gone == announce);
+        }
+    }
+    {
         DirectSession checkpoint_host;
         DirectSession checkpoint_client;
         configure_online_session(checkpoint_host);
