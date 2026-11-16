@@ -197,13 +197,14 @@ void hash_water_half(std::uint64_t& hash, std::uint16_t value) {
 
 bool inspect_water_runtime(const std::uint8_t* rdram, std::size_t size, WaterRuntime& water) {
     water = {};
-    if (!read_word(rdram, size, revision_addresses::WaveHeightIndices, water.height_indices) ||
-        !read_word(rdram, size, revision_addresses::WaveController + kWaveControllerSeedSizeOffset, water.seed_size) ||
-        !read_word(rdram, size, revision_addresses::WaveController + kWaveControllerTileCountOffset,
+    if (!read_word(rdram, size, revision_addresses::current().WaveHeightIndices, water.height_indices) ||
+        !read_word(rdram, size, revision_addresses::current().WaveController + kWaveControllerSeedSizeOffset,
+                   water.seed_size) ||
+        !read_word(rdram, size, revision_addresses::current().WaveController + kWaveControllerTileCountOffset,
                    water.tile_count) ||
-        !read_word(rdram, size, revision_addresses::WaveGenCount, water.generator_count) ||
-        !read_word(rdram, size, revision_addresses::WaveGenList, water.generator_list) ||
-        !read_word(rdram, size, revision_addresses::WaveGenObjects, water.generator_objects)) {
+        !read_word(rdram, size, revision_addresses::current().WaveGenCount, water.generator_count) ||
+        !read_word(rdram, size, revision_addresses::current().WaveGenList, water.generator_list) ||
+        !read_word(rdram, size, revision_addresses::current().WaveGenObjects, water.generator_objects)) {
         return false;
     }
 
@@ -291,11 +292,11 @@ bool capture_water_state(const std::uint8_t* rdram, std::size_t size, std::vecto
     if (!read_half(rdram, size, water.height_indices, phase_x) ||
         !read_half(rdram, size, water.height_indices + 2U, phase_y) || phase_x >= water.seed_size ||
         phase_y >= water.seed_size || !water_relative_index_hash(rdram, size, water, phase_x, phase_y, relative_hash) ||
-        !read_word(rdram, size, revision_addresses::WaveController + kWaveControllerMagnitudeOffset,
+        !read_word(rdram, size, revision_addresses::current().WaveController + kWaveControllerMagnitudeOffset,
                    controller_magnitude) ||
-        !read_word(rdram, size, revision_addresses::WavePowerBase, power_base) ||
-        !read_word(rdram, size, revision_addresses::WaveMagnitude, power_magnitude) ||
-        !read_word(rdram, size, revision_addresses::WavePowerDivisor, power_divisor)) {
+        !read_word(rdram, size, revision_addresses::current().WavePowerBase, power_base) ||
+        !read_word(rdram, size, revision_addresses::current().WaveMagnitude, power_magnitude) ||
+        !read_word(rdram, size, revision_addresses::current().WavePowerDivisor, power_divisor)) {
         error = "DKR's procedural-water phase is outside RDRAM.";
         return false;
     }
@@ -411,11 +412,12 @@ bool stage_water_state(const std::uint8_t* rdram, std::size_t size, std::span<co
             half_writes.emplace_back(address + 2U, static_cast<std::uint16_t>((y + delta_y) % seed_size));
         }
     }
-    word_writes.emplace_back(revision_addresses::WaveController + kWaveControllerMagnitudeOffset, controller_magnitude);
-    word_writes.emplace_back(revision_addresses::WavePowerBase, power_base);
-    word_writes.emplace_back(revision_addresses::WaveMagnitude, power_magnitude);
-    word_writes.emplace_back(revision_addresses::WavePowerDivisor, power_divisor);
-    word_writes.emplace_back(revision_addresses::WaveGenCount, generator_count);
+    word_writes.emplace_back(revision_addresses::current().WaveController + kWaveControllerMagnitudeOffset,
+                             controller_magnitude);
+    word_writes.emplace_back(revision_addresses::current().WavePowerBase, power_base);
+    word_writes.emplace_back(revision_addresses::current().WaveMagnitude, power_magnitude);
+    word_writes.emplace_back(revision_addresses::current().WavePowerDivisor, power_divisor);
+    word_writes.emplace_back(revision_addresses::current().WaveGenCount, generator_count);
     for (std::uint32_t index = 0U; index < kMaximumWaveGenerators; ++index) {
         if ((generator_mask & (1U << index)) != 0U) {
             half_writes.emplace_back(local.generator_list + index * kWaveGeneratorStride + kWaveGeneratorPhaseOffset,
@@ -668,16 +670,16 @@ bool collect_authored_actors(const std::uint8_t* rdram, std::size_t size, std::v
     std::uint32_t object_start = 0U;
     std::array<std::uint32_t, 2> map_starts{};
     std::array<std::uint32_t, 2> map_sizes{};
-    if (!read_word(rdram, size, revision_addresses::ObjectList, object_list) ||
-        !read_word(rdram, size, revision_addresses::ObjectCount, object_count) ||
-        !read_word(rdram, size, revision_addresses::ObjectListStart, object_start) || object_count > kMaximumObjects ||
-        object_start > object_count ||
+    if (!read_word(rdram, size, revision_addresses::current().ObjectList, object_list) ||
+        !read_word(rdram, size, revision_addresses::current().ObjectCount, object_count) ||
+        !read_word(rdram, size, revision_addresses::current().ObjectListStart, object_start) ||
+        object_count > kMaximumObjects || object_start > object_count ||
         (object_count != 0U &&
          offset_of(object_list, object_count * 4U, size) == std::numeric_limits<std::size_t>::max()) ||
-        !read_word(rdram, size, revision_addresses::ObjectMapSpawnList + 0U, map_starts[0]) ||
-        !read_word(rdram, size, revision_addresses::ObjectMapSpawnList + 4U, map_starts[1]) ||
-        !read_word(rdram, size, revision_addresses::ObjectMapSize + 0U, map_sizes[0]) ||
-        !read_word(rdram, size, revision_addresses::ObjectMapSize + 4U, map_sizes[1])) {
+        !read_word(rdram, size, revision_addresses::current().ObjectMapSpawnList + 0U, map_starts[0]) ||
+        !read_word(rdram, size, revision_addresses::current().ObjectMapSpawnList + 4U, map_starts[1]) ||
+        !read_word(rdram, size, revision_addresses::current().ObjectMapSize + 0U, map_sizes[0]) ||
+        !read_word(rdram, size, revision_addresses::current().ObjectMapSize + 4U, map_sizes[1])) {
         return false;
     }
     for (std::size_t map = 0U; map < map_starts.size(); ++map) {
@@ -756,10 +758,10 @@ bool capture_authoritative_state(const std::uint8_t* rdram, std::size_t rdram_si
     if (actors.capacity() < kMaximumAuthoredActors) {
         actors.reserve(kMaximumAuthoredActors);
     }
-    if (!read_word(rdram, rdram_size, revision_addresses::CurrentMapId, map) ||
-        !read_word(rdram, rdram_size, revision_addresses::NumberOfRacers, racer_count) ||
-        !read_word(rdram, rdram_size, revision_addresses::Racers, racer_array) || racer_count > kMaximumRacers ||
-        !collect_authored_actors(rdram, rdram_size, actors)) {
+    if (!read_word(rdram, rdram_size, revision_addresses::current().CurrentMapId, map) ||
+        !read_word(rdram, rdram_size, revision_addresses::current().NumberOfRacers, racer_count) ||
+        !read_word(rdram, rdram_size, revision_addresses::current().Racers, racer_array) ||
+        racer_count > kMaximumRacers || !collect_authored_actors(rdram, rdram_size, actors)) {
         error = "DKR's racer topology is invalid at the snapshot boundary.";
         return false;
     }
@@ -783,8 +785,8 @@ bool capture_authoritative_state(const std::uint8_t* rdram, std::size_t rdram_si
 
     std::uint16_t race_end_timer = 0U;
     std::uint8_t race_end_stage = 0U;
-    if (!read_half(rdram, rdram_size, revision_addresses::RaceEndTimer, race_end_timer) ||
-        !read_byte(rdram, rdram_size, revision_addresses::RaceEndStage, race_end_stage)) {
+    if (!read_half(rdram, rdram_size, revision_addresses::current().RaceEndTimer, race_end_timer) ||
+        !read_byte(rdram, rdram_size, revision_addresses::current().RaceEndStage, race_end_stage)) {
         error = "DKR's authored race-transition state is outside RDRAM.";
         output.clear();
         return false;
@@ -939,9 +941,9 @@ bool apply_authoritative_state_impl(std::uint8_t* rdram, std::size_t rdram_size,
     if (!take32(snapshot, cursor, magic) || !take32(snapshot, cursor, schema) || !take32(snapshot, cursor, frame) ||
         !take32(snapshot, cursor, map) || !take32(snapshot, cursor, racer_count) || magic != kMagic ||
         schema != kAuthoritativeStateSchema || frame != expected_frame || racer_count > kMaximumRacers ||
-        !read_word(rdram, rdram_size, revision_addresses::CurrentMapId, local_map) ||
-        !read_word(rdram, rdram_size, revision_addresses::NumberOfRacers, local_count) ||
-        !read_word(rdram, rdram_size, revision_addresses::Racers, racer_array) || local_map != map ||
+        !read_word(rdram, rdram_size, revision_addresses::current().CurrentMapId, local_map) ||
+        !read_word(rdram, rdram_size, revision_addresses::current().NumberOfRacers, local_count) ||
+        !read_word(rdram, rdram_size, revision_addresses::current().Racers, racer_array) || local_map != map ||
         local_count != racer_count) {
         error = "The host snapshot does not match this frame's map or racer topology.";
         return false;
@@ -955,13 +957,15 @@ bool apply_authoritative_state_impl(std::uint8_t* rdram, std::size_t rdram_size,
             return false;
         }
         word_writes.emplace_back(address, value);
-        if (preserve_lifecycle && address != revision_addresses::CurrentRngSeed &&
-            address != revision_addresses::PreviousRngSeed && address != revision_addresses::RaceStartTimer &&
-            address != revision_addresses::RaceStartProgress && address != revision_addresses::LogicUpdateRate) {
+        if (preserve_lifecycle && address != revision_addresses::current().CurrentRngSeed &&
+            address != revision_addresses::current().PreviousRngSeed &&
+            address != revision_addresses::current().RaceStartTimer &&
+            address != revision_addresses::current().RaceStartProgress &&
+            address != revision_addresses::current().LogicUpdateRate) {
             std::uint32_t local_value = 0U;
             if (!read_word(rdram, rdram_size, address, local_value) || local_value != value ||
-                ((address == revision_addresses::RaceFinishTriggered ||
-                  address == revision_addresses::NumberOfFinishedRacers) &&
+                ((address == revision_addresses::current().RaceFinishTriggered ||
+                  address == revision_addresses::current().NumberOfFinishedRacers) &&
                  value != 0U)) {
                 error = "Catch-up requires native race lifecycle work.";
                 return false;
@@ -972,19 +976,21 @@ bool apply_authoritative_state_impl(std::uint8_t* rdram, std::size_t rdram_size,
     std::uint16_t race_end_timer = 0U;
     std::uint8_t race_end_stage = 0U;
     if (!take16(snapshot, cursor, race_end_timer) || !take8(snapshot, cursor, race_end_stage) ||
-        offset_of(revision_addresses::RaceEndTimer ^ 2U, 2U, rdram_size) == std::numeric_limits<std::size_t>::max() ||
-        offset_of(revision_addresses::RaceEndStage ^ 3U, 1U, rdram_size) == std::numeric_limits<std::size_t>::max()) {
+        offset_of(revision_addresses::current().RaceEndTimer ^ 2U, 2U, rdram_size) ==
+            std::numeric_limits<std::size_t>::max() ||
+        offset_of(revision_addresses::current().RaceEndStage ^ 3U, 1U, rdram_size) ==
+            std::numeric_limits<std::size_t>::max()) {
         error = "The host snapshot's race-transition state is truncated.";
         return false;
     }
-    half_writes.emplace_back(revision_addresses::RaceEndTimer, race_end_timer);
-    byte_writes.emplace_back(revision_addresses::RaceEndStage, race_end_stage);
+    half_writes.emplace_back(revision_addresses::current().RaceEndTimer, race_end_timer);
+    byte_writes.emplace_back(revision_addresses::current().RaceEndStage, race_end_stage);
     if (preserve_lifecycle) {
         std::uint16_t local_timer = 0U;
         std::uint8_t local_stage = 0U;
-        if (!read_half(rdram, rdram_size, revision_addresses::RaceEndTimer, local_timer) ||
-            !read_byte(rdram, rdram_size, revision_addresses::RaceEndStage, local_stage) || race_end_timer != 0U ||
-            race_end_stage != 0U || local_timer != 0U || local_stage != 0U) {
+        if (!read_half(rdram, rdram_size, revision_addresses::current().RaceEndTimer, local_timer) ||
+            !read_byte(rdram, rdram_size, revision_addresses::current().RaceEndStage, local_stage) ||
+            race_end_timer != 0U || race_end_stage != 0U || local_timer != 0U || local_stage != 0U) {
             error = "Catch-up cannot skip a native race-end transition.";
             return false;
         }
@@ -1199,9 +1205,10 @@ bool capture_racer_orientation_state(const std::uint8_t* rdram, std::size_t rdra
     std::uint32_t map = 0U;
     std::uint32_t racer_count = 0U;
     std::uint32_t racer_array = 0U;
-    if (!read_word(rdram, rdram_size, revision_addresses::CurrentMapId, map) ||
-        !read_word(rdram, rdram_size, revision_addresses::NumberOfRacers, racer_count) ||
-        !read_word(rdram, rdram_size, revision_addresses::Racers, racer_array) || racer_count > kMaximumRacers) {
+    if (!read_word(rdram, rdram_size, revision_addresses::current().CurrentMapId, map) ||
+        !read_word(rdram, rdram_size, revision_addresses::current().NumberOfRacers, racer_count) ||
+        !read_word(rdram, rdram_size, revision_addresses::current().Racers, racer_array) ||
+        racer_count > kMaximumRacers) {
         error = "DKR's racer topology is invalid at the orientation boundary.";
         return false;
     }
@@ -1257,9 +1264,9 @@ bool apply_racer_orientation_correction(std::uint8_t* rdram, std::size_t rdram_s
     std::uint32_t current_map = 0U;
     std::uint32_t current_count = 0U;
     std::uint32_t racer_array = 0U;
-    if (!read_word(rdram, rdram_size, revision_addresses::CurrentMapId, current_map) ||
-        !read_word(rdram, rdram_size, revision_addresses::NumberOfRacers, current_count) ||
-        !read_word(rdram, rdram_size, revision_addresses::Racers, racer_array) || current_map != host.map ||
+    if (!read_word(rdram, rdram_size, revision_addresses::current().CurrentMapId, current_map) ||
+        !read_word(rdram, rdram_size, revision_addresses::current().NumberOfRacers, current_count) ||
+        !read_word(rdram, rdram_size, revision_addresses::current().Racers, racer_array) || current_map != host.map ||
         current_count != host.racers.size()) {
         error = "The orientation sample belongs to a different race topology.";
         return false;

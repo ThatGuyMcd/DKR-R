@@ -25,8 +25,12 @@
 
 namespace {
 
-const std::uint32_t& kActiveMagicCodesAddress = dkr::runtime::revision_addresses::ActiveMagicCodes;
-const std::uint32_t& kUnlockedMagicCodesAddress = dkr::runtime::revision_addresses::UnlockedMagicCodes;
+std::uint32_t active_magic_codes_address() {
+    return dkr::runtime::revision_addresses::current().ActiveMagicCodes;
+}
+std::uint32_t unlocked_magic_codes_address() {
+    return dkr::runtime::revision_addresses::current().UnlockedMagicCodes;
+}
 
 std::atomic<std::uint32_t> g_persistent_mask{0U};
 std::atomic<std::uint32_t> g_queued_one_shot_mask{0U};
@@ -230,8 +234,8 @@ bool dkr::runtime::magic_codes::clear_all(std::string& error) {
 extern "C" void dkr_apply_launch_magic_codes(std::uint8_t* rdram, recomp_context*) {
     if (g_session_state.applied)
         return;
-    const gpr active_address = RdramAddress(kActiveMagicCodesAddress);
-    const gpr unlocked_address = RdramAddress(kUnlockedMagicCodesAddress);
+    const gpr active_address = RdramAddress(active_magic_codes_address());
+    const gpr unlocked_address = RdramAddress(unlocked_magic_codes_address());
     const auto update = dkr::runtime::magic_codes::apply_magic_code_session(
         g_session_state, static_cast<std::uint32_t>(MEM_W(0, active_address)),
         static_cast<std::uint32_t>(MEM_W(0, unlocked_address)));

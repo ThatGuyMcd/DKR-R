@@ -29,7 +29,7 @@ extern "C" void dkr_water_profile_begin(std::uint32_t i) {
 extern "C" void dkr_water_profile_end(std::uint8_t* ram, std::uint32_t i) {
     if (!dkr::runtime::water::enabled() || i >= regions.size())
         return;
-    const auto map = Read(ram, dkr::runtime::revision_addresses::CurrentMapId);
+    const auto map = Read(ram, dkr::runtime::revision_addresses::current().CurrentMapId);
     if (map != profiled_map) {
         // Drop counts from the preceding level; preserve active nesting and
         // start times so a parent water-region return remains balanced.

@@ -38,21 +38,43 @@ namespace {
 constexpr std::uint32_t kRdramMask = 0x007FFFFFU;
 constexpr std::uint32_t kObjectBehaviourOffset = 0x48U;
 constexpr std::uint32_t kObjectIdOffset = 0x4AU;
-const std::uint32_t& kObjectCurrentMatrixAddress = dkr::runtime::revision_addresses::ObjectCurrentMatrix;
-const std::uint32_t& kSpTaskNumberAddress = dkr::runtime::revision_addresses::SpTaskNumber;
-const std::uint32_t& kCamerasAddress = dkr::runtime::revision_addresses::Cameras;
+std::uint32_t object_current_matrix_address() {
+    return dkr::runtime::revision_addresses::current().ObjectCurrentMatrix;
+}
+std::uint32_t sp_task_number_address() {
+    return dkr::runtime::revision_addresses::current().SpTaskNumber;
+}
+std::uint32_t cameras_address() {
+    return dkr::runtime::revision_addresses::current().Cameras;
+}
 constexpr std::uint32_t kCameraSize = 0x44U;
-const std::uint32_t& kActiveCameraIdAddress = dkr::runtime::revision_addresses::ActiveCameraId;
-const std::uint32_t& kCurrentCameraFovAddress = dkr::runtime::revision_addresses::CurrentCameraFov;
-const std::uint32_t& kCutsceneCameraActiveAddress = dkr::runtime::revision_addresses::CutsceneCameraActive;
+std::uint32_t active_camera_id_address() {
+    return dkr::runtime::revision_addresses::current().ActiveCameraId;
+}
+std::uint32_t current_camera_fov_address() {
+    return dkr::runtime::revision_addresses::current().CurrentCameraFov;
+}
+std::uint32_t cutscene_camera_active_address() {
+    return dkr::runtime::revision_addresses::current().CutsceneCameraActive;
+}
 constexpr std::uint32_t kCameraModeOffset = 0x36U;
-const std::uint32_t& kWaveControllerAddress = dkr::runtime::revision_addresses::WaveController;
+std::uint32_t wave_controller_address() {
+    return dkr::runtime::revision_addresses::current().WaveController;
+}
 constexpr std::uint32_t kWaveSubdivisionsOffset = 0x00U;
 constexpr std::uint32_t kWaveDoubleDensityOffset = 0x28U;
-const std::uint32_t& kShadowHeapFlipAddress = dkr::runtime::revision_addresses::ShadowHeapFlip;
-const std::uint32_t& kShadowHeapTrianglesAddress = dkr::runtime::revision_addresses::ShadowHeapTriangles;
-const std::uint32_t& kShadowHeapVerticesAddress = dkr::runtime::revision_addresses::ShadowHeapVertices;
-const std::uint32_t& kShadowHeapDataAddress = dkr::runtime::revision_addresses::ShadowHeapData;
+std::uint32_t shadow_heap_flip_address() {
+    return dkr::runtime::revision_addresses::current().ShadowHeapFlip;
+}
+std::uint32_t shadow_heap_triangles_address() {
+    return dkr::runtime::revision_addresses::current().ShadowHeapTriangles;
+}
+std::uint32_t shadow_heap_vertices_address() {
+    return dkr::runtime::revision_addresses::current().ShadowHeapVertices;
+}
+std::uint32_t shadow_heap_data_address() {
+    return dkr::runtime::revision_addresses::current().ShadowHeapData;
+}
 constexpr std::uint32_t kObjectHeaderOffset = 0x40U;
 constexpr std::uint32_t kObjectHeaderShadowGroupOffset = 0x32U;
 constexpr std::uint32_t kShadowTextureOffset = 0x04U;
@@ -334,28 +356,29 @@ bool ValidRange(std::uint32_t address, std::uint32_t size) {
 
 dkr::runtime::presentation::WorldProjection ReadWorldProjection(std::uint8_t* rdram) {
     using namespace dkr::runtime::revision_addresses;
-    const std::uint32_t header = ReadU32(rdram, CurrentLevelHeader);
+    const std::uint32_t header = ReadU32(rdram, dkr::runtime::revision_addresses::current().CurrentLevelHeader);
     if (!ValidRange(header, 0xA0U))
         return {};
-    const std::uint32_t layout = ReadU32(rdram, ViewportLayout);
-    const float wx = ReadF32(rdram, ViewProjectionMatrix + 0x0CU);
-    const float wy = ReadF32(rdram, ViewProjectionMatrix + 0x1CU);
-    const float wz = ReadF32(rdram, ViewProjectionMatrix + 0x2CU);
+    const std::uint32_t layout = ReadU32(rdram, dkr::runtime::revision_addresses::current().ViewportLayout);
+    const float wx = ReadF32(rdram, dkr::runtime::revision_addresses::current().ViewProjectionMatrix + 0x0CU);
+    const float wy = ReadF32(rdram, dkr::runtime::revision_addresses::current().ViewProjectionMatrix + 0x1CU);
+    const float wz = ReadF32(rdram, dkr::runtime::revision_addresses::current().ViewProjectionMatrix + 0x2CU);
     const bool perspective =
         std::isfinite(wx) && std::isfinite(wy) && std::isfinite(wz) && (wx * wx + wy * wy + wz * wz) > 0.01F;
-    if (!dkr_world_projection_eligible(static_cast<std::int32_t>(ReadU32(rdram, GameMode)),
-                                       ReadU8(rdram, header + 0x4CU), layout, perspective))
+    if (!dkr_world_projection_eligible(
+            static_cast<std::int32_t>(ReadU32(rdram, dkr::runtime::revision_addresses::current().GameMode)),
+            ReadU8(rdram, header + 0x4CU), layout, perspective))
         return {};
     const std::uint32_t authored = ReadU8(rdram, header + 0x9CU);
-    const std::uint32_t effective = ReadU32(rdram, CurrentCameraFov);
+    const std::uint32_t effective = ReadU32(rdram, dkr::runtime::revision_addresses::current().CurrentCameraFov);
     if (!authored || !dkr_world_projection_metadata_valid(authored, effective, layout))
         return {};
     return {static_cast<float>(authored), std::bit_cast<float>(effective), static_cast<std::uint8_t>(layout)};
 }
 
 bool ActiveLogicalCamera(std::uint8_t* rdram, std::uint32_t& camera_id) {
-    const std::uint32_t raw_camera_id = ReadU32(rdram, kActiveCameraIdAddress);
-    const bool cutscene_camera = ReadU8(rdram, kCutsceneCameraActiveAddress) != 0U;
+    const std::uint32_t raw_camera_id = ReadU32(rdram, active_camera_id_address());
+    const bool cutscene_camera = ReadU8(rdram, cutscene_camera_active_address()) != 0U;
     if (raw_camera_id >= g_camera_continuity.size() || (cutscene_camera && raw_camera_id >= 4U)) {
         return false;
     }
@@ -380,7 +403,7 @@ bool ShadowTopologySignature(std::uint8_t* rdram, std::uint32_t object, std::uin
         return false;
     }
     const std::int16_t shadow_group = ReadS16(rdram, header + kObjectHeaderShadowGroupOffset);
-    std::int32_t heap_index = static_cast<std::int32_t>(ReadU32(rdram, kShadowHeapFlipAddress));
+    std::int32_t heap_index = static_cast<std::int32_t>(ReadU32(rdram, shadow_heap_flip_address()));
     if (shadow_group == 1) {
         heap_index += 2;
     }
@@ -389,11 +412,11 @@ bool ShadowTopologySignature(std::uint8_t* rdram, std::uint32_t object, std::uin
     }
 
     const std::uint32_t heap_data =
-        ReadU32(rdram, kShadowHeapDataAddress + static_cast<std::uint32_t>(heap_index) * 4U);
+        ReadU32(rdram, shadow_heap_data_address() + static_cast<std::uint32_t>(heap_index) * 4U);
     const std::uint32_t heap_triangles =
-        ReadU32(rdram, kShadowHeapTrianglesAddress + static_cast<std::uint32_t>(heap_index) * 4U);
+        ReadU32(rdram, shadow_heap_triangles_address() + static_cast<std::uint32_t>(heap_index) * 4U);
     const std::uint32_t heap_vertices =
-        ReadU32(rdram, kShadowHeapVerticesAddress + static_cast<std::uint32_t>(heap_index) * 4U);
+        ReadU32(rdram, shadow_heap_vertices_address() + static_cast<std::uint32_t>(heap_index) * 4U);
     const std::uint32_t property_bytes = (static_cast<std::uint32_t>(mesh_end) + 1U) * kShadowHeapPropertySize;
     if (!ValidRange(heap_data, property_bytes) ||
         !ValidRange(heap_triangles, kMaximumShadowTriangles * kTriangleSize) ||
@@ -551,7 +574,7 @@ void RegisterCameraMatrix(std::uint8_t* rdram, std::uint32_t matrix_reference, s
         g_current_camera_identity = dkr::runtime::presentation::kIgnoredIdentity;
         return;
     }
-    const std::uint32_t camera = kCamerasAddress + camera_id * kCameraSize;
+    const std::uint32_t camera = cameras_address() + camera_id * kCameraSize;
     if (!ValidRange(camera, kCameraSize)) {
         TraceCameraRootFailure("invalid-camera-state", matrix_reference, matrix_address);
         g_matrix_maps[g_recording_buffer & 1U].insert_or_assign(Physical(matrix_address), MatrixBinding{});
@@ -564,11 +587,11 @@ void RegisterCameraMatrix(std::uint8_t* rdram, std::uint32_t matrix_reference, s
                                    static_cast<std::uint16_t>(ReadS16(rdram, camera + 0x38U)));
     const dkr::runtime::presentation::CameraContinuitySample sample{
         ReadF32(rdram, camera + 0x0CU), ReadF32(rdram, camera + 0x10U),
-        ReadF32(rdram, camera + 0x14U), ReadF32(rdram, kCurrentCameraFovAddress),
+        ReadF32(rdram, camera + 0x14U), ReadF32(rdram, current_camera_fov_address()),
         ReadS16(rdram, camera + 0x00U), static_cast<std::int16_t>(combined_pitch),
         ReadS16(rdram, camera + 0x04U),
     };
-    const std::uint32_t task = ReadU32(rdram, kSpTaskNumberAddress);
+    const std::uint32_t task = ReadU32(rdram, sp_task_number_address());
     CameraContinuityState& continuity = g_camera_continuity[camera_id];
     // Both are evaluated every sample: the finish shot tracks its own state,
     // and a Modern camera look-back toggle is a one-shot cut.
@@ -868,7 +891,7 @@ dkr::runtime::presentation::TaskIdentityScope::TaskIdentityScope(std::uint8_t* r
     if (rdram_snapshot == nullptr) {
         return;
     }
-    const std::uint32_t task_number = ReadU32(rdram_snapshot, kSpTaskNumberAddress) & 1U;
+    const std::uint32_t task_number = ReadU32(rdram_snapshot, sp_task_number_address()) & 1U;
     const std::uint32_t scene = g_scene_generation.load(std::memory_order_relaxed);
     const std::uint32_t actual = display_list_address & kRdramMask;
     std::scoped_lock lock(g_identity_mutex);
@@ -1259,13 +1282,14 @@ extern "C" void dkr_presentation_frame_begin(std::uint8_t* rdram, recomp_context
     dkr::runtime::hud::begin_authored_frame(rdram);
     dkr::runtime::presentation::postrace_presentation_begin_frame();
     dkr::runtime::custom_music::tick(rdram);
-    const auto visual_ticks = std::clamp(ReadU32(rdram, dkr::runtime::revision_addresses::LogicUpdateRate), 1U, 12U);
+    const auto visual_ticks =
+        std::clamp(ReadU32(rdram, dkr::runtime::revision_addresses::current().LogicUpdateRate), 1U, 12U);
     g_presentation_ticks.fetch_add(visual_ticks, std::memory_order_relaxed);
     const std::uint64_t frame = g_authored_frame_sequence.fetch_add(1U, std::memory_order_relaxed) + 1U;
     if (InterpolationTraceEnabled()) {
         PrintInterpolationTraceSummary(frame);
     }
-    g_recording_buffer = ReadU32(rdram, kSpTaskNumberAddress) & 1U;
+    g_recording_buffer = ReadU32(rdram, sp_task_number_address()) & 1U;
     g_capture_depth = 0U;
     g_capture_overflow_depth = 0U;
     g_current_camera_identity = dkr::runtime::presentation::kIgnoredIdentity;
@@ -1358,8 +1382,8 @@ extern "C" void dkr_presentation_wave_matrix(std::uint8_t* rdram, recomp_context
         return;
     }
 
-    const std::uint32_t subdivisions = ReadU32(rdram, kWaveControllerAddress + kWaveSubdivisionsOffset);
-    const bool double_density = ReadU32(rdram, kWaveControllerAddress + kWaveDoubleDensityOffset);
+    const std::uint32_t subdivisions = ReadU32(rdram, wave_controller_address() + kWaveSubdivisionsOffset);
+    const bool double_density = ReadU32(rdram, wave_controller_address() + kWaveDoubleDensityOffset);
     // The caller-side hook captured waves_render's `sp104` before this call.
     // Consume it exactly once so an unrelated mtx_cam_push can never reuse a
     // stale selector. If the call-site hook was missed or the decompiled
@@ -1383,11 +1407,12 @@ extern "C" void dkr_presentation_wave_matrix(std::uint8_t* rdram, recomp_context
     std::scoped_lock lock(g_identity_mutex);
     g_matrix_maps[g_recording_buffer & 1U].insert_or_assign(
         Physical(matrix_address),
-        MatrixBinding{dkr::runtime::presentation::with_camera_continuity(identity, g_current_camera_identity), 0U, true,
-                      true, true, true,
-                      dkr::runtime::water::scroll_tag(ReadU32(rdram, dkr::runtime::revision_addresses::WaveTexUVMaskX),
-                                                      ReadU32(rdram, dkr::runtime::revision_addresses::WaveTexUVMaskY)),
-                      ReadWorldProjection(rdram)});
+        MatrixBinding{
+            dkr::runtime::presentation::with_camera_continuity(identity, g_current_camera_identity), 0U, true, true,
+            true, true,
+            dkr::runtime::water::scroll_tag(ReadU32(rdram, dkr::runtime::revision_addresses::current().WaveTexUVMaskX),
+                                            ReadU32(rdram, dkr::runtime::revision_addresses::current().WaveTexUVMaskY)),
+            ReadWorldProjection(rdram)});
 }
 
 extern "C" void dkr_presentation_object_spawned(std::uint8_t*, recomp_context* context) {
@@ -1416,7 +1441,7 @@ extern "C" void dkr_presentation_task_submitted(std::uint8_t* rdram, recomp_cont
     }
     SubmittedFrame frame{};
     frame.display_list_address = static_cast<std::uint32_t>(context->r4);
-    frame.task_number = ReadU32(rdram, kSpTaskNumberAddress) & 1U;
+    frame.task_number = ReadU32(rdram, sp_task_number_address()) & 1U;
     frame.scene_generation = g_scene_generation.load(std::memory_order_relaxed);
     frame.submission_sequence = g_next_submission_sequence.fetch_add(1U, std::memory_order_relaxed);
     frame.presentation_time = double(g_presentation_ticks.load(std::memory_order_relaxed)) / 60.0;
@@ -1505,7 +1530,7 @@ extern "C" void dkr_presentation_object_end(std::uint8_t* rdram, recomp_context*
         return;
     }
     const ObjectCapture capture = g_capture_stack[--g_capture_depth];
-    const std::uint32_t end_matrix = Physical(ReadU32(rdram, kObjectCurrentMatrixAddress));
+    const std::uint32_t end_matrix = Physical(ReadU32(rdram, object_current_matrix_address()));
     if (capture.identity == dkr::runtime::presentation::kIgnoredIdentity || end_matrix < capture.first_matrix ||
         ((end_matrix - capture.first_matrix) & 0x3FU) != 0U) {
         return;
@@ -1549,9 +1574,9 @@ extern "C" void dkr_presentation_finish_camera_node(std::uint8_t* rdram, recomp_
     if (!ValidRange(reference, 4U))
         return;
     const auto camera = ReadU32(rdram, reference);
-    if (camera < kCamerasAddress || (camera - kCamerasAddress) % kCameraSize != 0U)
+    if (camera < cameras_address() || (camera - cameras_address()) % kCameraSize != 0U)
         return;
-    const auto slot = (camera - kCamerasAddress) / kCameraSize;
+    const auto slot = (camera - cameras_address()) / kCameraSize;
     const auto node = static_cast<std::uint32_t>(context->r4);
     const auto owner = static_cast<std::uint32_t>(context->r7);
     if (slot >= g_finish_camera_shots.size() || !ValidObjectAddress(node) || !ValidObjectAddress(owner))

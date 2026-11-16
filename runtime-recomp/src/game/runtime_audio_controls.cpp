@@ -23,8 +23,12 @@ std::atomic<float> g_nature_volume{1.0F};
 thread_local int g_vehicle_audio_scope_depth = 0;
 thread_local int g_nature_audio_scope_depth = 0;
 
-const std::uint32_t& kMusicPlayerAddress = dkr::runtime::revision_addresses::MusicPlayer;
-const std::uint32_t& kMusicBaseVolumeAddress = dkr::runtime::revision_addresses::MusicBaseVolume;
+std::uint32_t music_player_address() {
+    return dkr::runtime::revision_addresses::current().MusicPlayer;
+}
+std::uint32_t music_base_volume_address() {
+    return dkr::runtime::revision_addresses::current().MusicBaseVolume;
+}
 
 gpr RdramAddress(std::uint32_t address) {
     return static_cast<gpr>(static_cast<std::int32_t>(address));
@@ -64,7 +68,7 @@ void dkr::runtime::audio::set_nature_volume(float volume) {
 }
 
 extern "C" void dkr_scale_sequence_player_volume(std::uint8_t* rdram, recomp_context* context) {
-    const std::uint32_t music_player = static_cast<std::uint32_t>(MEM_W(0, RdramAddress(kMusicPlayerAddress)));
+    const std::uint32_t music_player = static_cast<std::uint32_t>(MEM_W(0, RdramAddress(music_player_address())));
     if (music_player == 0U || static_cast<std::uint32_t>(context->r4) != music_player) {
         return;
     }
@@ -94,7 +98,7 @@ extern "C" void dkr_audio_mix_tick(std::uint8_t* rdram, recomp_context* context)
         const float previous = g_music_applied.exchange(1.0F, std::memory_order_acq_rel);
         if (previous != 1.0F) {
             dkr::runtime::GuestCallContext call(*context);
-            call->r4 = MEM_BU(0, RdramAddress(kMusicBaseVolumeAddress));
+            call->r4 = MEM_BU(0, RdramAddress(music_base_volume_address()));
             dkr::runtime::invoke_music_volume_set(rdram, call.get());
         }
         return;
@@ -111,7 +115,7 @@ extern "C" void dkr_audio_mix_tick(std::uint8_t* rdram, recomp_context* context)
     // the alCSP boundary hook above then applies our final attenuation without
     // corrupting gMusicBaseVolume or waiting for the next map.
     dkr::runtime::GuestCallContext call(*context);
-    call->r4 = MEM_BU(0, RdramAddress(kMusicBaseVolumeAddress));
+    call->r4 = MEM_BU(0, RdramAddress(music_base_volume_address()));
     dkr::runtime::invoke_music_volume_set(rdram, call.get());
 }
 

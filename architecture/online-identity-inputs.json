@@ -124,7 +124,7 @@
     "runtime-recomp/symbols/detail_symbols.toml": "9f92da38d4e85278325bda85a51d9fa58ec0469da321f49ffbeaac91de52cc83",
     "runtime-recomp/symbols/display_list_symbols.toml": "ca298334140d074d1e40da0c2d9b369b268c96266ed566ce742d668aacf29929",
     "runtime-recomp/symbols/enhancements_symbols.toml": "1288f1dd49ae5f5bbf966fa8fcba69f67bc8edfb8e1cd28cd5e7db52eec473ea",
-    "runtime-recomp/symbols/hud_layout_code_symbols.toml": "0b4b3b1ca57b14a58dced1a43d96b19308cf53dbe15258863566fd42a1d7756c",
+    "runtime-recomp/symbols/hud_layout_code_symbols.toml": "f7b4d30b95a13f4af29bd77436cf8710f58953158856dce8f2d9776a9b542ece",
     "runtime-recomp/symbols/hud_layout_symbols.toml": "4fe06836aa97df68351cdb1db39f3b7bac1d79954be25be0becf5ebb41e2f1ba",
     "runtime-recomp/symbols/legacy_world_symbols.toml": "0a3451072470727f05744fd2cf3d6e4b26dec7f5f425376ad7328ccc38934b9c",
     "runtime-recomp/symbols/memory_symbols.toml": "ed6319c6e1a51683cbb6cee4714749c42a54c512ea98bdeacc6911c404697098",
@@ -184,7 +184,7 @@
     "scripts/compose_payloads.py": "c662355843564ccd40759cb245de158888abae80baf59c7f309834897626ba68",
     "scripts/gen_guest_symbols.py": "f9c74c5c8214fae6372595db4c5f2721e656dabed9c783aa0bb3c6d7dc3e8202",
     "scripts/generate_recomp_config.py": "444874a216c9011e6f196aa0a1269594517afcdea5fb3763196e092d99bfc473",
-    "scripts/generate_replay_probe.py": "967cb975a6a0e04faa60444169f76188655e80dc767112c55b19cd95a1385b6b",
+    "scripts/generate_replay_probe.py": "99973908e87add40501464d2a4d4ee6ee1f85322d06a2585d4212363ac44a6ab",
     "scripts/generate_revision_policy.py": "bafbefad41542e00b6c5ec13b02acde69dda7f48e34025f46d92d028da6427b9",
     "scripts/guest_hooks.py": "4058af2139c1211c2db79c8748734c2c1f231ec6168e964166d90c83bb48c6cc",
     "scripts/host_task_policy.py": "aa28c9bcd8110d0ef16b2f6dfde7ec51b8767578f46d3bc5371f197efb016f78",
@@ -207,6 +207,6 @@
   },
   "last_update": {
     "identity_changed": false,
-    "reason": "Mod behaviour patch sites moved onto generated function-relative symbols; every address value unchanged"
+    "reason": "Re-pin the nine owned-engine native sources that now read the selected revision through revision_addresses::current(); same addresses, no new store, guest call or hook"
   }
 }

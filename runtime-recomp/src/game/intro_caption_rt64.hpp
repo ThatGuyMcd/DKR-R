@@ -111,11 +111,13 @@ class IntroCaption {
         count_ = original_count_ = 0;
         drawn_ = false;
         ram_ = state.RDRAM;
-        if (!modern || word(revision_addresses::CurrentMenuId) != 1)
+        if (!modern || word(revision_addresses::current().CurrentMenuId) != 1)
             return;
         cover_ = std::clamp(std::isfinite(aspect) ? aspect / (4.F / 3.F) : 1.F, 1.F, 8.F);
         symbols_ =
-            &polish_symbols[revision_addresses::CurrentMenuId == revision_addresses::kUsV80.CurrentMenuId ? 1 : 0];
+            &polish_symbols[revision_addresses::current().CurrentMenuId == revision_addresses::kUsV80.CurrentMenuId
+                                ? 1
+                                : 0];
         const auto fonts = word((*symbols_)[2]);
         if (word((*symbols_)[3]) < 3 || word((*symbols_)[3]) > 32 || !valid(fonts, 3 * 0x400))
             return;

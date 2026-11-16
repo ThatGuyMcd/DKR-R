@@ -12,10 +12,10 @@ bool follow_camera_fields(std::uint32_t fields[8]) {
     if (!rev_a && revision_addresses::selected_revision() != rom::Revision::UsV77)
         return false;
     const auto& camera = camera_symbols::for_revision(rev_a);
-    const std::uint32_t values[8] = {revision_addresses::GameMode,
-                                     revision_addresses::CurrentLevelHeader,
-                                     revision_addresses::ViewportLayout,
-                                     revision_addresses::CutsceneCameraActive,
+    const std::uint32_t values[8] = {revision_addresses::current().GameMode,
+                                     revision_addresses::current().CurrentLevelHeader,
+                                     revision_addresses::current().ViewportLayout,
+                                     revision_addresses::current().CutsceneCameraActive,
                                      camera.level_model,
                                      camera.camera_object,
                                      camera.dialogue_angle,
