@@ -412,6 +412,7 @@ void object_map_walk_tests(const std::filesystem::path& base) {
     assert(!inspect_object_map_payload(bytes(object_map_container(object_map(48U, 5U))), reason));
     assert(!reason.empty());
     assert(!inspect_object_map_payload(bytes(object_map_container(object_map(0x7FFFFFFFU, 5U))), reason));
+    assert(reason.find("byte count") != std::string::npos); // named for what it is, not for the padding it walks into
     // An entry of size 0 never advances the loop.
     assert(!inspect_object_map_payload(bytes(object_map_container(object_map(16U, 2U, 0U) + std::string(16U, '\0'))),
                                        reason));
