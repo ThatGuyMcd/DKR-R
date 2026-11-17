@@ -106,7 +106,7 @@
     "runtime-recomp/src/game/netplay/runtime_state.hpp": "9d54de461b5220b246763d5f0b044cfc7ed845da4c8ad1ba521eb6f3cb905b07",
     "runtime-recomp/src/game/netplay/setup_policy.hpp": "c2630dbc6a3950e947d0ce380d1be42c71568a864bb7dbef42703df5f1cf31fc",
     "runtime-recomp/src/game/party_release.hpp": "0f364dfe23f991223547679858ca894056974d891040527a2c6e0ea6065e3676",
-    "runtime-recomp/src/game/party_runtime.cpp": "20e2818b9ebf10e3f828f702caaf54849688208dcdbcc933dfe565bad85bc15d",
+    "runtime-recomp/src/game/party_runtime.cpp": "bc72a11cf8e128929e60184a90f3e028600b28ec005f8501ccdadaf582b0ebeb",
     "runtime-recomp/src/game/party_runtime.hpp": "f71d5b873f71fd24000c43833171967fa40860468f2ee6f50367ac1c1c60b404",
     "runtime-recomp/src/game/runtime_save_routing.cpp": "837917b9ede8d0f9cadd86edaa325da50c7e88a6c34242758f18228112737890",
     "runtime-recomp/src/game/runtime_save_routing.hpp": "cb3ae802050f29e38def0d42c60c01345be2cc46a515a95e9c50d49a06cf6879",
@@ -207,6 +207,6 @@
   },
   "last_update": {
     "identity_changed": false,
-    "reason": "Retain v1.0.15 simulation and wire identities. Optional authenticated session-links v2 extensions add duplicate immutable racer delivery and consented waiting-lobby handover among capable peers; default menu ownership remains port zero and older peers retain host delivery. Correction eligibility and Auto delay accounting affect presentation and scheduling only. Upstream architecture-free launch hashes, state cross-checks, GuestCallContext and reliable checkpoint semantics are retained. Audio input newline canonicalization reconstructs the same existing pins; all ten prepared Windows input digests still match the upstream lock."
+    "reason": "Add bounded checkpoint delivery diagnostics only; no message format, simulation, admission or queue policy changes."
   }
 }

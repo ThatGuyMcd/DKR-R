@@ -687,6 +687,9 @@ struct PartyRuntime::Impl {
         if (!d.sender.begin(++transfer_serial, std::make_shared<Baseline>(wire)))
             throw std::runtime_error("Could not stage spectator checkpoint delivery.");
         party_retire_checkpoint(key, id, match, d.sender.offer().transfer);
+        std::fprintf(stderr, "[party][checkpoint-send] peer=%llu transfer=%llu epoch=%llu frame=%u bytes=%zu\n",
+                     static_cast<unsigned long long>(id), static_cast<unsigned long long>(transfer_serial),
+                     static_cast<unsigned long long>(wire.next.epoch), wire.next.frame, wire.state->size());
     }
     bool current_checkpoint() const {
         if (!encoded || !feed.covers(encoded->next))
@@ -964,6 +967,9 @@ struct PartyRuntime::Impl {
             last_offer = offer;
             receiving = offer;
             active_transfer = offer.transfer;
+            std::fprintf(stderr, "[party][checkpoint-receive] transfer=%llu epoch=%llu frame=%u bytes=%u\n",
+                         static_cast<unsigned long long>(offer.transfer),
+                         static_cast<unsigned long long>(offer.next.epoch), offer.next.frame, offer.bytes);
             admitted_at.reset();
             buffered.clear();
             if (phase == Phase::Admission)
@@ -987,6 +993,8 @@ struct PartyRuntime::Impl {
             if (result == CheckpointReceiver::Result::Rejected)
                 throw std::runtime_error(e);
             if (result == CheckpointReceiver::Result::Complete) {
+                std::fprintf(stderr, "[party][checkpoint-receive] complete transfer=%llu bytes=%zu\n",
+                             static_cast<unsigned long long>(chunk.transfer), receiver.received_bytes());
                 auto wire_state = receiver.take_verified(e);
                 if (!wire_state)
                     throw std::runtime_error(e);
@@ -1737,6 +1745,8 @@ struct PartyRuntime::Impl {
                 // An observer cannot stop required racing peers with malformed
                 // playback/seat requests. Required members still fail closed.
                 if (server() && !required().contains(packet.source)) {
+                    std::fprintf(stderr, "[party][observer-packet] rejected peer=%llu reason=%s\n",
+                                 static_cast<unsigned long long>(packet.source), e.what());
                     needing.erase(packet.source);
                     deliveries.erase(packet.source);
                     continue;
@@ -1767,6 +1777,15 @@ struct PartyRuntime::Impl {
         if (!callback_error.empty())
             throw std::runtime_error(callback_error);
         transfer(now);
+        if (phase != Phase::Admission && now >= admission_log &&
+            ((!simulating() && playback.needs_baseline()) || (server() && !deliveries.empty()))) {
+            admission_log = now + std::chrono::seconds(5);
+            std::fprintf(
+                stderr,
+                "[party][checkpoint-progress] authority=%u receiving=%zu active=%u decoding=%u encoded=%u needing=%zu deliveries=%zu\n",
+                unsigned(server()), receiver.received_bytes(), unsigned(bool(receiving)), unsigned(decoding.valid()),
+                unsigned(bool(encoded)), needing.size(), deliveries.size());
+        }
         std::erase_if(deliveries, [&](const auto& entry) { return !roster.find(entry.first); });
         std::erase_if(requested_at, [&](const auto& entry) { return !roster.find(entry.first); });
         if (server() && phase == Phase::Admission && all(prepared))
