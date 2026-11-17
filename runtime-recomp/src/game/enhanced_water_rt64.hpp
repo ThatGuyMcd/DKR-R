@@ -9,9 +9,19 @@
 #include "hle/rt64_rdp.h"
 #include "hle/rt64_workload_queue.h"
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 
 namespace dkr::runtime::water::enhanced {
+
+// DKR_WATER_TRACE=1 turns on the water calibration traces for playtests.
+inline bool trace_enabled() {
+    static const bool enabled = [] {
+        const char* value = std::getenv("DKR_WATER_TRACE");
+        return value != nullptr && std::atoi(value) > 0;
+    }();
+    return enabled;
+}
 
 inline std::uint32_t level_model_symbol() {
     return camera_symbols::for_revision(revision_addresses::selected_revision() == rom::Revision::UsV80).level_model;
@@ -71,6 +81,8 @@ inline const Registry& task_registry(RT64::State& state, std::uint32_t scene, bo
 
 struct CraftFrame {
     std::array<hlslpp::float4, 8> previous{}, current{};
+    // Low-pass clearance above the liquid: + aircraft, - hovercraft, 0 none.
+    std::array<float, 8> air{};
     float previous_time = 0;
 };
 inline const CraftFrame& task_crafts(Memory m, const Registry& registry, std::uint32_t scene, float time) {
@@ -78,6 +90,8 @@ inline const CraftFrame& task_crafts(Memory m, const Registry& registry, std::ui
         History history;
         CraftFrame frame;
         std::array<std::uint32_t, 8> objects{};
+        unsigned trace_lines = 0;
+        float trace_next = 0;
     };
     static thread_local Cache cache;
     if (cache.history.valid && cache.history.scene == scene && cache.history.time == time)
@@ -94,7 +108,10 @@ inline const CraftFrame& task_crafts(Memory m, const Registry& registry, std::ui
         const auto racer = object && m.valid(object, 0x68) ? m.u32(object + 0x64) : 0;
         auto& current = cache.frame.current[i];
         current = {0, 0, 0, -1};
-        if (racer && m.valid(racer, 0x224) && m.u8(racer + 0x1D6) <= 2) {
+        auto& air = cache.frame.air[i];
+        air = 0;
+        const auto vehicle = racer && m.valid(racer, 0x224) ? m.u8(racer + 0x1D6) : 0xFFU;
+        if (vehicle <= 2) {
             const Vec3 p{m.f32(object + 0xC), m.f32(object + 0x10), m.f32(object + 0x14)};
             const auto height = finite(p) ? registry.liquid_height(p.x, p.z, p.y) : std::nullopt;
             // Contact is a bounded visual observation, not a physics write.
@@ -104,12 +121,37 @@ inline const CraftFrame& task_crafts(Memory m, const Registry& registry, std::ui
                                       : 0;
             if (finite(p))
                 current = {p.x, p.y, p.z, contact};
+            // A low pass is visual too: aircraft downwash and hovercraft skirts
+            // disturb the liquid beneath them, above the hull-contact band.
+            if (height && p.y >= *height - 60) {
+                const float clearance = (std::max)(p.y - *height, 1.0F);
+                if (vehicle == 2 && clearance <= WATER_LOWPASS_PLANE_CEILING)
+                    air = clearance;
+                if (vehicle == 1 && clearance <= WATER_LOWPASS_HOVER_CEILING)
+                    air = -clearance;
+            }
         }
         const auto& old = cache.frame.previous[i];
         const float dx = float(current.x - old.x), dz = float(current.z - old.z);
         if (reset || object != cache.objects[i] || old.w < 0 || dx * dx + dz * dz > 150 * 150)
             cache.frame.previous[i] = current;
         cache.objects[i] = object;
+    }
+    // Bounded calibration trace for user-run low-pass playtests.
+    if (reset)
+        cache.trace_next = 0;
+    for (unsigned i = 0; i < 8 && trace_enabled() && cache.trace_lines < 64 && time >= cache.trace_next; ++i) {
+        if (cache.frame.air[i] == 0)
+            continue;
+        const auto& old = cache.frame.previous[i];
+        const auto& now = cache.frame.current[i];
+        const float dx = float(now.x - old.x), dz = float(now.z - old.z);
+        const float interval = time - cache.frame.previous_time;
+        std::fprintf(stderr, "[water][lowpass] scene=%u racer=%u %s clearance=%.1f speed=%.1f contact=%.2f\n", scene, i,
+                     cache.frame.air[i] > 0 ? "plane" : "hovercraft", std::abs(cache.frame.air[i]),
+                     interval > 0 ? std::sqrt(dx * dx + dz * dz) / interval : 0.0F, float(now.w));
+        ++cache.trace_lines;
+        cache.trace_next = time + 2;
     }
     return cache.frame;
 }
@@ -217,6 +259,13 @@ inline void apply_material(RT64::State& state, const Registry& registry, std::ui
                 material.craftPrevious[i].w = -1;
                 material.craftCurrent[i].w = -1;
             }
+        }
+        if (!lava) {
+            // Low-pass clearance shares the last two shoreline vectors
+            // (WATER_CRAFT_AIR): water draws publish no shoreline segments,
+            // and lava reuses only shoreSegments[0..15], so it gets none.
+            for (unsigned i = 0; i < 8; ++i)
+                WATER_CRAFT_AIR(material, i) = crafts.air[i];
         }
         if (lava) {
             // Lava has no shoreline/wake field. Reuse its unused shoreline
