@@ -59,9 +59,47 @@ same regression-harness timeout. Git status on the NTFS source checkout took
 23.14 seconds; the test's outer timeout is 20 seconds. Linux verification moves
 to a normal Linux checkout instead of increasing or disabling that deadline.
 
-Windows and Linux game builds, prepared-input verification, actual-game tests
-and final package scans are still being completed. This note will be updated
-with their results before the testing packages are handed over.
+Both Release builds completed. Windows passed all 243 Release tests, and Linux
+passed all 243 in a normal Linux checkout. The prepared-input lock check passed
+all ten inputs on both systems against the unchanged upstream lock. The private
+generator suite also passed all 53 tests. The cached-mod handover fixture passed
+37 checks using the real mod worker, including a fresh download from the promoted
+host and rejection of a damaged cache.
+
+The actual Windows game was tested with twelve separate processes: four racers
+and eight spectators. All twelve completed host handover and reached the race.
+The ordinary run recorded no racing input waits. The impaired run injected
+375 ms of outgoing delivery delay, 25 ms jitter, 200 ms spikes and loss of every
+97th disposable packet. The last spectator also had 1,000 ms delay and spikes.
+All twelve completed this run too. Each racer recorded 2.38 to 2.66 seconds of
+input waiting in the first two race pacing samples, then zero across the next
+23 samples. This is injected application delivery delay on one Windows PC,
+not twelve physical machines or a measured intercontinental connection.
+
+An earlier 90-second run ended while the spectators were still receiving the
+new scene checkpoint. Diagnostics confirmed that delivery was progressing.
+The complete 180-second run passed without changing the admission protocol or
+increasing its background bandwidth allowance. That allowance protects racing
+traffic, but eight spectators can still take a long time to receive a new scene.
+This remains a known limit; passing this test does not mean instant spectator
+scene loading or a guaranteed frame rate under every network condition.
+
+## Local checkout and recovery
+
+The combined branch in `C:/DKRPort` is `codex/upstream-integrated-v1016`.
+The original branch is retained as `codex/network-host-handover`, with an extra
+preservation ref and a named stash for its uncommitted files. The recovery
+bundle and exact file archive remain outside the repository under
+`D:/DiddykongWorkFolder/DKR-R-Upstream-Integration-20261117/recovery/`.
+All 3,071 recorded file hashes and the original status were checked again
+before switching branches; none had changed.
+
+Old dependency and build caches are preserved under
+`C:/DKRPort-pre-integration-20261117/`. The current `extern` directory is a local
+junction to the verified pinned checkouts in the integration workspace on D:.
+The verified Release build trees are also on D:, rather than reusing the old
+build caches. Neither path is a source or release-package dependency for other
+users: fresh checkouts use the maintained bootstrap and prepare scripts.
 
 Nothing has been pushed, published, signed for the updater or deployed. Public
 directory ownership transfer remains capability-gated until its matching
