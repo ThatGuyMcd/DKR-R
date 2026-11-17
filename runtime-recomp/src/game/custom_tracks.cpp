@@ -778,6 +778,11 @@ bool inspect_object_map_payload(const std::vector<std::uint8_t>& bytes, std::str
         return false;
     }
     const std::uint32_t count = read_be32(map.data());
+    if (count > inflated_size - kEntriesAt) {
+        error = "an object map's entry byte count (" + std::to_string(count) + ") is larger than the " +
+                std::to_string(inflated_size - kEntriesAt) + " entry bytes it holds";
+        return false;
+    }
     // Mirrors the loop in track_spawn_objects: position += entry[1] & 0x3F until count bytes are consumed.
     std::uint32_t used = 0;
     std::uint32_t at = kEntriesAt;
