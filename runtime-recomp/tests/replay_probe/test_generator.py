@@ -622,7 +622,7 @@ class InstrumentationTests(unittest.TestCase):
             "extern/n64-modern-runtime/ultramodern/src/timer.cpp":"07bec0f6617c0d9965a263ae6f41d8785cd380f5d584df8a844bc83b2cc89211",
         }
         for path,expected in pins.items():
-            self.assertEqual(hashlib.sha256(generator.audited_input_path(path, DEPENDENCIES_DIR).read_bytes()).hexdigest(),expected,
+            self.assertIsNotNone(generator.reviewed_bytes(generator.audited_input_path(path, DEPENDENCIES_DIR).read_bytes(),expected),
                              f"Re-audit the private native contract after source changes: {path}")
 
 
