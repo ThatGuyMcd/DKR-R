@@ -41,7 +41,7 @@
     "runtime-recomp/src/game/save_storage.hpp",
     "runtime-recomp/src/game/runtime_save_routing.*"
   ],
-  "identity": "b99263cde8f62ec6c20d12913a1bed2356d9a789df262a07160ab434f4ddc428",
+  "identity": "cfc1d8e0d92cb35be1c6b2282a451a315aa6a097006ecd3efa8a377c9cae1a96",
   "inputs": {
     "modding/reference-us-v77/game_symbols.inc": {
       "sha256": "8051c44ebda26973ab921d71e90cd15f44d6b93ce00f0fb2fac80253b20dbcb5",
@@ -64,12 +64,12 @@
       "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
     },
     "runtime-recomp/dkr.us.v77.recomp-policy.json": {
-      "sha256": "c4deefd55aca1dc1af1391a86d5df366624dabed2827a0fab055e8ffad8cd702",
-      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+      "sha256": "4fcfb6ae8bb7fe874df2e02eb2c13820ec5575bb9ec1c1e4ccb4fdbcef688164",
+      "reason": "online identity changed to cfc1d8e0d92c"
     },
     "runtime-recomp/dkr.us.v80.recomp-policy.json": {
-      "sha256": "b8a89ed014f6e6a7f1113adf72fe8c92b1f8cf8323ac4c35de00a258c28adb9b",
-      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+      "sha256": "91cb9e05edc8f9fcb1006dec28316e5a1e90dd2d64aada976f2289688816897f",
+      "reason": "online identity changed to cfc1d8e0d92c"
     },
     "runtime-recomp/guest-hooks/hooks.toml": {
       "sha256": "dc38a5194b8b946aca87942076935d6787555bdbf3792f97dd379ac8becdaf4f",
