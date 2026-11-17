@@ -43,6 +43,7 @@
 #include "netplay/session_chat/chat.hpp"
 #include "netplay/peer_relay/transport.hpp"
 #include "netplay/session_chat/settings.hpp"
+#include "netplay/session_links/qualification.hpp"
 #include <cwchar>
 #endif
 #if defined(__ANDROID__)
@@ -54,7 +55,6 @@
 #include <cstdlib>
 #endif
 #if DKR_LEGACY_QUALIFICATION
-#include "netplay/session_links/qualification.hpp"
 #include "legacy_runtime_qualification.hpp"
 #endif
 #if DKR_RUNTIME_HAS_RT64

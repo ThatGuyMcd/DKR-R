@@ -52,6 +52,7 @@
 #include "invite_handoff.hpp"
 #include <deque>
 #include "party_link.hpp"
+#include "custom_records.hpp"
 #include "online_presentation/test_receive_delay.hpp"
 #include "online_stability/qualification_delivery.hpp"
 #include "runtime_ui.hpp"
