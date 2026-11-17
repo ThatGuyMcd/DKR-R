@@ -35,6 +35,7 @@
 namespace {
 
 using dkr::runtime::custom_tracks::Entry;
+using dkr::runtime::custom_tracks::LevelLink;
 using dkr::runtime::custom_tracks::MapSlot;
 using dkr::runtime::custom_tracks::Section;
 using dkr::runtime::custom_tracks::Track;
@@ -755,6 +756,56 @@ bool owns_level_id(std::int32_t level_id) {
                        [level_id](const auto& entry) { return entry.second == level_id; });
 }
 
+bool inspect_object_map_payload(const std::vector<std::uint8_t>& bytes, std::string& error) {
+    constexpr std::size_t kContainerHeader = 5U;
+    constexpr std::uint32_t kEntriesAt = 0x10U;
+    if (bytes.size() <= kContainerHeader || bytes[4] != kContainerTag) {
+        error = "an object map is not in the five-byte-container form the game inflates";
+        return false;
+    }
+    const std::uint32_t inflated_size =
+        static_cast<std::uint32_t>(bytes[0]) | (static_cast<std::uint32_t>(bytes[1]) << 8) |
+        (static_cast<std::uint32_t>(bytes[2]) << 16) | (static_cast<std::uint32_t>(bytes[3]) << 24);
+    if (inflated_size < kEntriesAt || inflated_size > dkr::runtime::custom_tracks::kObjectMapBufferBytes) {
+        error = "an object map inflates to " + std::to_string(inflated_size) + " bytes; the game's buffer holds " +
+                std::to_string(dkr::runtime::custom_tracks::kObjectMapBufferBytes);
+        return false;
+    }
+    std::vector<std::uint8_t> map(inflated_size);
+    if (tinfl_decompress_mem_to_mem(map.data(), map.size(), bytes.data() + kContainerHeader,
+                                    bytes.size() - kContainerHeader, 0) != map.size()) {
+        error = "an object map does not inflate to the size it declares";
+        return false;
+    }
+    const std::uint32_t count = read_be32(map.data());
+    if (count > inflated_size - kEntriesAt) {
+        error = "an object map's entry byte count (" + std::to_string(count) + ") is larger than the " +
+                std::to_string(inflated_size - kEntriesAt) + " entry bytes it holds";
+        return false;
+    }
+    // Mirrors the loop in track_spawn_objects: position += entry[1] & 0x3F until count bytes are consumed.
+    std::uint32_t used = 0;
+    std::uint32_t at = kEntriesAt;
+    while (used < count) {
+        if (at + 2U > inflated_size) {
+            error = "an object map's entry byte count runs past its entries";
+            return false;
+        }
+        const std::uint32_t step = map[at + 1U] & 0x3FU;
+        if (step == 0U) {
+            error = "an object map has an entry of size 0, which the game's spawn loop never advances past";
+            return false;
+        }
+        if (at + step > inflated_size) {
+            error = "an object map entry runs past the end of the map";
+            return false;
+        }
+        used += step;
+        at += step;
+    }
+    return true;
+}
+
 std::int32_t count_level_model_batches(const std::uint8_t* bytes, std::size_t size) {
     // LevelModel and LevelModelSegment offsets, docs/LEVEL_MODEL_FORMAT.md.
     constexpr std::size_t kContainerHeader = 5U;
@@ -805,6 +856,58 @@ std::int32_t level_model_batches(std::int32_t level_id) {
             for (const Entry& entry : track.entries) {
                 if (entry.section == Section::LevelModels) {
                     return count_level_model_batches(entry.bytes.data(), entry.bytes.size());
+                }
+            }
+        }
+    }
+    return -1;
+}
+
+std::vector<ResolvedLevelLink> level_links_for_object_map(std::uint32_t offset) {
+    std::vector<ResolvedLevelLink> found;
+    std::scoped_lock lock(g_mutex);
+    const SectionState& maps = g_sections[section_slot(Section::LevelObjectMaps)];
+    if (!maps.built) {
+        return found;
+    }
+    for (const AddedEntry& entry : maps.added) {
+        if (entry.offset != offset || entry.track_id.empty()) {
+            continue;
+        }
+        for (const Track& track : g_tracks) {
+            if (track.id != entry.track_id || !track.enabled) {
+                continue;
+            }
+            for (const LevelLink& link : track.level_links) {
+                if (link.slot != entry.slot) {
+                    continue;
+                }
+                const auto resolved = g_resolved_level_ids.find(link.track);
+                // The byte written is a signed level id: anything above kMaxLevelId is not a target.
+                const bool usable =
+                    resolved != g_resolved_level_ids.end() && resolved->second >= 0 && resolved->second <= kMaxLevelId;
+                found.push_back({link.offset, usable ? resolved->second : -1, link.track});
+            }
+        }
+        break;
+    }
+    return found;
+}
+
+std::int32_t level_race_type(std::int32_t level_id) {
+    constexpr std::size_t kRaceTypeOffset = 0x4CU;
+    std::scoped_lock lock(g_mutex);
+    for (const auto& [track_id, resolved] : g_resolved_level_ids) {
+        if (resolved != level_id) {
+            continue;
+        }
+        for (const Track& track : g_tracks) {
+            if (track.id != track_id || !track.enabled) {
+                continue;
+            }
+            for (const Entry& entry : track.entries) {
+                if (entry.section == Section::LevelHeaders && entry.bytes.size() > kRaceTypeOffset) {
+                    return entry.bytes[kRaceTypeOffset];
                 }
             }
         }
@@ -1146,13 +1249,20 @@ PreparedTracks prepare_tracks(std::vector<Track> tracks, const std::array<std::v
             auto bytes =
                 std::vector<std::uint8_t>(section.blob.begin() + offset, section.blob.begin() + offset + added.size);
             if (i == section_slot(Section::LevelHeaders)) {
-                if (bytes.size() < 0xC8 || bytes[0] != kCustomTrackWorld || bytes[0x4C] != 0 || !bytes[0x4E] ||
-                    (bytes[0x4E] & ~7U))
-                    throw std::runtime_error("Online Track Lab course is not a playable Custom Tracks race.");
                 const auto found =
                     std::find_if(tracks.begin(), tracks.end(), [&](const Track& t) { return t.id == added.track_id; });
                 if (found == tracks.end())
                     throw std::runtime_error("Online Track Lab header lost its owner.");
+                // Boss, challenge and hub levels run retail scenes the frozen online
+                // world does not carry (a boss's intro scan, for one), so they are
+                // refused here, by name, rather than failing in a race.
+                if (bytes.size() >= 0xC8 && bytes[0x4C] != 0)
+                    throw std::runtime_error(
+                        "\"" + found->name + "\" is a " +
+                        (bytes[0x4C] == kRaceTypeBoss ? "boss level" : "Track Lab level that is not a race") +
+                        ". Only races can be played online; turn it off to play online.");
+                if (bytes.size() < 0xC8 || bytes[0] != kCustomTrackWorld || !bytes[0x4E] || (bytes[0x4E] & ~7U))
+                    throw std::runtime_error("Online Track Lab course is not a playable Custom Tracks race.");
                 out.courses.push_back({found->id, found->name, static_cast<std::int32_t>(added.index), bytes[0x4E]});
                 // The sixth world is a menu category only. The game indexes
                 // fixed five-world save/background arrays; serve Dino Domain.
@@ -1708,6 +1818,13 @@ bool parse_track(const std::filesystem::path& input_root, Track& track, std::str
             }
             track.textures_2d.push_back(info);
         }
+        if (entry.section == Section::LevelObjectMaps) {
+            std::string reason;
+            if (!dkr::runtime::custom_tracks::inspect_object_map_payload(entry.bytes, reason)) {
+                error = file + ": " + reason;
+                return false;
+            }
+        }
         if (entry.section == Section::Sprites) {
             dkr::runtime::custom_tracks::SpriteInfo info;
             std::string reason;
@@ -1774,6 +1891,47 @@ bool parse_track(const std::filesystem::path& input_root, Track& track, std::str
     if (manifest.contains("music") && !parse_music(manifest["music"], root, track, error)) {
         error = "music: " + error;
         return false;
+    }
+
+    // A hub's exits may lead to other .dkrmap tracks. Their level ids exist only
+    // once the installed set is known, so the package names the track and the
+    // byte to fill in; see level_links_for_object_map().
+    if (manifest.contains("levelLinks")) {
+        const auto& links = manifest["levelLinks"];
+        if (!links.is_array() || links.size() > 255) {
+            error = "levelLinks must be an array of at most 255 links";
+            return false;
+        }
+        for (const auto& link : links) {
+            if (!link.is_object() || !link.contains("slot") || !link["slot"].is_string() || !link.contains("offset") ||
+                !link["offset"].is_number_unsigned() || !link.contains("track") || !link["track"].is_string()) {
+                error = "levelLinks entries need slot, offset and track";
+                return false;
+            }
+            LevelLink parsed;
+            const auto slot = link["slot"].get<std::string>();
+            if (slot == "structure") {
+                parsed.slot = MapSlot::Structure;
+            } else if (slot == "collectables") {
+                parsed.slot = MapSlot::Collectables;
+            } else {
+                error = "levelLinks slot must be structure or collectables";
+                return false;
+            }
+            const auto offset = link["offset"].get<std::uint64_t>();
+            // Past the 16-byte map header, inside the game's object map buffer.
+            if (offset < 0x10U || offset >= dkr::runtime::custom_tracks::kObjectMapBufferBytes) {
+                error = "levelLinks offset " + std::to_string(offset) + " is outside an object map";
+                return false;
+            }
+            parsed.offset = static_cast<std::uint32_t>(offset);
+            parsed.track = link["track"].get<std::string>();
+            if (parsed.track.empty()) {
+                error = "levelLinks track is empty";
+                return false;
+            }
+            track.level_links.push_back(std::move(parsed));
+        }
     }
 
     // A header carries 0 in both object map fields, because the real indices

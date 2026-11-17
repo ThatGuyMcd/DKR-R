@@ -50,6 +50,7 @@ reported.
 from __future__ import annotations
 
 import json
+import ntpath
 import os
 import traceback
 
@@ -1092,6 +1093,33 @@ def water_summary(obj) -> dict:
         return json.loads(obj.get(PROP_WATER) or "{}")
     except (TypeError, ValueError):
         return {}
+
+
+def model_path(context, obj) -> str:
+    """Where the ``.bin`` this mesh was decoded from is now, or ``""``.
+
+    The path is recorded absolute, and a ``.blend`` handed to someone in an
+    archive, or a folder moved or unpacked somewhere else, leaves it naming a
+    disk that is not there - while the file sits right beside the ``.blend``,
+    because that is where :func:`replace_base` and Track From Mesh write it.
+    So the recorded name beside the ``.blend`` is looked for, and looked for
+    *first*: a copied folder still has the original's file at the recorded
+    path, and a texture renumbering that rewrote that one would reach into the
+    other project. The scene setting is the fallback for a mesh imported
+    before the object carried the path.
+    """
+    folder = os.path.dirname(bpy.data.filepath) if bpy.data.filepath else ""
+    for recorded in (obj.get(PROP_MODEL_PATH), context.scene.dkr.geometry_path):
+        if not recorded:
+            continue
+        recorded = str(recorded)
+        # ntpath splits on both separators, so a path recorded on Windows
+        # still names its file on a Deck or a Mac.
+        beside = os.path.join(folder, ntpath.basename(recorded)) if folder else ""
+        for candidate in (beside, bpy.path.abspath(recorded)):
+            if candidate and os.path.isfile(candidate):
+                return candidate
+    return ""
 
 
 def replace_base(context, obj, model, include_hidden=None):

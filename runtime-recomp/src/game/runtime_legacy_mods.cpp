@@ -283,6 +283,15 @@ void prepare_presentation(CharacterState& state, std::uint8_t* ram, const recomp
     if (found == entries.end())
         throw mods::Error("Active presentation character was not admitted.");
     const auto i = static_cast<unsigned>(found - entries.begin());
+    // Character select admits these, and an armed custom track's auto boot
+    // starts the race without it. Admitting allocates nothing in the guest,
+    // so the heap order prepare() relies on is the same either way.
+    if (!state.presentation.ready()) {
+        std::vector<std::uint32_t> samples;
+        for (unsigned j = 0; j < entries.size(); ++j)
+            samples.push_back(assets->character_race_sample_address(j));
+        state.presentation.initialize({ram, guest_memory_size()}, ctx, presentation_calls(*p), entries, samples);
+    }
     state.presentation.prepare({ram, guest_memory_size()}, ctx, presentation_calls(*p), entries, i,
                                assets->character_race_sample_address(i), audio);
 }
@@ -1273,6 +1282,11 @@ extern "C" int dkr_legacy_track_menu(std::uint8_t* rdram, recomp_context* ctx, u
     // get_track_id_to_load can replace it, with or without legacy courses.
     if (!legacy::frozen_courses() && event == 12 && static_cast<std::uint32_t>(ctx->r4) == 2)
         custom_tracks::arm_track_override({});
+    // menu_track_select_init, load_level_game and menu_init: a custom boss
+    // race is over, so the courseFlags bits it borrowed go back before any
+    // save can pack them. A boss level being loaded borrows them again.
+    if (event == 0 || event == 14 || event == 15)
+        custom_tracks::return_lent_boss_flags(rdram, ctx, -1);
     auto state = legacy::menu.load();
     try {
         if (!legacy::private_world && (event == 0 || event == 1 || event == 15)) {

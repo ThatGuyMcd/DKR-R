@@ -31,7 +31,7 @@ from typing import Dict, List, Optional
 import bpy
 from mathutils import Vector
 
-from . import catalog as catalog_module
+from . import catalog as catalog_module, level_links
 from .gltf_io import MapObject, ObjectMap
 
 #: Custom property names the addon owns. Everything else on an object is a
@@ -41,7 +41,11 @@ PROP_NODE_NAME = "dkr_node_name"
 PROP_ABSENT = "dkr_absent"
 PROP_UNKNOWN = "dkr_unknown"
 PROP_SLOT = "dkr_slot"
-RESERVED = {PROP_ID, PROP_NODE_NAME, PROP_ABSENT, PROP_UNKNOWN, PROP_SLOT}
+#: On an exit: the id of the custom track it leads to, or absent for a retail
+#: destination. See :mod:`.level_links` for why it is not the field itself.
+PROP_DESTINATION_TRACK = "dkr_destination_track"
+RESERVED = {PROP_ID, PROP_NODE_NAME, PROP_ABSENT, PROP_UNKNOWN, PROP_SLOT,
+            PROP_DESTINATION_TRACK}
 
 #: A start grid is an Empty that the start positions are parented to, so the
 #: whole grid moves and turns as one. It carries no ``dkr_id`` and so is never
@@ -190,6 +194,10 @@ def create_empty(context, obj: MapObject, catalog, root, tree=None,
                 absent.append(field.name)
 
     for name, value in obj.fields.items():
+        if name == level_links.TRACK_FIELD and obj.object_id == level_links.EXIT:
+            if isinstance(value, str) and value.strip():
+                empty[PROP_DESTINATION_TRACK] = value.strip()
+            continue
         if name not in known:
             unknown[name] = value
 
@@ -397,6 +405,9 @@ def read_object(empty: bpy.types.Object, catalog) -> MapObject:
             fields[field.name] = field.coerce(value)
 
     fields.update(_load_json(empty, PROP_UNKNOWN, {}))
+    track = destination_track(empty)
+    if track:
+        fields[level_links.TRACK_FIELD] = track
 
     return MapObject(
         object_id=object_id,
@@ -404,6 +415,14 @@ def read_object(empty: bpy.types.Object, catalog) -> MapObject:
         translation=to_map(empty.matrix_world.translation),
         fields=fields,
     )
+
+
+def destination_track(empty) -> str:
+    """The custom track an exit leads to, or ``""`` when it leads to a retail level."""
+    if str(empty.get(PROP_ID, "")) != level_links.EXIT:
+        return ""
+    value = empty.get(PROP_DESTINATION_TRACK, "")
+    return value.strip() if isinstance(value, str) else ""
 
 
 def _load_json(empty, key, fallback):

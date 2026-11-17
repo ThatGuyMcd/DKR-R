@@ -83,7 +83,11 @@ int main() {
         ctx.r16 = 0x1234;
         ctx.f_odd = &ctx.f0.u32h;
         const auto original = ctx;
+        check(!p.ready());
         p.initialize(memory, ctx, calls, assets->characters, std::array<std::uint32_t, 2>{0x18000000, 0x19000000});
+        // Admitting is host-side bookkeeping only: prepare_presentation relies on this to admit on
+        // demand when auto boot skips character select, without moving any guest allocation.
+        check(p.ready());
         check(std::memcmp(&ctx, &original, sizeof(ctx)) == 0);
         check(allocations == 0);
         for (unsigned i = 0; i < 2; ++i)

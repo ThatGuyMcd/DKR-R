@@ -10,6 +10,8 @@
 #include <vector>
 #include "enhanced_water_policy.hpp"
 
+struct recomp_context;
+
 // Project-owned custom track support.
 //
 // DKR reaches every level through one indirection that is entirely data
@@ -280,6 +282,30 @@ struct MusicInfo {
     std::uint16_t channel_mask = 0xFFFF; // header /instruments
 };
 
+// manifest.levelLinks: a byte of one of the track's own object maps that names
+// another .dkrmap track's level - a hub EXIT's destinationMapId. Level ids are
+// assigned from the installed set at runtime, so the author cannot write the
+// number; the exporter leaves a placeholder and records which track it means.
+// `offset` counts from the start of the inflated object map, its 16-byte header
+// (u32 entry bytes, then padding) included: the buffer track_spawn_objects
+// spawns from, whose entries begin at +0x10.
+// The game's object map buffer (OBJECT_MAP_SIZE in objects.c): track_spawn_objects
+// inflates every map into one of these. A link's offset must land inside it.
+inline constexpr std::uint32_t kObjectMapBufferBytes = 0x3000U;
+// track_spawn_objects spawns entries until the header's byte count is used up, stepping by each
+// entry's own size byte, and trusts both. A map whose count outruns its entries, or whose entry
+// size is 0 (the loop never advances), makes the game spawn from whatever follows the buffer, or
+// spin forever. This inflates a LEVEL_OBJECT_MAPS payload (five-byte container, raw DEFLATE) and
+// walks it the way the game does; it refuses a map the walk would not finish inside its own bytes.
+[[nodiscard]] bool inspect_object_map_payload(const std::vector<std::uint8_t>& bytes, std::string& error);
+// Native preview and selection store level ids in signed bytes.
+inline constexpr std::int32_t kMaxLevelId = 127;
+struct LevelLink {
+    MapSlot slot = MapSlot::Structure;
+    std::uint32_t offset = 0;
+    std::string track;
+};
+
 struct Track {
     std::string id;
     std::string name;
@@ -302,6 +328,7 @@ struct Track {
     bool hd_pack_sibling_mismatch = false;          // sibling present, digest differs
     std::optional<MusicInfo> music;                 // manifest.music (schema 2)
     std::optional<water::enhanced::Metadata> water; // Renderer-only appearance.
+    std::vector<LevelLink> level_links;             // manifest.levelLinks
 };
 
 // Scans `directory` for *.dkrmap archives and parses their manifests. Invalid
@@ -384,6 +411,10 @@ void reload();
 // depend on the audio code.
 using LevelLoadObserver = void (*)(std::int32_t level_id);
 void set_level_load_observer(LevelLoadObserver observer);
+// A custom boss race borrows its course's visited and cleared bits to skip the
+// retail intro and outro scenes. This takes them back unless `keep_level` is
+// the level that borrowed them (-1 takes them back unconditionally).
+void return_lent_boss_flags(std::uint8_t* rdram, recomp_context* context, std::int32_t keep_level);
 // The recorded music of the enabled track that owns `level_id`, if it has any.
 // Asked at every level load, so it copies only the descriptor.
 [[nodiscard]] std::optional<MusicInfo> music_for_level(std::int32_t level_id);
@@ -418,6 +449,11 @@ struct PreparedTracks {
 // level loads. -1 when the level is not a .dkrmap track, ships no model of its
 // own, or the model cannot be read.
 [[nodiscard]] std::int32_t level_model_batches(std::int32_t level_id);
+// The race type (LevelHeader byte 0x4C) of the .dkrmap track at `level_id`, or
+// -1 when the level is not one of them.
+[[nodiscard]] std::int32_t level_race_type(std::int32_t level_id);
+// LevelHeader race types the runtime treats specially.
+inline constexpr std::int32_t kRaceTypeBoss = 8;
 // The same count for one compressed LEVEL_MODELS payload.
 [[nodiscard]] std::int32_t count_level_model_batches(const std::uint8_t* bytes, std::size_t size);
 
@@ -549,6 +585,16 @@ void set_auto_boot(bool enabled);
 // `slot` selects between a section's two payloads where one exists; pass
 // MapSlot::None for sections that have only one.
 [[nodiscard]] std::int32_t sibling_index(Section from, std::uint32_t offset, Section to, MapSlot slot);
+
+// The level links of the custom object map served from `offset`, each with the
+// level id its track resolved to, or -1 when that track is not installed or
+// enabled. Empty for a retail map or a track with no links.
+struct ResolvedLevelLink {
+    std::uint32_t offset;
+    std::int32_t level_id;
+    std::string track;
+};
+[[nodiscard]] std::vector<ResolvedLevelLink> level_links_for_object_map(std::uint32_t offset);
 
 // The id range the exporter writes into a level model's texture table for the
 // track's own artwork, standing in for indices only the runtime can assign.

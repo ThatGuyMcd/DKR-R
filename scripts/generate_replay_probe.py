@@ -607,7 +607,13 @@ INPUT_NATIVE_HASH = {
     # select and memory pool addresses come from generated symbol tables with
     # the same values (scripts/tests/test_revision_literals.py).
     # Nov 17: reads the selected revision through revision_addresses::current(); same addresses, no new store, call or hook.
-    "runtime-recomp/src/game/custom_tracks_hooks.cpp": "18346ba130fb2a3d313d180fcccd97fdcf3c079511ac77d702cc17eb4e7f8977",
+    # Nov 16 (PR #93): .dkrmap boss races lend courseFlags bits, and a levelLinks hook writes one
+    # byte into the object map buffer (funcs payload only, never in the owned code). Both run
+    # only for custom .dkrmap content, behind the frozen/bootstrap returns that already guard
+    # every hook here, so retail courses and the frozen online world are untouched. New stores:
+    # skip_custom_boss_intro, return_lent_boss_flags, the links hook; new call: get_settings
+    # (through GuestCallContext), only when a custom boss level is loaded.
+    "runtime-recomp/src/game/custom_tracks_hooks.cpp": "e3ae095263320767115d25b29e1cdcbb72a3905e8a0835590a5449de4bebc4e8",
     # Online mod owner: same no-session returns, explicit TLS namespace and
     # closed private guest callback table; no live/default dispatch fallback.
     # Oct 6: bounded sparse model-slot scan and pre-dereference allocation
@@ -624,7 +630,9 @@ INPUT_NATIVE_HASH = {
     # mempool_alloc_safe, material_set and the track-select cover) now uses
     # GuestCallContext, which repairs f_odd. None of those callees touches an
     # odd float register or a double, so no register, RAM or ordering changes.
-    "runtime-recomp/src/game/runtime_legacy_mods.cpp": "30738ac15d9d4ba15f96023302104979fa52ee45b565f83bd1e4ff81626485ce",
+    # Nov 16 (PR #93): the track menu hook (events 0, 14, 15) hands back courseFlags bits a custom
+    # boss race borrowed; with none borrowed it returns before any guest access.
+    "runtime-recomp/src/game/runtime_legacy_mods.cpp": "bd8dc52a84bf7f9d9549409bd8c4e5b486a6378f28605f7d68efedbcdb0dc22b",
     # Oct 9: guest-owned deferred queue/reserve; no shortened borrower lifetime.
     # Nov 15: the memory pool table address comes from the generated memory_symbols.hpp
     # (gMemoryPools, v77 0x80123580, v80 0x80123B00: both unchanged, see test_revision_literals.py).
@@ -752,7 +760,7 @@ REVIEWED_MAIN_MERGE_HASH = {
     # Nov 8: event 2 derives selected-actor label anchors and calls three
     # read-only font/camera accessors through the same private payload. The
     # reviewed diff leaves input, Pak, rumble and checkpoint ownership intact.
-    "runtime-recomp/src/game/runtime_legacy_mods.cpp": "30738ac15d9d4ba15f96023302104979fa52ee45b565f83bd1e4ff81626485ce",
+    "runtime-recomp/src/game/runtime_legacy_mods.cpp": "bd8dc52a84bf7f9d9549409bd8c4e5b486a6378f28605f7d68efedbcdb0dc22b",
     "runtime-recomp/src/game/mods/legacy_guest_checkpoint.cpp": "92db808732d530ad8e70c93bad1e14f3e4396e486d71d758a75cf0f3f9d6af50",
 }
 
