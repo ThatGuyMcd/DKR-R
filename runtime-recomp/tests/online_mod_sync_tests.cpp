@@ -6,13 +6,14 @@
 #include <iostream>
 #include <chrono>
 #include <fstream>
+#include <source_location>
 using namespace dkr::mods;
 using namespace dkr::mods::online;
 namespace {
 unsigned checks = 0;
-void check(bool value) {
+void check(bool value, const std::source_location& site = std::source_location::current()) {
     if (!value)
-        throw Error("Online sync assertion " + std::to_string(checks));
+        throw Error("Online sync assertion " + std::to_string(checks) + " at line " + std::to_string(site.line()));
     ++checks;
 }
 struct Hub {
@@ -134,6 +135,31 @@ SyncView wait(ModSync& sync, SyncPhase wanted, std::chrono::seconds timeout = st
     }
     throw Error("Timed out waiting for the online mod sync phase.");
 }
+SyncView wait_kept(ModSync& sync) {
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(30);
+    while (std::chrono::steady_clock::now() < deadline) {
+        auto view = sync.snapshot();
+        if (view.phase == SyncPhase::Failed)
+            throw Error(view.error);
+        // Admission finishes before the deliberately asynchronous offline copy.
+        if (view.phase == SyncPhase::Verified && (view.kept_offline || !view.keep_error.empty()))
+            return view;
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    throw Error("The admitted client's offline copy did not finish.");
+}
+void promote(ModSync& sync, const SyncSettings& settings) {
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(30);
+    while (std::chrono::steady_clock::now() < deadline) {
+        std::string error;
+        if (sync.promote_cached_host(settings, error))
+            return;
+        if (!error.empty())
+            throw Error(error);
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    throw Error("The verified mod worker did not retire before promotion.");
+}
 } // namespace
 int main(int argc, char** argv) {
     if (argc != 3 && argc != 4) {
@@ -244,7 +270,7 @@ int main(int argc, char** argv) {
                 std::this_thread::sleep_for(std::chrono::milliseconds(10));
             }
             check(observed_progress);
-            const auto first = wait(a, SyncPhase::Verified), third = wait(c, SyncPhase::Verified);
+            const auto first = wait_kept(a), third = wait_kept(c);
             check(first.profile && first.runtime && third.profile && third.runtime);
             check(first.profile->digest == ready.profile->digest && third.profile->digest == ready.profile->digest);
             check(first.kept_offline && first.keep_error.empty());
@@ -297,8 +323,7 @@ int main(int argc, char** argv) {
             }
             // Promote the exact verified client cache, then use it to serve a
             // fresh download after the lobby's authority changes.
-            std::string promotion_error;
-            check(a.promote_cached_host(settings(1), promotion_error));
+            promote(a, settings(1));
             const auto promoted = wait(a, SyncPhase::HostReady);
             check(a.cached_host_active() && promoted.runtime == first.runtime &&
                   promoted.profile->digest == ready.profile->digest);
@@ -331,7 +356,7 @@ int main(int argc, char** argv) {
                 std::ofstream out(corrupt, std::ios::binary | std::ios::trunc);
                 out << "changed";
             }
-            check(c.promote_cached_host(settings(3), promotion_error));
+            promote(c, settings(3));
             const auto rejected = wait(c, SyncPhase::Verified);
             check(!rejected.error.empty() && !c.cached_host_active());
         }
