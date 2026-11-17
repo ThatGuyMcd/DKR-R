@@ -163,9 +163,17 @@ class Transport final : public net::SessionTransport {
                               (unsigned long long)d[1], (unsigned long long)d[2]);
                 lanes += text;
             }
-            dkr::runtime::session_log::write("[online][proxy] teardown forwarded-bytes=%llu dropped=%llu%s\n",
-                                             (unsigned long long)relayed.forwarded, (unsigned long long)relayed.dropped,
-                                             lanes.c_str());
+            char head[96];
+            std::snprintf(head, sizeof head, "[online][proxy] teardown forwarded-bytes=%llu dropped=%llu",
+                          (unsigned long long)relayed.forwarded, (unsigned long long)relayed.dropped);
+            // close() runs more than once per transport (the session's explicit disconnect,
+            // then the destructor), and the counters are lifetime totals that survive
+            // engine_.reset(). Write only when the report differs from the last one.
+            std::string line = head + lanes + "\n";
+            if (line != last_teardown_) {
+                dkr::runtime::session_log::write("%s", line.c_str());
+                last_teardown_ = std::move(line);
+            }
         }
         engine_.reset();
         meter_.reset();
@@ -748,6 +756,7 @@ class Transport final : public net::SessionTransport {
     std::map<Id, Resolved> resolved_;
     const void* key_;
     std::unique_ptr<net::SessionTransport> base_;
+    std::string last_teardown_;
     NetworkOptions options_;
     std::shared_ptr<Events> events_;
     Engine engine_;
