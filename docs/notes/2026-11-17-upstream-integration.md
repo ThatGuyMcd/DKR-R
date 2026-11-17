@@ -38,7 +38,9 @@ capable members before a new owned world is constructed.
 
 ## Verification and build notes
 
-The initial combined Windows host run passed all 214 tests. A separate native
+The combined Windows host run passed all 214 tests. The final Linux host preset
+also configured, built and passed all 214 tests after resuming the paused build.
+The installed pre-commit checks passed for the integration changes. A separate native
 four-racer/eight-spectator test passed sequential handovers to a racer and a
 spectator, including mixed-architecture metadata, preserved seats/save owner,
 and a synchronized start. Its impaired run added 375 ms one-way delay, 25 ms
@@ -52,7 +54,8 @@ Windows portability fixes retain the checks: use extended paths for deep cache
 fixtures, keep relative executable tests on the interpreter's drive, normalize
 schema paths, compare review text with universal newlines, encode the iOS bundle
 entry point's executable mode explicitly, and use native paths for the local
-esbuild and CMake command construction.
+esbuild and CMake command construction. CMake warning checks ignore line wraps
+caused by different checkout and temporary-directory lengths.
 
 The clean Linux baseline and the first combined Linux run both exposed the
 same regression-harness timeout. Git status on the NTFS source checkout took
@@ -83,6 +86,22 @@ increasing its background bandwidth allowance. That allowance protects racing
 traffic, but eight spectators can still take a long time to receive a new scene.
 This remains a known limit; passing this test does not mean instant spectator
 scene loading or a guaranteed frame rate under every network condition.
+
+## Testing packages
+
+The Windows ZIP and x86_64 AppImage are built as `1.0.16-playtest.1`. Their
+archive readback checks match every staged file, with no missing or changed
+payloads. The package scans passed the version, feature, frozen identity and
+private-data checks. Receipts, checksums and test logs stay outside the source
+tree in the integration workspace.
+
+The packaged Windows runtime passed its install-layout check. The actual
+AppImage extracted and ran its settings round-trip check successfully. The
+Linux library audit inspected 100 ELF files and found no missing dependencies
+outside the documented host-library policy. The AppDir closure check also
+passed, including the file picker that deliberately uses host GTK libraries.
+This AppImage requires glibc 2.38 or newer; its C++ runtime needs GLIBCXX 3.4.32.
+These checks do not replace testing the package on a physical Steam Deck.
 
 ## Local checkout and recovery
 
