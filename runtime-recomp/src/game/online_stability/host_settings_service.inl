@@ -14,8 +14,9 @@
     stability::HostSettingsContext context;
     context.spectator_capable = party->enabled;
     context.playing = bool(party->launch) || state_ == ConnectionState::Running || state_ == ConnectionState::Loading;
-    context.transition = party->stopping || party->returned || state_ == ConnectionState::Loading ||
-                         launch_countdown_active_ || (!context.playing && lobby_.room().phase != RoomPhase::Waiting);
+    context.transition = party->stopping || party->returned || dkr::runtime::netplay::links::busy(party->links) ||
+                         state_ == ConnectionState::Loading || launch_countdown_active_ ||
+                         (!context.playing && lobby_.room().phase != RoomPhase::Waiting);
     context.occupied_ports = 1;
     if (party->enabled) {
         for (const auto& member : party->party.snapshot().members)

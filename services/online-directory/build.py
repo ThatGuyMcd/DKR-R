@@ -4,6 +4,7 @@ import argparse
 import hashlib
 import json
 from pathlib import Path
+import platform
 import shutil
 import subprocess
 import sys
@@ -124,7 +125,11 @@ def verify(output):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--esbuild", type=Path, default=AUTH.parent / "test-tools/node_modules/.bin/esbuild")
+    bundler = AUTH.parent / "test-tools/node_modules/.bin/esbuild"
+    if sys.platform == "win32":
+        architecture = "arm64" if platform.machine().lower() in ("aarch64", "arm64") else "x64"
+        bundler = AUTH.parent / f"test-tools/node_modules/@esbuild/win32-{architecture}/esbuild.exe"
+    parser.add_argument("--esbuild", type=Path, default=bundler)
     parser.add_argument("--rollback-api", type=Path)
     parser.add_argument("--rollback-directory", type=Path)
     parser.add_argument("--archive", type=Path)

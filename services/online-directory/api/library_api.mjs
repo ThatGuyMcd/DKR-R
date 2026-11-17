@@ -3629,7 +3629,7 @@ async function handleOnlineDirectory(request, env) {
   const headers = { 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': '*' };
   if (url.pathname === '/v1/online/capabilities' && request.method === 'GET') {
     return Response.json({ protocol: 1, enabled: env.ONLINE_ENABLED === 'true' && !!env.ONLINE_DIRECTORY,
-      runningSpectators: env.RUNNING_SPECTATORS_ENABLED === 'true', heartbeatSeconds: 20, leaseSeconds: 60 }, { headers });
+      runningSpectators: env.RUNNING_SPECTATORS_ENABLED === 'true', hostHandover: true, heartbeatSeconds: 20, leaseSeconds: 60 }, { headers });
   }
   if (env.ONLINE_ENABLED !== 'true' || !env.ONLINE_DIRECTORY)
     return Response.json({ error: { code: 'disabled', message: 'Public lobbies are not enabled yet.' } }, { status: 503, headers });

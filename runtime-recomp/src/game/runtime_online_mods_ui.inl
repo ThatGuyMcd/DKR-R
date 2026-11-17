@@ -135,6 +135,9 @@ void PumpOnlineMods() {
     auto view = g_online_mod_sync->snapshot();
     g_online_mod_notice.progress(view.stage);
     const auto network = session().view();
+// Cached, verified content is promoted by the existing worker, outside
+// the network locks. Host transfer never enables local offline selections.
+#include "netplay/session_links/mod_owner_ui.inl"
     if (g_stability_retry_requested && !dkr::lobby_stability::snapshot(g_online_mod_sync.get()).running) {
         g_stability_retry_requested = false;
         std::string error;

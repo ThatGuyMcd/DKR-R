@@ -69,7 +69,8 @@ Context build_context(const RelayRoster&, Clock::time_point now);
 struct RouteTable {
     bool is_host = false;
     Id host = 0;
-    std::vector<Id> reachable; // a host's reachable member ids
+    std::vector<Id> reachable;  // a host's reachable member ids
+    std::vector<Id> introduced; // authenticated racer ICE peers, not additional relay authorities
 };
 // The control packets that will be sent, in order: a host's to reachable members,
 // a client's to the host, nothing else.

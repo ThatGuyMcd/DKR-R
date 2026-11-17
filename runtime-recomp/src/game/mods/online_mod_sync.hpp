@@ -79,6 +79,8 @@ class ModSync {
     bool prepare_host(SyncSettings settings, std::filesystem::path legacy, std::vector<std::filesystem::path> labs,
                       std::string revision, bool custom_ai, RuntimePreparation prepare);
     bool watch_client(SyncSettings settings, RuntimePreparation prepare);
+    bool promote_cached_host(SyncSettings settings, std::string& error);
+    bool cached_host_active() const;
     void consent(bool accept, bool keep_offline = true, std::string approved_code_offer = {});
     void cancel();
     SyncView snapshot() const;

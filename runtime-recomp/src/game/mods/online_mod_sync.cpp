@@ -262,6 +262,10 @@ void ModSync::host_loop(std::shared_ptr<const Bundle> bundle, std::stop_token st
             hosted = true;
         else if (hosted)
             break;
+        if (!network.host) {
+            pause(stop, std::chrono::milliseconds(20));
+            continue;
+        }
         if (network.game_active) {
             peers.clear();
             {
@@ -800,3 +804,4 @@ void ModSync::client_loop(const SyncSettings& settings, const RuntimePreparation
     }
 }
 } // namespace dkr::mods::online
+#include "netplay/session_links/mod_host.inl"

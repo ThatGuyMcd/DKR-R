@@ -5,6 +5,7 @@
 #include <deque>
 #include <iostream>
 #include <chrono>
+#include <fstream>
 using namespace dkr::mods;
 using namespace dkr::mods::online;
 namespace {
@@ -17,6 +18,7 @@ void check(bool value) {
 struct Hub {
     std::mutex mutex;
     bool hosting = false, game_active = false;
+    unsigned host_slot = 0;
     std::optional<SyncOffer> offer;
     std::array<std::deque<SyncPacket>, 4> packets;
     std::array<bool, 4> admitted{}, verified{}, left{}, consent_dropped{}, prepare_dropped{}, chunk_dropped{};
@@ -31,18 +33,18 @@ class Link : public SyncLink {
     SyncNetworkView view() const override {
         std::lock_guard lock(hub_.mutex);
         SyncNetworkView result;
-        result.host = slot_ == 0;
+        result.host = slot_ == hub_.host_slot;
         result.hosting = result.host && hub_.hosting;
-        result.joining = slot_ && !hub_.admitted[slot_] && !hub_.left[slot_];
+        result.joining = !result.host && !hub_.admitted[slot_] && !hub_.left[slot_];
         result.game_active = hub_.game_active;
         result.session_active = hub_.hosting || hub_.game_active;
-        result.lobby = slot_ && hub_.admitted[slot_];
+        result.lobby = !result.host && hub_.admitted[slot_];
         result.failed = hub_.left[slot_];
         result.failure_reason = hub_.failure_reason[slot_];
-        if (slot_ && hub_.hosting)
+        if (!result.host && hub_.hosting)
             result.offer = hub_.offer;
-        for (unsigned i = 1; i < 4; ++i)
-            if (!hub_.admitted[i] && !hub_.left[i])
+        for (unsigned i = 0; i < 4; ++i)
+            if (i != hub_.host_slot && !hub_.admitted[i] && !hub_.left[i])
                 result.preparing_requests.push_back(i);
         return result;
     }
@@ -62,32 +64,33 @@ class Link : public SyncLink {
         std::lock_guard lock(hub_.mutex);
         error.clear();
         const auto op = decode_message(data);
-        const auto to = slot_ ? 0 : static_cast<unsigned>(target);
+        const bool host = slot_ == hub_.host_slot;
+        const auto to = host ? static_cast<unsigned>(target) : hub_.host_slot;
         if (to >= 4 || hub_.packets[to].size() >= 32)
             return false;
-        if (slot_ && op.operation == Operation::Progress)
+        if (!host && op.operation == Operation::Progress)
             ++hub_.progress_reports[slot_];
-        if (slot_ && op.operation == Operation::Consent && !hub_.consent_dropped[slot_]) {
+        if (!host && op.operation == Operation::Consent && !hub_.consent_dropped[slot_]) {
             hub_.consent_dropped[slot_] = true;
             return true;
         }
-        if (slot_ && op.operation == Operation::Preparing && !hub_.prepare_dropped[slot_]) {
+        if (!host && op.operation == Operation::Preparing && !hub_.prepare_dropped[slot_]) {
             hub_.prepare_dropped[slot_] = true;
             return true;
         }
-        if (!slot_ && op.operation == Operation::PayloadChunk) {
+        if (host && op.operation == Operation::PayloadChunk) {
             hub_.payload_bytes[to] += op.bytes.size();
             if (op.offset == 826 && !hub_.chunk_dropped[to]) {
                 hub_.chunk_dropped[to] = true;
                 return true;
             }
         }
-        hub_.packets[to].push_back({slot_, slot_ ? slot_ : 0, Bytes(data.begin(), data.end())});
+        hub_.packets[to].push_back({slot_, host ? 0 : slot_, Bytes(data.begin(), data.end())});
         return true;
     }
     bool verify_local(std::string_view digest, std::string_view resources, std::string&) override {
         std::lock_guard lock(hub_.mutex);
-        if (!valid_digest(resources) || !slot_ || !hub_.offer || digest != hub_.offer->digest)
+        if (!valid_digest(resources) || slot_ == hub_.host_slot || !hub_.offer || digest != hub_.offer->digest)
             return false;
         hub_.verified[slot_] = true;
         return true;
@@ -292,6 +295,45 @@ int main(int argc, char** argv) {
                 std::lock_guard lock(hub.mutex);
                 check(hub.admitted[2]);
             }
+            // Promote the exact verified client cache, then use it to serve a
+            // fresh download after the lobby's authority changes.
+            std::string promotion_error;
+            check(a.promote_cached_host(settings(1), promotion_error));
+            const auto promoted = wait(a, SyncPhase::HostReady);
+            check(a.cached_host_active() && promoted.runtime == first.runtime &&
+                  promoted.profile->digest == ready.profile->digest);
+            {
+                std::lock_guard lock(hub.mutex);
+                hub.host_slot = 1;
+                hub.admitted[0] = true;
+                hub.admitted[2] = false;
+                hub.verified[2] = false;
+                hub.payload_bytes[2] = 0;
+                hub.packets[2].clear();
+            }
+            auto transferred_settings = settings(2);
+            transferred_settings.online_root = root / "after-transfer-cache";
+            check(b.watch_client(transferred_settings, proof));
+            wait(b, SyncPhase::Review);
+            b.consent(true, false);
+            const auto after_transfer = wait(b, SyncPhase::Verified);
+            check(after_transfer.runtime && after_transfer.profile->digest == promoted.profile->digest);
+            {
+                std::lock_guard lock(hub.mutex);
+                check(hub.admitted[2] && hub.payload_bytes[2] > 0);
+            }
+            // Retained profile metadata is not sufficient if a cached payload
+            // changed after verification. The candidate must fail closed.
+            check(!third.manifest->payloads.empty());
+            const auto corrupt =
+                private_storage_path(settings(3).online_root) / "payloads" / third.manifest->payloads.front().digest;
+            {
+                std::ofstream out(corrupt, std::ios::binary | std::ios::trunc);
+                out << "changed";
+            }
+            check(c.promote_cached_host(settings(3), promotion_error));
+            const auto rejected = wait(c, SyncPhase::Verified);
+            check(!rejected.error.empty() && !c.cached_host_active());
         }
         if (argc == 4) {
             Hub stale;

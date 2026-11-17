@@ -6,6 +6,8 @@
 #include "online_stability/traffic_meter.hpp"
 #include "online_stability/ping_window.hpp"
 #include "online_stability/live_send_capacity.hpp"
+#include "netplay/session_links/state.hpp"
+#include "netplay/session_links/registry.hpp"
 #include <deque>
 #include <map>
 #include <memory>
@@ -81,6 +83,7 @@ struct LinkView {
 // Public/UI functions below NEVER call DirectSession while holding this lock.
 // No change to DirectSession's class layout or checked-out header is required.
 struct PartyLink {
+    net::links::State links;
     dkr::online_stability::PingWindow ping_window;
     dkr::online_stability::QueueAgeMeter queue_age;
     mutable std::recursive_mutex mutex;
@@ -132,6 +135,9 @@ bool party_watching(const void* session);
 bool party_send(const void* session, MemberId target, std::span<const std::uint8_t> bytes,
                 net::TransportTrafficClass traffic);
 bool party_receive(const void* session, LinkIncoming& out);
+bool party_direct_input(const void* session, MemberId target, std::span<const std::uint8_t> bytes,
+                        net::TransportTrafficClass traffic);
+std::size_t party_retire_checkpoint(const void* session, MemberId target, std::uint64_t match, std::uint64_t transfer);
 void party_ready(const void* session, bool ready);
 void party_start(const void* session);
 void party_stop(const void* session, std::string reason);

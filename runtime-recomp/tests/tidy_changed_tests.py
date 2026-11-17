@@ -22,6 +22,13 @@ class LineDiffTests(unittest.TestCase):
     def test_identical_is_empty(self):
         self.assertEqual(tidy.line_diff(b"a;\nb;\n", b"a;\nb;\n", "x.cpp"), "")
 
+    def test_line_endings_do_not_turn_unchanged_code_into_changed_lines(self):
+        self.assertEqual(tidy.line_diff(b"a;\nb;\n", b"a;\r\nb;\r\n", "x.cpp"), "")
+        diff = tidy.line_diff(b"a;\nb;\n", b"a;\r\nB;\r\n", "x.cpp")
+        self.assertIn("@@ -2 +2 @@", diff)
+        self.assertNotIn("+a;", diff)
+        self.assertNotIn("\r", diff)
+
     def test_paths_survive_dash_p1_and_hunks_are_zero_context(self):
         diff = tidy.line_diff(b"a;\nb;\nc;\n", b"a;\nB;\nc;\n", "src/x.cpp")
         self.assertIn("+++ b/src/x.cpp\n", diff)

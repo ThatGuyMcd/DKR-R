@@ -85,8 +85,8 @@
     "runtime-recomp/src/game/netplay/experimental_performance.hpp": "0f802347c393412e7a99003f60625f52de3ec62fd3f88c6e4601185c9c597bfa",
     "runtime-recomp/src/game/netplay/experimental_present_gate.cpp": "11fff06bd17bc8069274e090de7f6a005972bd5c909f09d75b121e8c109f98bf",
     "runtime-recomp/src/game/netplay/experimental_present_gate.hpp": "11ef80fb42f85f6d95601273352014bb123ba6cd6e122e3adbc6a9e6cf0edc46",
-    "runtime-recomp/src/game/netplay/experimental_presentation.cpp": "66c93e26eedbea8826cb15c063b72f5bc507cfe3686736ff4e0c7cec27f4438e",
-    "runtime-recomp/src/game/netplay/experimental_presentation.hpp": "dbd26ed84319448054da4be0f49c277391dee838b40e67f5654f54eb9066c955",
+    "runtime-recomp/src/game/netplay/experimental_presentation.cpp": "43db182ddc6589b23af5582778acf57463d85e647144705f7c89f2a6675401d1",
+    "runtime-recomp/src/game/netplay/experimental_presentation.hpp": "6752a3cbfd1b6a4635b06377deabb2ffca70500dbc5f567fd244a74c517af6d6",
     "runtime-recomp/src/game/netplay/experimental_process.cpp": "ebbfba4aa3f500c843dcedacb2f15bf605b8c8abe4e9f83224ab5aff6b549a31",
     "runtime-recomp/src/game/netplay/experimental_process.hpp": "5db5d2d4b04db0c08d3f102d41d0843866d6171ca3c76b7dcf95a841a9b44da9",
     "runtime-recomp/src/game/netplay/experimental_pump.cpp": "6bda29d224d5030344475a8127b9061d4801e125a5f2c1dde99d86748e716130",
@@ -94,7 +94,7 @@
     "runtime-recomp/src/game/netplay/experimental_race_frontend.cpp": "6223a033bcbbc51417d850e6d1acb359d2d987b172daf32de28b615e44228b61",
     "runtime-recomp/src/game/netplay/experimental_rollback.cpp": "b429eb1fc93a3e2b0454790cdec3c81f8ed29572f57cb4b56abf0e78c96ca738",
     "runtime-recomp/src/game/netplay/experimental_rollback.hpp": "23656d21cb5cde5cd336e69e9a7c9569799b06756f70bbde15c8078bef4809fe",
-    "runtime-recomp/src/game/netplay/experimental_runtime.cpp": "7784b8e94652c749fa3f0762a4e4c513ca0e773b8508802e65879caa713ccb00",
+    "runtime-recomp/src/game/netplay/experimental_runtime.cpp": "55920d9beaa803801c417bfe64bfe741b118a0a65dd7551e68972bea098a4fae",
     "runtime-recomp/src/game/netplay/experimental_runtime.hpp": "e2bd584098e45af7e67b6198f650d18a204d3b57be6bbe3214639e3abe73598c",
     "runtime-recomp/src/game/netplay/experimental_runtime_admission.hpp": "6e2e1b60086bebaccdb50089ea5dce8c40b572fab6912b2562acc7e81211f527",
     "runtime-recomp/src/game/netplay/experimental_runtime_presence.hpp": "0c14e186cd618998e0902f28a1e88be53d4601bd2ffee1cbc5ba19cc5bb851ba",
@@ -106,7 +106,7 @@
     "runtime-recomp/src/game/netplay/runtime_state.hpp": "9d54de461b5220b246763d5f0b044cfc7ed845da4c8ad1ba521eb6f3cb905b07",
     "runtime-recomp/src/game/netplay/setup_policy.hpp": "c2630dbc6a3950e947d0ce380d1be42c71568a864bb7dbef42703df5f1cf31fc",
     "runtime-recomp/src/game/party_release.hpp": "0f364dfe23f991223547679858ca894056974d891040527a2c6e0ea6065e3676",
-    "runtime-recomp/src/game/party_runtime.cpp": "0eb45b3483dabebd0e0ae6b98e6fed67ae8593dd5bfdaa40ed899db38893a8fc",
+    "runtime-recomp/src/game/party_runtime.cpp": "20e2818b9ebf10e3f828f702caaf54849688208dcdbcc933dfe565bad85bc15d",
     "runtime-recomp/src/game/party_runtime.hpp": "f71d5b873f71fd24000c43833171967fa40860468f2ee6f50367ac1c1c60b404",
     "runtime-recomp/src/game/runtime_save_routing.cpp": "837917b9ede8d0f9cadd86edaa325da50c7e88a6c34242758f18228112737890",
     "runtime-recomp/src/game/runtime_save_routing.hpp": "cb3ae802050f29e38def0d42c60c01345be2cc46a515a95e9c50d49a06cf6879",
@@ -148,7 +148,7 @@
     "runtime-recomp/tests/replay_probe/probe_bridge.h": "893652acb1858fd5a93e17f1a8dd720e6634b532212096b123b87ddd34f91c03",
     "runtime-recomp/tests/replay_probe/probe_component.c": "022cc844ac8a5879168e82dd79035c98ebe2203eadabf4268cff0559c58979c3",
     "runtime-recomp/tests/replay_probe/probe_component.h": "bd1919c9701e6aeba909af45e17d89e7e4275d846f66a9df806857b7e2460009",
-    "runtime-recomp/tests/replay_probe/probe_driver.cpp": "bc027b5aa7fbe082d863be3ace06fc7e89fac76639919abe6d2b546565fabeaa",
+    "runtime-recomp/tests/replay_probe/probe_driver.cpp": "a4940cce66a8fee0169797085c2fc0d391211c8035d4cfa11f68b3c5832b5288",
     "runtime-recomp/tests/replay_probe/probe_driver.hpp": "630fb96603ea6f9d3abc2a6554c63d1acbaa43b5dc741e767df06a2d154660f6",
     "runtime-recomp/tests/replay_probe/probe_eeprom.cpp": "b3596a6727f899508d111e5a73acf755822d42e6901b7d89a95c546ae708d89b",
     "runtime-recomp/tests/replay_probe/probe_input.c": "40eef7c9fdd82da5e1247711b9cca1ef38852176681b5e3addb819eca1d7ced7",
@@ -207,6 +207,6 @@
   },
   "last_update": {
     "identity_changed": false,
-    "reason": "PR #93 port: auto-boot presentation admission sizes host vectors only; levelLinks hook is funcs-only (owned hook set identical), a no-op online and on retail maps; boss and hub .dkrmap levels are offline only"
+    "reason": "Retain v1.0.15 simulation and wire identities. Optional authenticated session-links v2 extensions add duplicate immutable racer delivery and consented waiting-lobby handover among capable peers; default menu ownership remains port zero and older peers retain host delivery. Correction eligibility and Auto delay accounting affect presentation and scheduling only. Upstream architecture-free launch hashes, state cross-checks, GuestCallContext and reliable checkpoint semantics are retained."
   }
 }

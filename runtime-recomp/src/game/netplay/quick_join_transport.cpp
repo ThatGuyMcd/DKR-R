@@ -4,6 +4,8 @@
 #include "online_presentation/test_receive_delay.hpp"
 #include "online_stability/live_send_capacity.hpp"
 #include "session_transport.hpp"
+#include "netplay/session_links/transport.hpp"
+#include <set>
 #include "callback_lifetime.hpp"
 #include "transport_send_policy.hpp"
 #include "social_executor.hpp"
@@ -127,7 +129,7 @@ std::string signaling_ca_bundle() {
     return std::string(kPeerJsFallbackRoot);
 }
 
-class QuickJoinTransport final : public SessionTransport {
+class QuickJoinTransport final : public SessionTransport, public links::IntroducedTransport {
   public:
     QuickJoinTransport(bool host, std::string code) : host_(host), code_(std::move(code)) {}
     ~QuickJoinTransport() override {
@@ -187,6 +189,9 @@ class QuickJoinTransport final : public SessionTransport {
             peers.swap(peers_);
             remote_to_identifier_.clear();
             pinned_routes_.clear();
+            authorized_remote_.clear();
+            peer_aliases_.clear();
+            preparing_host_.store(false);
             departed_peers_.clear();
             retired.swap(retired_peers_);
             control_inbound_.clear();
@@ -236,7 +241,8 @@ class QuickJoinTransport final : public SessionTransport {
     void retain_peer_route(const PeerAddress& address) override {
         std::scoped_lock lock(mutex_);
         for (const auto& [id, peer] : peers_) {
-            if (peer->address == address && (pinned_routes_.contains(peer->remote_id) || pinned_routes_.size() < 16U)) {
+            if (peer->address == address &&
+                (pinned_routes_.contains(peer->remote_id) || pinned_route_count_locked() < 16U)) {
                 pinned_routes_[peer->remote_id] = {id, address};
                 return;
             }
@@ -244,6 +250,19 @@ class QuickJoinTransport final : public SessionTransport {
     }
     void release_peer_route(const PeerAddress& address) override {
         std::scoped_lock lock(mutex_);
+        for (const auto& [id, peer] : peers_)
+            if (peer->address == address) {
+                authorized_remote_.erase(peer->remote_id);
+                if (const auto alias = peer_aliases_.find(id); alias != peer_aliases_.end()) {
+                    authorized_remote_.erase(alias->second);
+                    peer_aliases_.erase(alias);
+                }
+            }
+        for (const auto& [name, route] : pinned_routes_)
+            if (route.second == address) {
+                authorized_remote_.erase(name);
+                peer_aliases_.erase(route.first);
+            }
         std::erase_if(pinned_routes_, [&](const auto& entry) { return entry.second.second == address; });
     }
     bool take_peer_departure(PeerAddress& address) override {
@@ -302,8 +321,10 @@ class QuickJoinTransport final : public SessionTransport {
         return code_;
     }
 
+#include "netplay/session_links/quick_join_api.inl"
+
     bool rekey_quick_join(std::string bootstrap, std::string& error) override {
-        if (!host_ || !is_open() || rekey_status() == QuickJoinRekeyStatus::Pending) {
+        if ((!host_ && !preparing_host_.load()) || !is_open() || rekey_status() == QuickJoinRekeyStatus::Pending) {
             error = "Only an active host without a pending code replacement can rekey.";
             return false;
         }
@@ -316,6 +337,7 @@ class QuickJoinTransport final : public SessionTransport {
             pending->bootstrap = std::move(bootstrap);
             pending->generation = next_signaling_generation_.fetch_add(1U) + 1U;
             pending_rekey_ = pending;
+            pending->quiet = preparing_host_.load();
         }
         rekey_state_.store(QuickJoinRekeyStatus::Pending);
         pending->socket = make_signaling_socket(pending->generation, pending);
@@ -644,6 +666,7 @@ class QuickJoinTransport final : public SessionTransport {
     friend struct QuickJoinTestAccess;
     CallbackLifetime callbacks_;
     struct PendingRekey {
+        bool quiet = false;
         std::string code;
         std::string bootstrap;
         std::uint64_t generation = 0U;
@@ -690,16 +713,17 @@ class QuickJoinTransport final : public SessionTransport {
                 pending->socket->close();
             return;
         }
-        for (const auto& channel : channels) {
-            rtc::binary framed{static_cast<std::byte>(3U)};
-            for (unsigned char c : pending->code)
-                framed.push_back(static_cast<std::byte>(c));
-            try {
-                if (channel->isOpen())
-                    channel->send(std::move(framed));
-            } catch (...) {
+        if (!pending->quiet)
+            for (const auto& channel : channels) {
+                rtc::binary framed{static_cast<std::byte>(3U)};
+                for (unsigned char c : pending->code)
+                    framed.push_back(static_cast<std::byte>(c));
+                try {
+                    if (channel->isOpen())
+                        channel->send(std::move(framed));
+                } catch (...) {
+                }
             }
-        }
         if (previous)
             previous->close();
     }
@@ -710,6 +734,7 @@ class QuickJoinTransport final : public SessionTransport {
         PeerAddress address{};
         std::atomic<bool> current{true};
         std::atomic<bool> route_ready{false};
+        std::atomic<bool> authority_route{false};
         bool departure_reported = false; // mutex_ protected
         bool signals_released = false;   // mutex_ protected
         std::vector<Json> held_signals;  // mutex_ protected
@@ -806,9 +831,10 @@ class QuickJoinTransport final : public SessionTransport {
 
     bool has_established_route() const {
         std::scoped_lock lock(mutex_);
-        return std::any_of(peers_.begin(), peers_.end(), [](const auto& entry) {
+        return std::any_of(peers_.begin(), peers_.end(), [this](const auto& entry) {
             const auto& peer = entry.second;
             return peer && peer->current.load(std::memory_order_acquire) &&
+                   (host_ || peer->authority_route.load(std::memory_order_acquire)) &&
                    peer->route_ready.load(std::memory_order_acquire) && peer->control_channel &&
                    peer->control_channel->isOpen();
         });
@@ -879,7 +905,7 @@ class QuickJoinTransport final : public SessionTransport {
             failed_.load(std::memory_order_acquire))
             return;
         peer->route_ready.store(false, std::memory_order_release);
-        if (!host_) {
+        if (!host_ && peer->authority_route.load(std::memory_order_acquire)) {
             std::uint64_t unscheduled = 0U;
             next_route_retry_ms_.compare_exchange_strong(unscheduled, steady_milliseconds() + 750U,
                                                          std::memory_order_acq_rel);
@@ -918,6 +944,7 @@ class QuickJoinTransport final : public SessionTransport {
         std::shared_ptr<Peer> replaced;
         {
             std::scoped_lock lock(mutex_);
+            peer->authority_route.store(!host_ && peer->remote_id == remote_host_id_);
             if (peer->remote_id.size() > 128U || peer->connection_id.size() > 128U ||
                 retired_peers_.size() + pending_retirements_.load() >= 16U ||
                 (peers_.size() >= 16U && std::none_of(peers_.begin(), peers_.end(), [&](const auto& entry) {
@@ -965,7 +992,7 @@ class QuickJoinTransport final : public SessionTransport {
                     payload["serialization"] = "none";
                 }
                 send_peer_signal(locked, Json{{"type", type == "offer" ? "OFFER" : "ANSWER"},
-                                              {"dst", locked->remote_id},
+                                              {"dst", signal_name(locked->identifier, locked->remote_id)},
                                               {"payload", std::move(payload)}});
             }));
             peer->connection->onLocalCandidate(callbacks_.wrap([this, weak_peer](rtc::Candidate candidate) {
@@ -975,7 +1002,7 @@ class QuickJoinTransport final : public SessionTransport {
                 send_peer_signal(
                     locked,
                     Json{{"type", "CANDIDATE"},
-                         {"dst", locked->remote_id},
+                         {"dst", signal_name(locked->identifier, locked->remote_id)},
                          {"payload",
                           {{"connectionId", locked->connection_id},
                            {"type", "data"},
@@ -993,7 +1020,7 @@ class QuickJoinTransport final : public SessionTransport {
                     return;
                 if (state == rtc::PeerConnection::State::Connected) {
                     locked->route_ready.store(true, std::memory_order_release);
-                    if (!host_) {
+                    if (!host_ && locked->authority_route.load(std::memory_order_acquire)) {
                         next_route_retry_ms_.store(0U, std::memory_order_release);
                         route_retry_requested_.store(false, std::memory_order_release);
                     }
@@ -1214,10 +1241,10 @@ class QuickJoinTransport final : public SessionTransport {
             std::scoped_lock lock(mutex_);
             if (!locked->current.load(std::memory_order_acquire) || closing_.load())
                 return;
-            if (kind == 2U && !host_) {
+            if (kind == 2U && !host_ && locked->authority_route.load(std::memory_order_acquire)) {
                 bootstrap_.assign(bytes.begin(), bytes.end());
                 bootstrap_peer_ = locked->address;
-            } else if (kind == 3U && !host_) {
+            } else if (kind == 3U && !host_ && locked->authority_route.load(std::memory_order_acquire)) {
                 const std::string replacement(bytes.begin(), bytes.end());
                 if (valid_quick_join_code(replacement)) {
                     const std::string new_remote = "dkrr-31-" + normalize_code(replacement);
@@ -1352,7 +1379,12 @@ class QuickJoinTransport final : public SessionTransport {
         if (connection_id.empty())
             return;
         std::shared_ptr<Peer> peer = find_peer(remote, connection_id);
-        if (!peer && type == "OFFER" && host_) {
+        bool introduced = false;
+        {
+            std::scoped_lock lock(mutex_);
+            introduced = authorized_remote_.contains(remote);
+        }
+        if (!peer && type == "OFFER" && (host_ || introduced)) {
             if (!payload.contains("sdp") || !payload["sdp"].is_object())
                 return;
             (void)create_peer(remote, connection_id, false, &payload["sdp"]);
@@ -1379,7 +1411,7 @@ class QuickJoinTransport final : public SessionTransport {
         }
     }
 
-    bool host_ = false;
+#include "netplay/session_links/quick_join_state.inl"
 #ifdef DKR_QUICK_JOIN_TESTING
     int construction_failure_stage_ = -1;
     std::function<void(int)> construction_hook_;

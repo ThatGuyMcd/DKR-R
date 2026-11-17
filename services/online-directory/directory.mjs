@@ -84,6 +84,7 @@ export class WorldwideDirectory extends DurableObject {
       CREATE TABLE IF NOT EXISTS joins(id TEXT PRIMARY KEY, account TEXT NOT NULL, instance TEXT NOT NULL, room TEXT NOT NULL, expires INTEGER NOT NULL, data TEXT NOT NULL);
       CREATE INDEX IF NOT EXISTS join_room ON joins(room,expires);
       CREATE TABLE IF NOT EXISTS social_members(room TEXT NOT NULL,instance TEXT NOT NULL,account TEXT NOT NULL,sender TEXT NOT NULL,PRIMARY KEY(room,instance),UNIQUE(room,sender));
+      CREATE TABLE IF NOT EXISTS host_transfers(room TEXT PRIMARY KEY,expires INTEGER NOT NULL,data TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS replies(key TEXT PRIMARY KEY, expires INTEGER NOT NULL, data TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS tickets(hash TEXT PRIMARY KEY, expires INTEGER NOT NULL, data TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS limits(key TEXT PRIMARY KEY, window INTEGER NOT NULL, count INTEGER NOT NULL);
@@ -152,6 +153,7 @@ export class WorldwideDirectory extends DurableObject {
     for (const row of this.rows('SELECT data FROM joins WHERE expires<=?', now)) this.cancelJoin(JSON.parse(row.data), 'The join request expired.');
     this.sql.exec('DELETE FROM replies WHERE expires<=?', now);
     this.sql.exec('DELETE FROM tickets WHERE expires<=?', now);
+    this.sql.exec('DELETE FROM host_transfers WHERE expires<=?', now);
     this.sql.exec('DELETE FROM limits WHERE window<?', now - 120000);
     this.sql.exec('DELETE FROM audit WHERE expires<=?', now);
     if (changed) this.changed();
@@ -279,6 +281,67 @@ export class WorldwideDirectory extends DurableObject {
       return { online: this.count(), revision: this.revision(), serverTime: Date.now() };
     }
     if (input.type === 'list') return this.list(input.cursor || '');
+    if (input.type === 'transfer_prepare' || input.type === 'transfer_accept' || input.type === 'transfer_commit') {
+      const serial=text(input.serial,20,'transfer serial'),epoch=text(input.epoch,80,'room epoch');
+      const hash=text(input.digest,64,'prepared session digest'),code=text(input.code,5,'lobby code');
+      const nextCode=text(input.nextCode,5,'successor code'),sender=text(input.sender,20,'successor identity');
+      need(/^[1-9][0-9]{0,19}$/.test(serial)&&/^[a-f0-9]{64}$/.test(hash)&&socialSender(sender)&&
+        /^[A-Z0-9]{5}$/.test(code)&&/^[A-Z0-9]{5}$/.test(nextCode),400,'transfer','Invalid prepared host transfer.');
+      this.sql.exec('DELETE FROM host_transfers WHERE expires<=?',Date.now());
+      const prior=this.rows('SELECT data FROM host_transfers').map(row=>JSON.parse(row.data)).find(t=>
+        t.epoch===epoch&&t.serial===serial&&t.digest===hash&&t.oldAccount===who.account&&t.oldInstance===who.instance&&t.completed);
+      if(input.type==='transfer_commit'&&prior)return prior.result;
+      const room=this.rows('SELECT data FROM rooms').map(row=>JSON.parse(row.data)).find(r=>r.code===code&&r.epoch===epoch);
+      need(room&&this.roomLive(room),409,'transfer_room','The original lobby is no longer available.');
+      need(['waiting','testing'].includes(room.phase),409,'transfer_phase','Return to the lobby before transferring host.');
+      if(input.type==='transfer_prepare') {
+        need(room.owner===who.account&&room.instance===who.instance,403,'owner','Only the current host can prepare this transfer.');
+        const member=this.rows('SELECT account,instance FROM social_members WHERE room=? AND sender=?',room.id,sender)[0];
+        need(member&&room.socialRoster.includes(sender)&&member.instance!==room.instance,
+          403,'transfer_member','The proposed host is not an admitted lobby member.');
+        const candidate=this.sessions.get(member.instance);
+        need(candidate&&this.live(candidate.data)&&candidate.data.account===member.account,409,'transfer_left','The proposed host disconnected.');
+        const previous=this.rows('SELECT data FROM host_transfers WHERE room=?',room.id)[0];
+        const pending=previous&&JSON.parse(previous.data);
+        if(pending&&!pending.completed&&pending.serial===serial&&pending.digest===hash&&pending.sender===sender)return {prepared:true,serial,digest:hash};
+        const transfer={room:room.id,epoch,serial,digest:hash,code,nextCode,sender,account:member.account,instance:member.instance,
+          oldAccount:room.owner,oldInstance:room.instance,completed:false,accepted:false};
+        this.sql.exec('INSERT OR REPLACE INTO host_transfers VALUES(?,?,?)',room.id,Date.now()+120000,JSON.stringify(transfer));
+        return {prepared:true,serial,digest:hash};
+      }
+      if(input.type==='transfer_accept') {
+        const row=this.rows('SELECT data FROM host_transfers WHERE room=?',room.id)[0],pending=row&&JSON.parse(row.data);
+        need(pending&&!pending.completed&&pending.instance===who.instance&&pending.account===who.account&&pending.serial===serial&&
+          pending.digest===hash&&pending.sender===sender&&pending.nextCode===nextCode,
+          403,'transfer_member','Only the admitted successor can accept the host prepared session.');
+        pending.accepted=true;this.sql.exec('UPDATE host_transfers SET data=?,expires=? WHERE room=?',JSON.stringify(pending),Date.now()+120000,room.id);
+        return {accepted:true,serial,digest:hash};
+      }
+      need(room.owner===who.account&&room.instance===who.instance,403,'owner','Only the current host can commit this transfer.');
+      const row=this.rows('SELECT data FROM host_transfers WHERE room=?',room.id)[0],transfer=row&&JSON.parse(row.data);
+      need(transfer&&!transfer.completed&&transfer.accepted&&transfer.serial===serial&&transfer.digest===hash&&transfer.nextCode===nextCode&&transfer.sender===sender,
+        409,'transfer_consent','Waiting for the admitted successor to confirm the same session.');
+      const candidate=this.sessions.get(transfer.instance),member=this.rows('SELECT account,sender FROM social_members WHERE room=? AND instance=?',room.id,transfer.instance)[0];
+      need(candidate&&this.live(candidate.data)&&candidate.data.account===transfer.account&&member?.account===transfer.account&&member.sender===sender&&
+        room.socialRoster.includes(sender),409,'transfer_left','The proposed host disconnected.');
+      need(!this.rows('SELECT id FROM rooms WHERE owner=? AND instance=?',transfer.account,transfer.instance).length,
+        409,'transfer_busy','The proposed host already owns another lobby.');
+      for(const join of this.rows('SELECT data FROM joins WHERE room=?',room.id))this.cancelJoin(JSON.parse(join.data),'The host transferred the lobby. Please request to join again.');
+      const oldHost=room.socialHost,wasPublic=room.visibility==='public';
+      const next={...room,owner:transfer.account,instance:transfer.instance,hostName:candidate.data.name,socialHost:sender,
+        code:nextCode,bootstrap:nextCode,revision:room.revision+1,generation:room.generation+1};
+      const result={id:next.id,epoch:next.epoch,revision:next.revision,visibility:next.visibility,serial,digest:hash};
+      transfer.completed=true;transfer.result=result;
+      this.ctx.storage.transactionSync(()=>{
+        this.saveRoom(next);
+        this.sql.exec('DELETE FROM social_members WHERE room=? AND instance=?',room.id,transfer.instance);
+        if(socialSender(oldHost))this.sql.exec('INSERT OR REPLACE INTO social_members VALUES(?,?,?,?)',room.id,who.instance,who.account,oldHost);
+        this.sql.exec('UPDATE host_transfers SET expires=?,data=? WHERE room=?',Date.now()+120000,JSON.stringify(transfer),room.id);
+      });
+      who.room='';current.socket.serializeAttachment(who);candidate.data.room=room.id;candidate.socket.serializeAttachment(candidate.data);
+      this.send(candidate,{type:'host_transferred',...result});this.publicChange(next,wasPublic);this.changed();this.record(who.account,'host_transferred',room.id);
+      return result;
+    }
     if (input.type === 'social') {
       const member=this.rows('SELECT room,sender FROM social_members WHERE instance=? AND account=?',who.instance,who.account)
         .map(row=>({row,room:this.room(row.room)})).find(entry=>entry.room?.code===input.code && entry.room.socialRoster?.includes(entry.row.sender));

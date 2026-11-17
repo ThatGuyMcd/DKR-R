@@ -196,8 +196,12 @@ void LiveDatagram::configure(const Context& context, const std::vector<std::stri
     s.context = context;
 #if defined(DKR_LIVE_DATAGRAM_ICE)
     std::set<Id> wanted;
+    const auto local = std::find_if(context.members.begin(), context.members.end(),
+                                    [&](const auto& member) { return member.id == context.local; });
     for (const auto& member : context.members)
-        if (member.id && member.id != context.local && (context.local == context.host || member.id == context.host))
+        if (member.id && member.id != context.local &&
+            (context.local == context.host || member.id == context.host ||
+             (local != context.members.end() && local->racer && member.racer)))
             wanted.insert(member.id);
     std::erase_if(s.peers, [&](const auto& p) { return !wanted.contains(p.first); });
     for (const auto id : wanted)

@@ -43,6 +43,11 @@ inline void forget(const void* owner) {
     std::scoped_lock lock(r.mutex);
     r.entries.erase(owner);
 }
+inline bool needs_prepare(const Gate& value, std::uint64_t descriptor, std::uint64_t roster,
+                          std::uint32_t save_generation, std::uint64_t save_hash) {
+    return !value.launch || value.hash != descriptor || value.roster != roster ||
+           value.save_generation != save_generation || value.save_hash != save_hash;
+}
 // Receipt/cancel metadata is inside the authenticated party envelope. It binds
 // the descriptor, current roster and verified EEPROM identity, never a slot claim.
 inline std::vector<std::uint8_t> receipt(unsigned stage, const Gate& g) {

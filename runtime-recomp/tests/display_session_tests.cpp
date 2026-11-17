@@ -35,6 +35,10 @@ int main() {
     assert((display::resolve({Aspect::Deck, 800, 1}, 1920, 1080).render == display::Size{1280, 800}));
     assert((display::resolve({Aspect::Window, 0, 1}, 1280, 800).render == display::Size{1280, 800}));
     assert((display::resolve({Aspect::Window, 0, 1}, 1920, 1080).render == display::Size{1920, 1080}));
+    // Captured Gamescope window dimensions: native Auto avoids the legacy
+    // integer mode's extra pixels, without changing that explicit preference.
+    assert((display::resolve({Aspect::Window, 0, 1}, 1600, 1000).render == display::Size{1600, 1000}));
+    assert((display::resolve({Aspect::Window, -1, 1}, 1600, 1000).render == display::Size{1920, 1200}));
     for (int resolution = 0; resolution <= 2; ++resolution)
         for (int aspect = 0; aspect < 2; ++aspect)
             for (int sample : {1, 2, 4, 8}) {

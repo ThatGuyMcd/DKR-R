@@ -64,6 +64,18 @@ bool begin(const std::filesystem::path& path, bool restore, std::string& error) 
     }
     return true;
 }
+bool begin_memory(std::span<const std::uint8_t> bytes, std::string& error) {
+    Map next;
+    if (!bytes.empty() && !decode(bytes, next)) {
+        error = "The shared online records seed is invalid.";
+        return false;
+    }
+    if (!begin({}, false, error))
+        return false;
+    std::scoped_lock lock(record_mutex);
+    record_seed = std::move(next);
+    return true;
+}
 Bytes seed() {
     std::scoped_lock lock(record_mutex);
     return encode(record_seed);

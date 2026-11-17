@@ -1,0 +1,36 @@
+DKR-R v1.0.16 Playtest 1
+
+This is a test build for the next online update. Please use the same playtest
+on every PC and Steam Deck in the lobby.
+
+ONLINE FRAME PACING
+- Fixed Auto measuring late input against a rewound frame during rollback.
+- Auto now considers the cost of correction bursts as well as sustained CPU
+  load, with separate thresholds for increasing and reducing protective delay.
+- Ordinary corrections can keep queued pictures from before the changed frame.
+  Changed pictures still get rejected, and scene/resource changes keep their
+  full retirement and GPU completion checks.
+- Automatic - match window is marked as the recommended resolution choice.
+  Existing settings and explicitly selected higher resolutions are preserved.
+
+HOST HANDOVER AND FULL LOBBIES
+- Adds authenticated direct input connections between racers. The host's
+  existing relay and input repair remain available.
+- Hosts can offer ownership to another member while waiting in the lobby,
+  including after returning from a race. The new host must accept.
+- Controller slots and the original online save owner survive the transfer.
+- Spectators stay outside the racing input mesh and use buffered playback.
+- Fixes route reservations, starting-grid acknowledgements and redundant
+  spectator checkpoint requests found during full-lobby testing.
+
+TESTING
+This is a playtest, not the final v1.0.16 release. Physical Steam Deck frame
+pacing still needs checking with the same mods and settings as the affected
+session. Internet latency still affects response time; this build cannot
+guarantee zero waits or 60 FPS under every connection and graphics setting.
+
+Private Quick Join host transfer is included. Public-lobby host transfer also
+needs the matching update on the existing lobby directory. That backend update
+has not been deployed as part of this local playtest build.
+
+Nothing in this package includes a game ROM. Existing personal saves are kept.

@@ -25,7 +25,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.tag is not None and args.tag != f"Version{version}":
         fail(f"Tag {args.tag!r} doesn't match VERSION {version!r} (expected Version{version})")
     if not re.fullmatch(
-        r"\d+\.\d+\.\d+(?:-beta\.[1-9]\d*(?:-playtest\.[1-9]\d*(?:-fix\.[1-9]\d*)?)?|\+beta\.[1-9]\d*)?",
+        r"\d+\.\d+\.\d+(?:-beta\.[1-9]\d*(?:-playtest\.[1-9]\d*(?:-fix\.[1-9]\d*)?)?|-playtest\.[1-9]\d*|\+beta\.[1-9]\d*)?",
         version,
     ):
         fail(f"VERSION is not a supported release/beta semantic version: {version!r}")

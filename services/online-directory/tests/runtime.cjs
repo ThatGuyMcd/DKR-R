@@ -242,6 +242,58 @@ async function main(){
     console.log(JSON.stringify({loadSessions:1000,hostedRooms:100,simultaneousJoins:100,seconds:(Date.now()-loadStart)/1000,scope:'Local Cloudflare runtime; no geographical or gameplay claim.'}));
    }finally{clearInterval(heartbeatTimer);}
   }
+  if(process.argv.includes('--handover')){
+   const members=[];
+   for(let i=0;i<12;i++){
+    const account='handover_'+i,token=randomBytes(32).toString('base64url');tokens[account]=token;
+    await db.prepare('INSERT INTO accounts VALUES(?,?,?,?,?,?,?)').bind(account,account,'Transfer '+i,'player','active',now,now).run();
+    await db.prepare('INSERT INTO sessions VALUES(?,?,?,?,?,?,NULL)').bind(createHash('sha256').update(token).digest('base64url'),account,now,now,now+3600,now+86400).run();
+    members.push(await open(account));
+   }
+   const state={title:'Twelve member handover',epoch:'full-handover',compatibility:'test-network',visibility:'public',phase:'waiting',
+    racers:1,maxRacers:4,spectators:0,maxSpectators:8,roster:'1',code:'XFER1',bootstrap:'XFER1',socialHost:'100',socialRoster:['100']};
+   let room=(await members[0].call({type:'room',revision:0,state})).data;
+   for(let i=1;i<12;i++){
+    const role=i<4?'racer':'spectator';
+    const join=await members[i].call({type:'join',room:room.id,role,key:key(),compatibility:'test-network'});
+    check(join.ok,'handover member reserves an authenticated slot');
+    await members[0].event('intent',event=>event.join.id===join.data.id);
+    check((await members[0].call({type:'grant',id:join.data.id,allowed:true,admission:key()})).ok,'handover native admission is authorized');
+    await members[i].event('bootstrap',event=>event.id===join.data.id);
+    check((await members[0].call({type:'consume',id:join.data.id,sender:String(100+i)})).ok,'handover binds account and instance to native sender');
+    state[role==='racer'?'racers':'spectators']++;state.socialRoster.push(String(100+i));state.roster=String(i+1);
+    room=(await members[0].call({type:'room',revision:room.revision,state})).data;
+   }
+   const original=room.id;
+   const transfer={epoch:state.epoch,serial:'1',digest:key(),code:state.code,nextCode:'XFER2',sender:'102'};
+   check(!(await members[2].call({type:'transfer_prepare',...transfer})).ok,'candidate cannot prepare a transfer as host');
+   check((await members[0].call({type:'transfer_prepare',...transfer})).ok,'current host prepares an admitted candidate');
+   equal((await members[0].call({type:'transfer_commit',...transfer})).error.code,'transfer_consent','host cannot transfer without successor consent');
+   const duplicate=await open('handover_2');
+   check(!(await duplicate.call({type:'transfer_accept',...transfer})).ok,'same account on another instance cannot accept');
+   check(!(await members[5].call({type:'transfer_accept',...transfer})).ok,'spectator cannot accept as another sender');
+   check(!(await members[2].call({type:'transfer_accept',...transfer,digest:key()})).ok,'successor cannot accept a different native state');
+   check((await members[2].call({type:'transfer_accept',...transfer})).ok,'exact admitted candidate accepts prepared digest');
+   const committed=await members[0].call({type:'transfer_commit',...transfer});check(committed.ok,'old host commits the acknowledged ownership transfer');
+   equal(committed.data.id,original,'host handover preserves directory room identity');
+   equal((await members[2].event('host_transferred')).id,original,'successor receives private ownership confirmation');
+   equal((await members[0].call({type:'transfer_commit',...transfer})).data.id,original,'lost commit acknowledgement is idempotent');
+   await members[0].call({type:'close'});
+   check((await members[1].call({type:'list'})).data.rooms.some(r=>r.id===original),'old host close cannot close the successor lobby');
+   state.code=state.bootstrap=transfer.nextCode;state.socialHost=transfer.sender;state.roster='13';
+   room=(await members[2].call({type:'room',revision:committed.data.revision,state})).data;
+   equal(room.id,original,'successor updates the existing room rather than duplicating it');
+   const visible=(await members[1].call({type:'list'})).data.rooms.find(r=>r.id===original);
+   equal(visible.racers,4,'four racing slots survive handover');equal(visible.spectators,8,'eight spectators survive handover');
+   members[0].socket.close(1000,'former host leaves');await pause(50);
+   check((await members[1].call({type:'list'})).data.rooms.some(r=>r.id===original),'former host disconnect cannot close the transferred lobby');
+   const again={...transfer,serial:'2',digest:key(),code:state.code,nextCode:'XFER3',sender:'111'};
+   check((await members[2].call({type:'transfer_prepare',...again})).ok,'successor can prepare a second handover');
+   check((await members[11].call({type:'transfer_accept',...again})).ok,'admitted spectator can accept hosting without acquiring a racing slot');
+   const second=await members[2].call({type:'transfer_commit',...again});check(second.ok,'second planned handover succeeds');equal(second.data.id,original,'second handover keeps the same full lobby');
+   await members[11].call({type:'close'});
+   for(const member of [...members,duplicate])try{member.socket.close(1000,'handover test finished');}catch{}
+  }
   options.workers[0].bindings.ONLINE_ENABLED='false';options.workers[1].bindings.ONLINE_ENABLED='false';
   await mf.setOptions(options);
   equal((await (await http('/v1/online/capabilities')).json()).enabled,false,'feature disable is advertised');

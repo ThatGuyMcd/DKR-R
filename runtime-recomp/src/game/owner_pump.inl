@@ -7,6 +7,30 @@
     auto owner = directory::native::owner(this);
     const auto online = directory::view();
     const auto now = std::chrono::steady_clock::now();
+    {
+        auto party = watch::party_link(this);
+        std::scoped_lock party_lock(party->mutex);
+        auto bridge = directory::bridge(this);
+        std::lock_guard bridge_lock(bridge->mutex);
+        std::erase_if(bridge->commands, [&](const auto& command) {
+            if (command.value("type", std::string{}) != "host_transfer_result")
+                return false;
+            auto& links = party->links;
+            const auto& proposal = links.handover.proposal();
+            const auto data = command.value("data", directory::Json::object());
+            if (proposal && data.value("serial", std::string{}) == std::to_string(proposal->serial) &&
+                data.value("digest", std::string{}) == secure::encode_key(proposal->state) &&
+                command.value("ok", false)) {
+                if (command.value("operation", std::string{}) == "transfer_accept")
+                    links.directory_accepted = true;
+                if (command.value("operation", std::string{}) == "transfer_commit")
+                    links.directory_committed = true;
+            } else if (proposal && !command.value("ok", false))
+                links.status = command.value("error", directory::Json::object())
+                                   .value("message", std::string("Waiting for the directory host transfer."));
+            return true;
+        });
+    }
     const bool hosting = is_host_ && method_ == ConnectionMethod::QuickJoin && state_ != ConnectionState::Offline &&
                          state_ != ConnectionState::Failed;
     if (!hosting) {
@@ -48,7 +72,8 @@
         const bool starting = launch_countdown_active_ || launch_stage_ != LaunchStage::Idle ||
                               gate->phase == dkr::runtime::party_start::Phase::Countdown ||
                               gate->phase == dkr::runtime::party_start::Phase::Committing;
-        const bool testing = connection_test_active_ || dkr::runtime::rollback_check::active(this);
+        const bool testing = connection_test_active_ || dkr::runtime::rollback_check::active(this) ||
+                             dkr::runtime::netplay::links::busy(party->links);
         const bool returning = party->stopping || (owned_match_end_ && !owned_match_end_->resumed);
         const bool live = party->running || state_ == ConnectionState::Running;
         const bool loading = state_ == ConnectionState::Loading || bool(party->launch);

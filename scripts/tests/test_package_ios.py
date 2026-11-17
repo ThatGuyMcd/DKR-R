@@ -157,6 +157,15 @@ class PackageIOSTests(unittest.TestCase):
             self.assertEqual(archive.getinfo("Payload/DKR-R.app/DKR-R").external_attr >> 16 & 0o777, 0o755)
         self.assertFalse(destination.with_suffix(".ipa.partial").exists())
 
+    def test_entry_point_mode_does_not_depend_on_staging_filesystem(self):
+        self.binary.chmod(0o644)
+        destination = self.build / "staged.ipa"
+        package.write_ipa(self.app, destination)
+        with zipfile.ZipFile(destination) as archive:
+            binary = archive.getinfo("Payload/DKR-R.app/DKR-R")
+            self.assertEqual(binary.create_system, 3)
+            self.assertEqual(binary.external_attr >> 16 & 0o777, 0o755)
+
 
 if __name__ == "__main__":
     unittest.main()

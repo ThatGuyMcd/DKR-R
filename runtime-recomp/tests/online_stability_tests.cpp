@@ -877,8 +877,81 @@ void negotiated_trace(bool dynamic, unsigned window, bool impaired, bool loss = 
     std::cout << "delay trace dynamic=" << dynamic << " window=" << window << " impairment=" << impaired
               << " low=" << low << " high=" << high << " changes=" << changes << '\n';
 }
+void replay_arrival_regressions() {
+    const auto start = Clock::time_point(std::chrono::seconds(100));
+    auto bridge = std::make_shared<Control>();
+    bridge->configure({44, 2, 1, true, false, true, {{1, 142, true, 0}}});
+    LiveDelay delay(bridge, 1, 20);
+    delay.local_owner(1);
+    delay.pulse(91, 1, 100, false, false, start);
+    bridge->outgoing();
+    delay.pulse(91, 1, 90, false, false, start + std::chrono::milliseconds(100));
+    bridge->outgoing();
+    for (unsigned n = 0; n < 12; ++n)
+        delay.arrival(0, 95);
+    delay.arrival(0, 1, true);
+    delay.arrival(1, 0); // Repair and local input are excluded.
+    delay.pulse(91, 1, 92, false, false, start + std::chrono::milliseconds(500));
+    unsigned reports = 0;
+    for (const auto& packet : bridge->outgoing()) {
+        DelayMessage m;
+        assert(decode(packet.bytes, m));
+        if (m.kind == DelayKind::Report) {
+            ++reports;
+            assert(m.frame == 100 && m.samples == 12 && m.late_frames == 5 && m.owner_late[0] == 5 &&
+                   m.owner_samples[0] == 12 && m.owner_samples[1] == 0);
+        }
+    }
+    assert(reports == 1);
+    for (unsigned n = 0; n < 12; ++n)
+        delay.arrival(0, 105);
+    delay.pulse(91, 1, 100, false, false, start + std::chrono::milliseconds(1000));
+    for (const auto& packet : bridge->outgoing()) {
+        DelayMessage m;
+        assert(decode(packet.bytes, m));
+        if (m.kind == DelayKind::Report)
+            assert(m.late_frames == 0 && m.owner_late[0] == 0);
+    }
+    delay.pulse(92, 1, 0, false, false, start + std::chrono::milliseconds(1500));
+    bridge->outgoing();
+    delay.arrival(0, 0);
+    delay.pulse(92, 1, 0, false, false, start + std::chrono::milliseconds(2000));
+    for (const auto& packet : bridge->outgoing()) {
+        DelayMessage m;
+        assert(decode(packet.bytes, m));
+        if (m.kind == DelayKind::Report)
+            assert(m.frame == 0 && m.late_frames == 0 && m.owner_late[0] == 0);
+    }
+}
+
+void replay_burst_regressions() {
+    ReplayCost cost;
+    cost.observe(100, 0, 0, 500000);
+    cost.observe(115, 330000, 150000, 500000);
+    assert(cost.pressure(3, 150000) && !cost.pressure(2, 150000) && cost.busy(2, 150000));
+    assert(!cost.pressure(12, 0) && !cost.pressure(3, 1000));
+    const auto start = Clock::time_point(std::chrono::seconds(100));
+    DelayPolicy policy;
+    policy.reset(0, start);
+    const auto growth = policy.evaluate(0, 20, 142, 3, 0, true, true, start + std::chrono::seconds(2),
+                                        cost.pressure(3, 150000), cost.busy(3, 150000), 0);
+    assert(growth && *growth == 1); // Costly bursts matter below 70% average work.
+    assert(!policy.evaluate(1, 20, 142, 2, 0, true, true, start + std::chrono::seconds(5), false, cost.busy(2, 150000),
+                            0));
+    const auto reduced =
+        policy.evaluate(1, 20, 142, 0, 0, true, true, start + std::chrono::seconds(8), false, false, 0);
+    assert(reduced && *reduced == 0);
+    ReplayCost cheap;
+    cheap.observe(100, 0, 0, 500000);
+    cheap.observe(115, 16500, 15000, 500000);
+    assert(!cheap.pressure(12, 15000) && !cheap.busy(12, 15000));
+    cost.observe(0, 100000, 50000, 500000);
+    assert(!cost.pressure(3, 150000));
+}
 } // namespace
 int main() {
+    replay_arrival_regressions();
+    replay_burst_regressions();
     background_budget_checks();
     host_settings_checks();
     delayed_ping_checks();

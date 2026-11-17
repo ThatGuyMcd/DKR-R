@@ -84,6 +84,7 @@ inline bool valid(std::span<const std::uint8_t> bytes) {
 // Normal guest hooks enqueue copies only. No disk access during replay.
 bool begin(const std::filesystem::path& path, bool restore, std::string& error);
 Bytes seed();
+bool begin_memory(std::span<const std::uint8_t> bytes, std::string& error);
 void submit(Bytes bytes);
 bool finish(std::string& error);
 bool persist(const std::filesystem::path& path, std::span<const std::uint8_t> bytes, std::string& error);

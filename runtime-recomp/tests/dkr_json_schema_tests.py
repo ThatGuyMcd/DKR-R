@@ -191,7 +191,7 @@ class DkrJsonSchemaTests(unittest.TestCase):
 
     def test_tracked_samples_validate(self):
         samples = tracked_samples()
-        self.assertTrue(any("modding/examples" in str(path) for path in samples))
+        self.assertTrue(any("modding/examples" in path.as_posix() for path in samples))
         for path in samples:
             with self.subTest(path=path.relative_to(ROOT).as_posix()):
                 meta = json.loads(path.read_text(encoding="utf-8"), object_pairs_hook=unique_object)

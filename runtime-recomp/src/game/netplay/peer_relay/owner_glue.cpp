@@ -53,9 +53,14 @@ Context build_context(const RelayRoster& roster, Clock::time_point now) {
 std::vector<Control> route(std::vector<Control> controls, const RouteTable& table) {
     std::vector<Control> sends;
     for (auto& control : controls) {
+        const bool ice =
+            control.bytes.size() >= 6 && std::equal(control.bytes.begin(), control.bytes.begin() + 6,
+                                                    std::array<std::uint8_t, 6>{'D', 'K', 'R', 'X', 1, 6}.begin());
+        const bool introduced = ice && std::find(table.introduced.begin(), table.introduced.end(), control.target) !=
+                                           table.introduced.end();
         const bool deliverable = table.is_host ? std::find(table.reachable.begin(), table.reachable.end(),
                                                            control.target) != table.reachable.end()
-                                               : control.target == table.host;
+                                               : control.target == table.host || introduced;
         if (deliverable)
             sends.push_back(std::move(control));
     }

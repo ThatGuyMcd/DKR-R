@@ -27,6 +27,7 @@ import argparse
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 import difflib
+import io
 from pathlib import Path
 import re
 import shlex
@@ -99,8 +100,10 @@ def changed_paths(merge_base: str) -> list[tuple[str | None, str]]:
 
 def line_diff(before: bytes, after: bytes, path: str) -> str:
     """Unified diff with no context, `a/` and `b/` prefixed so `-p1` finds the path."""
-    old = before.decode(errors="surrogateescape").splitlines(keepends=True)
-    new = after.decode(errors="surrogateescape").splitlines(keepends=True)
+    # Compare in-memory text using universal newlines, as read_text does. This
+    # produces a review diff only; neither input file is rewritten.
+    old = io.StringIO(before.decode(errors="surrogateescape"), newline=None).readlines()
+    new = io.StringIO(after.decode(errors="surrogateescape"), newline=None).readlines()
     return "".join(difflib.unified_diff(old, new, f"a/{path}", f"b/{path}", n=0))
 
 

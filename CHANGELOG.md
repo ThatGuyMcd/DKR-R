@@ -1,5 +1,25 @@
 # DKR-R changelog
 
+## 1.0.16 playtest 1 — 2026-11-17
+
+- Bring our online work onto the latest contributor code. Keep the upstream
+  source layout, cross-platform compatibility checks, relay support, shutdown
+  fixes, settings work and Track Lab improvements.
+- Send racers' inputs directly to one another when that route is available.
+  Keep the host route for recovery. Spectators stay outside the racing input
+  path, including in a full lobby with four racers and eight spectators.
+- Show a suggested host from measured connections. Let the host offer ownership
+  to another member without closing the lobby. The new host must accept, and
+  every member must finish the transfer before the next game starts. Controller
+  seats and the original online save owner stay the same.
+- Keep usable pictures during ordinary rollback corrections and measure input
+  lateness against forward progress. Auto delay also takes replay cost into
+  account, to avoid repeatedly removing the delay that a slower machine needs.
+- Mark window-matched resolution as recommended. Keep explicit rendering
+  preferences and the existing launcher layout.
+- Keep the Linux Wayland fallback and package closure checks. Fix Windows test
+  portability for long cache paths, separate temporary drives and path separators.
+
 ## 1.0.15 — 2026-11-08
 
 - Replace the added Player Select footer with native colourful names for selected

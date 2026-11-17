@@ -54,6 +54,7 @@
 #include <cstdlib>
 #endif
 #if DKR_LEGACY_QUALIFICATION
+#include "netplay/session_links/qualification.hpp"
 #include "legacy_runtime_qualification.hpp"
 #endif
 #if DKR_RUNTIME_HAS_RT64
@@ -981,6 +982,8 @@ int DkrMain(int argc, char** argv) {
             dkr::runtime::platform::shutdown();
             return 5;
         }
+        dkr::runtime::netplay::links::HandoverQualification handover_check(owned_check);
+        auto start_retry_at = std::chrono::steady_clock::time_point{};
         bool joined = launch.owned_check_host, invitation_written = false, ready = false, started = false,
              accepted = false;
         bool connection_test_requested = false, connection_tested = false;
@@ -1014,11 +1017,18 @@ int DkrMain(int argc, char** argv) {
         const auto chat_started = std::chrono::steady_clock::now();
         std::optional<std::chrono::steady_clock::time_point> chat_release;
         auto report_at = std::chrono::steady_clock::now();
-        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(60);
+        const auto deadline =
+            std::chrono::steady_clock::now() + std::chrono::seconds(handover_check.enabled() ? 180 : 60);
         while (std::chrono::steady_clock::now() < deadline && !accepted) {
             dkr::runtime::vehicles::lighting::pump_owned_check();
             dkr::runtime::platform::pump_window_events(nullptr);
             const auto state = online.view();
+            std::string handover_error;
+            const bool handover_ready = handover_check.pulse(&online, handover_error);
+            if (!handover_error.empty()) {
+                rom_error = handover_error;
+                break;
+            }
             if (std::chrono::steady_clock::now() >= report_at) {
                 std::fprintf(stderr, "[rollback][check] lobby state=%d local=%u status=%s\n", int(state.state),
                              unsigned(state.local_slot), state.status.c_str());
@@ -1080,7 +1090,7 @@ int DkrMain(int argc, char** argv) {
                     std::chrono::steady_clock::now() - chat_started >= std::chrono::seconds(25))
                     chat_release = std::chrono::steady_clock::now();
             }
-            if (launch.owned_check_host)
+            if (state.host)
                 for (const auto& pending : state.pending_joins)
                     if (!online.approve_join(pending.request_id, rom_error))
                         break;
@@ -1090,7 +1100,10 @@ int DkrMain(int argc, char** argv) {
                            state.state == dkr::runtime::netplay::ConnectionState::Lobby)) {
                 ready = online.set_ready(true, rom_error);
             }
-            if (launch.owned_check_host && ready && !started) {
+            if (state.host && ready && handover_ready &&
+                state.state == dkr::runtime::netplay::ConnectionState::Hosting && !state.launch_countdown_active &&
+                state.launch_stage == dkr::runtime::netplay::LaunchStage::Idle &&
+                (!started || std::chrono::steady_clock::now() >= start_retry_at)) {
                 unsigned occupants = 0;
                 bool all_ready = true;
                 for (const auto& racer : state.room.players)
@@ -1131,8 +1144,10 @@ int DkrMain(int argc, char** argv) {
                     const bool chat_ready =
                         !check_chat || (chat_release && std::chrono::steady_clock::now() >= *chat_release);
                     if (chat_ready &&
-                        (connection_tested || !(connection_test && std::string_view(connection_test) == "1")))
+                        (connection_tested || !(connection_test && std::string_view(connection_test) == "1"))) {
                         started = online.request_start(rom_error);
+                        start_retry_at = std::chrono::steady_clock::now() + std::chrono::seconds(1);
+                    }
                 }
             }
             accepted = online.consume_launch_request();
@@ -1410,10 +1425,13 @@ int DkrMain(int argc, char** argv) {
             selecting_save_owner = true;
             if (dkr::runtime::spectators::party_enabled(&dkr::runtime::netplay::session())) {
                 auto party = dkr::runtime::spectators::party_link(&dkr::runtime::netplay::session());
-                std::vector<std::uint8_t> seed;
+                std::vector<std::uint8_t> seed, shared_records;
+                bool owns_save = false;
                 {
                     std::scoped_lock lock(party->mutex);
                     seed = party->seed;
+                    shared_records = party->links.save_records;
+                    owns_save = party->links.save_owner == party->local;
                 }
                 if (seed.size() != 512)
                     throw dkr::mods::Error("Party bootstrap is missing its verified save seed.");
@@ -1423,7 +1441,7 @@ int DkrMain(int argc, char** argv) {
                                                          dkr::runtime::spectators::party_bootstrap_write});
                 dkr::runtime::pak::begin_session_directory({});
                 std::filesystem::path records;
-                if (online_save.host) {
+                if (owns_save && shared_records.empty()) {
                     std::vector<std::uint8_t> active;
                     std::filesystem::path owner;
                     if (!dkr::runtime::saves::read_online_adventure(true, online_save.launch_descriptor->match_id,
@@ -1431,8 +1449,13 @@ int DkrMain(int argc, char** argv) {
                         active != seed)
                         throw dkr::mods::Error("The host online seed changed during party boot: " + rom_error);
                     records = owner.parent_path() / "custom-records-v1.bin";
+                    if (!dkr::runtime::saves::records::begin(records, false, rom_error))
+                        throw dkr::mods::Error(rom_error);
+                    shared_records = dkr::runtime::saves::records::seed();
+                    std::scoped_lock lock(party->mutex);
+                    party->links.save_records = shared_records;
                 }
-                if (!dkr::runtime::saves::records::begin(records, false, rom_error))
+                if (!dkr::runtime::saves::records::begin_memory(shared_records, rom_error))
                     throw dkr::mods::Error(rom_error);
             } else {
                 dkr::runtime::spectators::party_bootstrap_seed({});

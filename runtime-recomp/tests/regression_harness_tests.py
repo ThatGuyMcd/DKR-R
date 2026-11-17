@@ -40,7 +40,7 @@ class RegressionHarnessTests(unittest.TestCase):
         self.suite_path.write_text(json.dumps(value), encoding="utf-8")
         return value
 
-    def run_cli(self, *options, output=None):
+    def run_cli(self, *options, output=None, cwd=None):
         self.next_output += 1
         output = output or self.root / f"run with spaces {self.next_output}"
         command = [
@@ -58,7 +58,7 @@ class RegressionHarnessTests(unittest.TestCase):
             str(output),
             *map(str, options),
         ]
-        child = subprocess.run(command, cwd=self.root, capture_output=True, text=True, timeout=20)
+        child = subprocess.run(command, cwd=cwd or self.root, capture_output=True, text=True, timeout=20)
         report_path = output / "report.json"
         report = json.loads(report_path.read_text()) if report_path.is_file() else None
         return child, report, output
@@ -351,12 +351,13 @@ print('STATE=stable')
 
     def test_check_inputs_and_execution_resolve_relative_executable_from_invocation_directory(self):
         item = self.scenario(expect_stdout=["OK"])
-        item["command"][0] = os.path.relpath(sys.executable, self.root.resolve())
+        invocation = Path(sys.executable).resolve().parent
+        item["command"][0] = os.path.join(".", Path(sys.executable).name)
         self.suite(item)
-        child, _, output = self.run_cli("--check-inputs")
+        child, _, output = self.run_cli("--check-inputs", cwd=invocation)
         self.assert_exit(child, 0)
         self.assertFalse(output.exists())
-        child, report, _ = self.run_cli()
+        child, report, _ = self.run_cli(cwd=invocation)
         self.assert_exit(child, 0)
         self.assertEqual(report["scenarios"][0]["command"][0], str(Path(sys.executable).resolve()))
 
