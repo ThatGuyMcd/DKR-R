@@ -23,11 +23,12 @@ HEADER_HASH = "58977ed0a489f7df8b17c377a87cc6670857a5fba15af78fc7d38132fc59b33f"
 def reviewed_bytes(data: bytes, expected: str) -> bytes | None:
     """The pinned bytes when data is them, as checked out with LF or CRLF.
 
-    Pins are taken from LF checkouts. Git for Windows checks dependencies out
-    with CRLF by default, so a CRLF copy of the same content passes and comes
-    back with LF endings. Anything else returns None.
+    Most pins are LF; the generated audio RSP also has reviewed CRLF inputs.
+    Return only bytes whose digest equals the existing pin, regardless of the
+    checkout's newline convention. Anything else returns None.
     """
-    for candidate in (data, data.replace(b"\r\n", b"\n")):
+    lf = data.replace(b"\r\n", b"\n")
+    for candidate in (data, lf, lf.replace(b"\n", b"\r\n")):
         if hashlib.sha256(candidate).hexdigest() == expected:
             return candidate
     return None
@@ -783,16 +784,9 @@ def audio_rsp_payload(rsp_source=None, dependencies_dir=None):
             if rsp_source is not None and name.startswith("runtime-recomp/RecompiledRSP/")
             else audited_input_path(name, dependencies_dir)
         )
-        raw = source_path.read_bytes()
-        if hashlib.sha256(raw).hexdigest() != expected:
-            # The reviewed Windows-generated input uses CRLF, whereas a Git
-            # checkout may contain LF. Admit only newline-equivalent bytes
-            # that reconstruct the SAME existing pinned input; never relax
-            # the source-content gate or rewrite a protected input file.
-            pinned_newlines = raw.replace(b"\r\n", b"\n").replace(b"\n", b"\r\n")
-            if hashlib.sha256(pinned_newlines).hexdigest() != expected:
-                raise ValueError(f"Unreviewed private audio RSP input: {name}")
-            raw = pinned_newlines
+        raw = reviewed_bytes(source_path.read_bytes(), expected)
+        if raw is None:
+            raise ValueError(f"Unreviewed private audio RSP input: {name}")
         sources[Path(name).name] = raw.decode()
     header = sources["rsp.hpp"]
     header = header.replace(
