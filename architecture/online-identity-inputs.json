@@ -184,7 +184,7 @@
     "scripts/compose_payloads.py": "c662355843564ccd40759cb245de158888abae80baf59c7f309834897626ba68",
     "scripts/gen_guest_symbols.py": "f9c74c5c8214fae6372595db4c5f2721e656dabed9c783aa0bb3c6d7dc3e8202",
     "scripts/generate_recomp_config.py": "444874a216c9011e6f196aa0a1269594517afcdea5fb3763196e092d99bfc473",
-    "scripts/generate_replay_probe.py": "119d112f92e587f55b3ad5e614a500596ff3735db4a03baa899234978b81e8d9",
+    "scripts/generate_replay_probe.py": "b1a61521343eeec9547e0b67df68864d7a9ba2c0c3ad9a9cfd1b8c803ccfced7",
     "scripts/generate_revision_policy.py": "bafbefad41542e00b6c5ec13b02acde69dda7f48e34025f46d92d028da6427b9",
     "scripts/guest_hooks.py": "4058af2139c1211c2db79c8748734c2c1f231ec6168e964166d90c83bb48c6cc",
     "scripts/host_task_policy.py": "aa28c9bcd8110d0ef16b2f6dfde7ec51b8767578f46d3bc5371f197efb016f78",
@@ -207,6 +207,6 @@
   },
   "last_update": {
     "identity_changed": false,
-    "reason": "Retain v1.0.15 simulation and wire identities. Optional authenticated session-links v2 extensions add duplicate immutable racer delivery and consented waiting-lobby handover among capable peers; default menu ownership remains port zero and older peers retain host delivery. Correction eligibility and Auto delay accounting affect presentation and scheduling only. Upstream architecture-free launch hashes, state cross-checks, GuestCallContext and reliable checkpoint semantics are retained."
+    "reason": "Retain v1.0.15 simulation and wire identities. Optional authenticated session-links v2 extensions add duplicate immutable racer delivery and consented waiting-lobby handover among capable peers; default menu ownership remains port zero and older peers retain host delivery. Correction eligibility and Auto delay accounting affect presentation and scheduling only. Upstream architecture-free launch hashes, state cross-checks, GuestCallContext and reliable checkpoint semantics are retained. Audio input newline canonicalization reconstructs the same existing pins; all ten prepared Windows input digests still match the upstream lock."
   }
 }
