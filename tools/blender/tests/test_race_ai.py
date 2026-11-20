@@ -8,8 +8,8 @@ checks here hold the module to the game's arithmetic rather than to taste:
 * **The spline is the game's.** It passes through every lane point, and a
   racer on the alternate route leaves and rejoins the main line at gates.
 * **Loading follows ``checkpoint_update_all``** - vehicle set filter, sort on
-  ``index + 255`` for alternates, pairing by index, the 127-gate ceiling
-  DKR-R patches in and the 60 retail and older builds keep.
+  ``index + 255`` for alternates, pairing by index, the 60-gate ceiling
+  shared by the current DKR-R runtime and retail.
 * **Every retail map builds**, every set of it, into finite lines.
 * **The header bytes are the right bytes.** Each pointer lands on the offset
   the game reads, the two mislabelled ``ai-levels`` slots included, and an
@@ -135,19 +135,19 @@ def check_loading_rules():
     if doubled.duplicates != [0]:
         return "two gates on index 0 are a duplicate"
 
-    if race_ai.MAX_CHECKPOINTS != 127 or race_ai.RETAIL_MAX_CHECKPOINTS != 60:
-        return "DKR-R's table holds 127 gates a set and retail's 60"
-    many = race_ai.build_route([_gate(i, 0, index=i) for i in range(132)])
+    if race_ai.MAX_CHECKPOINTS != 60 or race_ai.RETAIL_MAX_CHECKPOINTS != 60:
+        return "current DKR-R and retail both hold 60 gates per set"
+    many = race_ai.build_route([_gate(i, 0, index=i) for i in range(65)])
     if len(many.main) != race_ai.MAX_CHECKPOINTS or many.dropped != 5:
-        return "DKR-R loads 127 gates a set and drops the rest"
+        return "DKR-R loads 60 gates a set and drops the rest"
     if many.past_retail != race_ai.MAX_CHECKPOINTS - race_ai.RETAIL_MAX_CHECKPOINTS:
         return "past_retail counts the loaded gates past retail's 60"
     # Alternates count toward the same table, in spawn order.
-    mixed = [_gate(i, 0, index=i) for i in range(100)]
-    mixed += [_gate(i, 9, index=i, alternate=1) for i in range(30)]
+    mixed = [_gate(i, 0, index=i) for i in range(50)]
+    mixed += [_gate(i, 9, index=i, alternate=1) for i in range(13)]
     mixed_route = race_ai.build_route(mixed)
-    if (len(mixed_route.main), len(mixed_route.alternates), mixed_route.dropped) != (100, 27, 3):
-        return "alternate gates share the main gates' 127 slots"
+    if (len(mixed_route.main), len(mixed_route.alternates), mixed_route.dropped) != (50, 10, 3):
+        return "alternate gates share the main gates' 60 slots"
     within = race_ai.build_route([_gate(i, 0, index=i) for i in range(60)])
     if within.dropped or within.past_retail:
         return "60 gates fit everywhere"
@@ -155,8 +155,7 @@ def check_loading_rules():
 
 
 def check_validate_counts():
-    """Validation says what loading does: a set past DKR-R's 127 is an error
-    that names the gates skipped, past retail's 60 a warning, at 60 nothing."""
+    """A set above the runtime's 60 is an error naming the skipped gates."""
     def count_issues(gates):
         # The checkpoint rules alone: these gates carry only the line's fields.
         report = validate._check_checkpoints(gltf_io.ObjectMap(objects=gates), False)
@@ -166,26 +165,26 @@ def check_validate_counts():
         return "60 checkpoints in a set are fine everywhere"
 
     issues = count_issues([_gate(i, 0, index=i) for i in range(100)])
-    if [issue.severity for issue in issues] != [validate.WARNING]:
-        return "100 checkpoints warn once: %r" % issues
-    if "older DKR-R builds" not in issues[0].message or issues[0].objects != list(range(60, 100)):
-        return "the warning names older builds and the 40 gates they skip"
+    if [issue.severity for issue in issues] != [validate.ERROR]:
+        return "100 checkpoints must block export: %r" % issues
+    if "at most 60" not in issues[0].message or issues[0].objects != list(range(60, 100)):
+        return "the error names the runtime limit and the 40 gates it skips"
 
     # Alternates share the table, and each vehicle type has its own.
-    gates = [_gate(i, 0, index=i) for i in range(120)]
-    gates += [_gate(i, 9, index=i, alternate=1) for i in range(10)]
+    gates = [_gate(i, 0, index=i) for i in range(50)]
+    gates += [_gate(i, 9, index=i, alternate=1) for i in range(13)]
     gates += [_gate(i, 0, index=i, vehicle=1) for i in range(20)]
     issues = count_issues(gates)
     if [issue.severity for issue in issues] != [validate.ERROR]:
-        return "130 gates in set 0 and 20 in set 1 is one error: %r" % issues
+        return "63 gates in set 0 and 20 in set 1 is one error: %r" % issues
     message = issues[0].message
-    if "at most 127" not in message or "130 checkpoints" not in message:
+    if "at most 60" not in message or "63 checkpoints" not in message:
         return "the error says the count and the ceiling: %s" % message
-    if issues[0].objects != list(range(127, 130)):
+    if issues[0].objects != list(range(60, 63)):
         return "the error selects the three gates past the ceiling"
 
-    if count_issues([_gate(i, 0, index=i) for i in range(127)])[0].severity != validate.WARNING:
-        return "127 checkpoints still load on DKR-R"
+    if count_issues([_gate(i, 0, index=i) for i in range(61)])[0].severity != validate.ERROR:
+        return "the first gate past the runtime limit must block export"
     return None
 
 
@@ -346,7 +345,26 @@ def check_skill_words():
     return None
 
 
+def check_runtime_checkpoint_limit():
+    """The editor must agree with both policies' allocation and update limits."""
+    root = os.path.abspath(os.path.join(_HERE, "..", "..", ".."))
+    for revision in (77, 80):
+        policy_path = os.path.join(root, "runtime-recomp", "dkr.us.v%d.recomp-policy.json" % revision)
+        with open(policy_path, encoding="utf-8") as stream:
+            policy = json.load(stream)
+        # Without an instruction patch these functions retain retail's 60 slots.
+        # A future extension must deliberately update this check alongside its
+        # allocation, bound and online compatibility decision.
+        patched = {entry.get("function") for entry in policy.get("instructionPatches", [])}
+        if patched & {"allocate_object_pools", "checkpoint_update_all"}:
+            return "checkpoint patches require verifying the editor limit against both new bounds"
+        if race_ai.MAX_CHECKPOINTS != 60:
+            return "v%d still allocates and loads 60 checkpoints; editor advertises %d" % (revision, race_ai.MAX_CHECKPOINTS)
+    return None
+
+
 CHECKS = [
+    ("runtime checkpoint limit", check_runtime_checkpoint_limit),
     ("lane offsets", check_lane_offsets),
     ("spline passes the gates", check_spline_passes_the_gates),
     ("loading rules", check_loading_rules),

@@ -1,6 +1,7 @@
 #include "custom_tracks.hpp"
 #include "game_payload.hpp"
 #include "revision_addresses.hpp"
+#include "shadow_symbols.hpp"
 #include "recomp.h"
 
 #include <algorithm>
@@ -23,6 +24,12 @@ extern "C" void dkr_custom_tracks_table_load_end(std::uint8_t*, recomp_context*)
 extern "C" void dkr_custom_tracks_asset_load_begin(std::uint8_t*, recomp_context*);
 extern "C" void dkr_custom_tracks_asset_load_end(std::uint8_t*, recomp_context*);
 extern "C" void dkr_custom_tracks_object_map_links(std::uint8_t*, recomp_context*);
+extern "C" int dkr_custom_tracks_is_boss_level(std::int32_t);
+extern "C" void dkr_shadow_polygon_budget(std::uint8_t*, recomp_context*);
+extern "C" void dkr_shadow_water_polygon_budget(std::uint8_t*, recomp_context*);
+extern bool dkr_test_frozen_resources;
+extern bool dkr_test_owned_bootstrap;
+extern "C" void dkr_shadow_clip_index(std::uint8_t*, recomp_context*);
 
 namespace tracks = dkr::runtime::custom_tracks;
 namespace addresses = dkr::runtime::revision_addresses;
@@ -792,6 +799,213 @@ int main() {
         edge.r16 = addr(map_offset);
         edge.r29 = addr(kStack);
         dkr_custom_tracks_object_map_links(rdram, &edge);
+    }
+
+    // -----------------------------------------------------------------------
+    // Only an installed custom boss takes the finish hook. A stock course or a
+    // different custom level kind must keep the retail path.
+    {
+        const auto library = root / "boss-finish";
+        for (const auto* id : {"boss", "race"}) {
+            const auto package = library / (std::string(id) + ".dkrmap");
+            std::filesystem::create_directories(package);
+            std::ofstream(package / "manifest.json")
+                << "{\"schemaVersion\":1,\"id\":\"" << id
+                << "\",\"name\":\"Finish test\",\"adds\":[{\"section\":\"LEVEL_HEADERS\",\"file\":\"header.bin\"}]}";
+            std::string header(196, '\0');
+            header[0] = static_cast<char>(tracks::kCustomTrackWorld);
+            header[0x37] = 73; // borrow a valid retail object map
+            header[0xBB] = 5;
+            header[0x4C] = std::string_view(id) == "boss" ? tracks::kRaceTypeBoss : 0;
+            std::ofstream(package / "header.bin", std::ios::binary) << header;
+        }
+        tracks::scan(library);
+        std::array<std::int32_t, 72> retail{};
+        for (std::size_t i = 0; i < retail.size() - 1; ++i)
+            retail[i] = static_cast<std::int32_t>(i * 196U);
+        retail.back() = -1;
+        assert(!tracks::build_extended_table(tracks::Section::LevelHeaders, retail.data()).empty());
+        const auto boss = tracks::resolved_level_id("boss");
+        assert(boss >= 70 && dkr_custom_tracks_is_boss_level(boss));
+        assert(!dkr_custom_tracks_is_boss_level(tracks::resolved_level_id("race")));
+        assert(!dkr_custom_tracks_is_boss_level(0));
+        assert(!dkr_custom_tracks_is_boss_level(-1));
+        assert(!dkr_custom_tracks_is_boss_level(255));
+    }
+
+    // -----------------------------------------------------------------------
+    // Shadow budget: only writes that reach live storage are refused
+    // -----------------------------------------------------------------------
+    // The shadow passes append each clipped polygon to D_8011C238[32] and its unseen vertices
+    // to D_8011B120[32], and each clip point to D_8011B330[120]. The hooks refuse only the
+    // write that would pass an array; within-capacity polygons remain unchanged.
+    for (const auto revision : {dkr::runtime::rom::Revision::UsV77, dkr::runtime::rom::Revision::UsV80}) {
+        assert(addresses::select(revision));
+        const auto& symbols =
+            dkr::runtime::shadow_symbols::for_revision(revision == dkr::runtime::rom::Revision::UsV80);
+        // The guest is 16 MiB here, as in the owned engine and the extended funcs runtime.
+        std::vector<std::uint8_t> guest(0x1000000U);
+        std::uint8_t* const rdram = guest.data();
+        constexpr std::uint32_t kStack = 0x80700000U;
+        const auto put_float = [&](std::uint32_t at, float value) {
+            std::int32_t bits;
+            std::memcpy(&bits, &value, 4);
+            MEM_W(0, addr(at)) = bits;
+        };
+        // Vertex i of the clipped polygon, or of the shared array: (x, z) and the unkC/unkE word.
+        const auto put_vertex = [&](std::uint32_t at, float x, float z, std::int16_t index) {
+            put_float(at, x);
+            put_float(at + 4U, 0.0F);
+            put_float(at + 8U, z);
+            MEM_W(0, addr(at + 12U)) = static_cast<std::int32_t>(static_cast<std::uint16_t>(index));
+        };
+        const auto shared = [&](int count) {
+            MEM_W(0, addr(symbols.vertex_count)) = count;
+            for (int i = 0; i < count; ++i)
+                put_vertex(symbols.vertices + 16U * i, static_cast<float>(i), static_cast<float>(i) * 2.0F, 0);
+        };
+        std::uint32_t stack = kStack;
+        const auto polygon_result_at = [&](void (*hook)(std::uint8_t*, recomp_context*), std::uint32_t offset,
+                                           int polygons, int clipped, auto&& fill) {
+            MEM_W(0, addr(symbols.polygon_count)) = polygons;
+            recomp_context context{};
+            context.r2 = clipped;
+            context.r29 = addr(stack);
+            fill(stack + offset);
+            hook(rdram, &context);
+            return static_cast<std::int32_t>(context.r2);
+        };
+        // The floor shadow pass keeps its polygon at sp+0xD0; the water shadow pass at sp+0xA8.
+        const auto polygon_result = [&](int polygons, int clipped, auto&& fill) {
+            return polygon_result_at(dkr_shadow_polygon_budget, 0xD0U, polygons, clipped, fill);
+        };
+        constexpr std::int16_t kNew = -1;
+        // Plenty of room: untouched.
+        shared(10);
+        assert(polygon_result(3, 4, [&](std::uint32_t at) {
+                   for (int i = 0; i < 4; ++i)
+                       put_vertex(at + 16U * i, 100.0F + i, 7.0F, kNew);
+               }) == 4);
+        // 31 vertices in use and 4 clipped, three of them already known and one new: the
+        // pass appends exactly one, so it fits and is left alone.
+        shared(31);
+        assert(polygon_result(3, 4, [&](std::uint32_t at) {
+                   put_vertex(at, 3.0F, 6.0F, kNew);
+                   put_vertex(at + 16U, 4.0F, 8.0F, kNew);
+                   put_vertex(at + 32U, 5.0F, 10.0F, kNew);
+                   put_vertex(at + 48U, 500.0F, 7.0F, kNew);
+               }) == 4);
+        // Two genuinely new vertices need slots 31 and 32: refused.
+        assert(polygon_result(3, 4, [&](std::uint32_t at) {
+                   put_vertex(at, 3.0F, 6.0F, kNew);
+                   put_vertex(at + 16U, 4.0F, 8.0F, kNew);
+                   put_vertex(at + 32U, 500.0F, 7.0F, kNew);
+                   put_vertex(at + 48U, 600.0F, 7.0F, kNew);
+               }) == 0);
+        // Equal new vertices within the polygon count once.
+        assert(polygon_result(3, 4, [&](std::uint32_t at) {
+                   for (int i = 0; i < 4; ++i)
+                       put_vertex(at + 16U * i, 500.0F, 7.0F, kNew);
+               }) == 4);
+        // A full vertex array still takes a polygon whose vertices carry existing indices.
+        shared(32);
+        assert(polygon_result(3, 3, [&](std::uint32_t at) {
+                   for (int i = 0; i < 3; ++i)
+                       put_vertex(at + 16U * i, 900.0F + i, 7.0F, static_cast<std::int16_t>(i));
+               }) == 3);
+        // ...but not one that needs a new vertex.
+        assert(polygon_result(3, 3, [&](std::uint32_t at) {
+                   put_vertex(at, 900.0F, 7.0F, 0);
+                   put_vertex(at + 16U, 901.0F, 7.0F, 1);
+                   put_vertex(at + 32U, 902.0F, 7.0F, kNew);
+               }) == 0);
+        // The next allocation is live water input, so both passes stop at 32.
+        shared(2);
+        const auto three_known = [&](std::uint32_t at) {
+            for (int i = 0; i < 3; ++i)
+                put_vertex(at + 16U * i, 1.0F + i, 1.0F, 0);
+        };
+        assert(polygon_result(31, 3, three_known) == 3);
+        assert(polygon_result(32, 3, three_known) == 0);
+        assert(polygon_result(100, 3, three_known) == 0);
+        assert(polygon_result(137, 3, three_known) == 0);
+        assert(polygon_result(138, 3, three_known) == 0);
+        assert(polygon_result(100000, 3, three_known) == 0);
+        assert(polygon_result(-1, 3, three_known) == 0);
+        // A polygon with more vertices than the entry's unk2[8] is refused.
+        assert(polygon_result(3, 9, three_known) == 0);
+        // Stacks can sit anywhere in guest memory, including the top of RDRAM: the polygon is
+        // judged by its own bytes, not by a fixed address ceiling.
+        stack = 0x807FFEE0U;
+        assert(polygon_result(3, 3, three_known) == 3);
+        // The owned engine's guest stack, past the retail 8 MiB, is guest memory too.
+        stack = 0x80FDFC50U;
+        assert(polygon_result(3, 3, three_known) == 3);
+        // Where the polygon would run past the 16 MiB guest, or start below it, it is
+        // refused without being read.
+        for (const std::uint32_t outside : {0x80FFFF30U, 0x81000000U, 0x00001000U}) {
+            stack = outside;
+            recomp_context context{};
+            context.r2 = 3;
+            context.r29 = addr(stack);
+            dkr_shadow_polygon_budget(rdram, &context);
+            assert(context.r2 == 0);
+        }
+        stack = kStack;
+        // A clip that returned fewer than three vertices is skipped by retail already.
+        assert(polygon_result(32, 2, [&](std::uint32_t) {}) == 2);
+
+        // Water shadows append the same way from another frame offset, and are held to the
+        // same rule.
+        shared(31);
+        const auto water_fill = [&](std::uint32_t at) {
+            put_vertex(at, 3.0F, 6.0F, kNew);
+            put_vertex(at + 16U, 500.0F, 7.0F, kNew);
+            put_vertex(at + 32U, 600.0F, 7.0F, kNew);
+        };
+        assert(polygon_result_at(dkr_shadow_water_polygon_budget, 0xA8U, 3, 3, water_fill) == 0);
+        shared(30);
+        assert(polygon_result_at(dkr_shadow_water_polygon_budget, 0xA8U, 3, 3, water_fill) == 3);
+
+        assert(polygon_result_at(dkr_shadow_water_polygon_budget, 0xA8U, 31, 3, three_known) == 3);
+        assert(polygon_result_at(dkr_shadow_water_polygon_budget, 0xA8U, 32, 3, three_known) == 0);
+
+        // Run the guest's count update after each append, including repeated
+        // saturation. Every later edge traversal must stop at entry 119.
+        for (int group = 0; group < 4; ++group) {
+            const int capacity = group == 3 ? 24 : 32;
+            int count = 0;
+            for (int attempt = 0; attempt < 40; ++attempt) {
+                recomp_context context{};
+                context.r4 = std::min(count, 31); // guest's existing clamp
+                context.r3 = group * 32 + context.r4;
+                dkr_shadow_clip_index(rdram, &context);
+                assert(context.r3 >= group * 32 && context.r3 < group * 32 + capacity);
+                count = static_cast<int>(context.r4) + 1; // guest continuation
+                assert(count == std::min(attempt + 1, capacity));
+                assert(group * 32 + count - 1 < 120);
+            }
+        }
+    }
+
+    // Online/owned bootstrap must not change any register or guest byte,
+    // even when the supplied counts and stack would otherwise be rejected.
+    for (bool* gate : {&dkr_test_frozen_resources, &dkr_test_owned_bootstrap}) {
+        *gate = true;
+        assert(dkr_custom_tracks_is_boss_level(70) == 0);
+        std::vector<std::uint8_t> guest(0x1000000U, 0xFF);
+        const auto before = guest;
+        for (auto hook : {dkr_shadow_polygon_budget, dkr_shadow_water_polygon_budget, dkr_shadow_clip_index}) {
+            recomp_context context{};
+            context.r2 = 9;
+            context.r3 = 120;
+            context.r4 = 24;
+            const auto saved = context;
+            hook(guest.data(), &context);
+            assert(std::memcmp(&saved, &context, sizeof(context)) == 0);
+            assert(guest == before);
+        }
+        *gate = false;
     }
 
     tracks::set_auto_boot(false);
