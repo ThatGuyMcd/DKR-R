@@ -24,6 +24,7 @@ TOOLING_TESTS_SKIP = {
 # Tests that need build tools beyond Git and Python run in the opt-in
 # host-tools suite instead (CTest runs them too).
 HOST_TOOL_TESTS = {
+    "custom_boss_finish_tests.py": "compiles generated v77/v80 guest functions when available",
     "build_iteration_tests.py": "configures and compiles a scratch CMake/Ninja project",
     "owned_content_identity_tests.py": "runs cmake -P",
 }

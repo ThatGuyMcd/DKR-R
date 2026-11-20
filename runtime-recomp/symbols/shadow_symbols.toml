@@ -1,0 +1,16 @@
+# Fixed shadow vertex storage and the vertex/polygon counters. D_8011B120
+# holds 32 vertices; D_8011C230 counts the 32-slot polygon array.
+schema = 1
+header = "shadow_symbols.hpp"
+table = "decomp"
+hex = "upper"
+symbols = ["D_8011B118", "D_8011B120", "D_8011C230"]
+template = '''#pragma once
+#include <cstdint>
+namespace dkr::runtime::shadow_symbols {
+struct Symbols {std::uint32_t vertex_count;std::uint32_t vertices;std::uint32_t polygon_count;};
+inline constexpr Symbols symbols77{@ALL:77@};
+inline constexpr Symbols symbols80{@ALL:80@};
+inline constexpr const Symbols& for_revision(bool us_v80) { return us_v80 ? symbols80 : symbols77; }
+}
+'''

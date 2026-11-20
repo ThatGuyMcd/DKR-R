@@ -24,6 +24,7 @@ GOLDEN = {
     "hud_layout_code_symbols.hpp": "9edfa0b2",
     "hud_layout_symbols.hpp": "fa371568",
     "audio_queue_symbols.hpp": "069b742c",
+    "shadow_symbols.hpp": "4878ecf3",
     "display_list_symbols.hpp": "833f48e9",
     "memory_symbols.hpp": "e4995134",
     "camera_symbols.hpp": "1e0b6071",
