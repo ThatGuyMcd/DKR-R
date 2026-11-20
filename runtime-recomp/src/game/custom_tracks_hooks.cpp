@@ -2,6 +2,7 @@
 #include "display_list_symbols.hpp"
 #include "guest_call_context.hpp"
 #include "memory_symbols.hpp"
+#include "shadow_symbols.hpp"
 #include "custom_tracks.hpp"
 #if defined(DKR_REPLAY_QUALIFICATION) || defined(DKR_EXPERIMENTAL_RACE_TEST)
 #include "replay_probe_capture.hpp"
@@ -10,11 +11,14 @@
 #include "game_payload.hpp"
 #include "runtime_legacy_mods.hpp"
 #include "revision_addresses.hpp"
+#include "netplay/runtime_state.hpp"
 #include "rom_revision.hpp"
 
 #include "recomp.h"
 
 #include <algorithm>
+#include <atomic>
+#include <bit>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -744,21 +748,18 @@ void dkr::runtime::custom_tracks::set_level_load_observer(LevelLoadObserver obse
 // introduction scene instead, found by scanning ASSET_MISC_67 for pairs of
 // {boss level, intro level} until the level id matches. A .dkrmap level is in
 // no such pair, so the scan runs past the table and loads whatever level id it
-// meets - the camera then sits frozen in an unrelated scene. racer_boss_finish
-// (vehicle_tricky.c) repeats that scan with settings->courseId when the player
-// finishes, unless the course is already cleared, and pushes the level it found
-// as the next scene. So the course is marked visited and cleared (bits 0 and 1
-// of its courseFlags): retail's own rematch path, which starts the race
-// directly and ends it with a plain transition. world 6 is served as Dino
+// meets - the camera then sits frozen in an unrelated scene. Marking the course
+// visited skips that intro. racer_boss_finish scans the same table before its
+// cleared check; the custom-boss-finish guest hook skips that lookup and selects
+// the ordinary rematch transition explicitly. world 6 is served as Dino
 // Domain, so the Wizpig worlds' unconditional intro never applies to a .dkrmap
 // header, and a boss level never runs a silver coin race (objects.c tests
 // level_type()), so the cleared bit unlocks nothing.
 //
-// The bits are only lent. save_data.c packs two bits per boss level up to
-// levelCount, so a lent flag left in courseFlags would reach the EEPROM with
-// the next Adventure save. Whatever this function set is taken back when
-// another level loads and, through return_lent_boss_flags, wherever Track
-// Select takes back its lent vehicle choice.
+// The bits are only lent. Whatever this function set is taken back when another
+// level loads and, through return_lent_boss_flags, wherever Track Select takes
+// back its lent vehicle choice. The current save layout serializes stock course
+// IDs only; these transient flags must still not outlive the custom level.
 namespace {
 struct LentBossFlags {
     std::int32_t level = -1;
@@ -785,6 +786,15 @@ std::uint32_t course_flags_at(std::uint8_t* rdram, recomp_context* context, std:
     return addressable(flags) && addressable(at) ? at : 0U;
 }
 } // namespace
+
+// Called by the funcs-only finish hook after get_settings. Consult host metadata
+// without changing guest registers or memory; stock and online bosses stay retail.
+extern "C" int dkr_custom_tracks_is_boss_level(std::int32_t level) {
+    if (dkr::runtime::legacy::frozen_online_resources() || owned_vanilla_bootstrap()) {
+        return 0;
+    }
+    return dkr::runtime::custom_tracks::level_race_type(level) == dkr::runtime::custom_tracks::kRaceTypeBoss;
+}
 
 void dkr::runtime::custom_tracks::return_lent_boss_flags(std::uint8_t* rdram, recomp_context* context,
                                                          std::int32_t keep_level) {
@@ -1020,5 +1030,142 @@ extern "C" void dkr_custom_tracks_object_map_links(std::uint8_t* rdram, recomp_c
         MEM_B(static_cast<std::int32_t>(link.offset), rdram_address(buffer)) = static_cast<std::int8_t>(link.level_id);
         std::fprintf(stderr, "[custom-tracks] level link to %s now leads to level %d\n", link.track.c_str(),
                      static_cast<int>(link.level_id));
+    }
+}
+
+namespace {
+// Guest threads (simulation and renderer) can both reach the shadow hooks, so the
+// count is atomic. It reports the first drop and then every power of two, which
+// keeps a floor that drops a piece every frame from filling the log.
+std::atomic<std::uint32_t> g_shadow_drops{0};
+void note_shadow_drop(const char* what, std::int32_t a = 0, std::int32_t b = 0) {
+    const std::uint32_t count = g_shadow_drops.fetch_add(1U, std::memory_order_relaxed) + 1U;
+    if ((count & (count - 1U)) == 0U) {
+        std::fprintf(stderr, "[custom-tracks] %s (%d, %d); the rest of that shadow is dropped (%u so far)\n", what, a,
+                     b, count);
+    }
+}
+} // namespace
+
+// Shadow generation (tracks.c) keeps its work in fixed arrays that its appends never
+// bound-check: D_8011B120[32] (vertices, counted by D_8011B118), D_8011C238[32]
+// (polygons, counted by D_8011C230, each with unk2[8]) and D_8011B330[120] (clip
+// points, in four groups of 32 counted by D_8011B320[4], although the array holds
+// only 120: the fourth group's entries 24 to 31 land on D_8011C230 and the polygon
+// array behind it). Retail floors do not overflow them, but a custom floor cut into
+// many small faces can: under a .dkrmap's covered plaza a plane's shadow gathered
+// more than 32 vertices, ran over the arrays behind them into the polygon count, and
+// the next store through that count wrote far outside RDRAM (stray triangles on
+// screen, then an access violation).
+//
+// These funcs-only hooks protect offline play. The owned online payload is
+// unchanged. In particular, the polygon array must not spill into D_8011C3B8:
+// that storage is live input during the water pass.
+
+// After func_8002FF6C returns the clipped polygon's vertex count in v0, before the
+// caller's `someCount >= 3` test: the polygon's vertices are at sp+`vertices_at`
+// (the clip's a1), 0x10 bytes each. The caller then appends the polygon to
+// D_8011C238 and each vertex whose unkE is negative to D_8011B120 unless an equal
+// (x, z) is already there, counting the ones this polygon has just added. When that
+// would pass an array v0 is set to 0, and the polygon is skipped.
+static void shadow_polygon_budget(std::uint8_t* rdram, recomp_context* context, std::uint32_t vertices_at) {
+    if (dkr::runtime::legacy::frozen_online_resources() || owned_vanilla_bootstrap())
+        return;
+    const auto& addresses = dkr::runtime::shadow_symbols::for_revision(
+        dkr::runtime::revision_addresses::gSelectedRevision == dkr::runtime::rom::Revision::UsV80);
+    constexpr std::int32_t kVertexSlots = 32;    // D_8011B120[32]: entry 32 is the clip counters
+    constexpr std::int32_t kPolygonVertices = 8; // D_8011C238[n].unk2[8]
+    constexpr std::int32_t polygon_limit = 32;   // D_8011C238[32]; live water input follows
+    const auto clipped = static_cast<std::int32_t>(context->r2);
+    if (clipped < 3) {
+        return;
+    }
+    const std::int32_t vertices = read_word(rdram, addresses.vertex_count);
+    const std::int32_t polygons = read_word(rdram, addresses.polygon_count);
+    if (polygons < 0 || polygons >= polygon_limit) {
+        context->r2 = 0;
+        note_shadow_drop("a shadow's polygons would run onto the water input after the polygon array", polygons,
+                         polygon_limit);
+        return;
+    }
+    if (clipped > kPolygonVertices || vertices < 0 || vertices > kVertexSlots) {
+        context->r2 = 0;
+        note_shadow_drop("a shadow polygon has more vertices than the game's polygon entry holds", clipped, vertices);
+        return;
+    }
+    // The polygon is on the guest's own stack, written a moment ago by the clip. Its place
+    // is bounded by the guest address space itself, the 16 MiB DKR runs in (the 8 MiB base
+    // image plus the project's extended region; the owned engine keeps its stack at
+    // 0x80FDFC50, so the retail 8 MiB is not the limit). A stack pointer that puts it
+    // anywhere else is refused rather than read.
+    const std::uint32_t polygon = static_cast<std::uint32_t>(context->r29) + vertices_at;
+    const std::uint64_t polygon_end = std::uint64_t{polygon} + 0x10U * static_cast<std::uint64_t>(clipped);
+    if (polygon < kRdramLow || polygon_end > kRdramLow + dkr::runtime::netplay::kRollbackMemoryBytes) {
+        context->r2 = 0;
+        note_shadow_drop("a shadow polygon is outside guest memory", static_cast<std::int32_t>(polygon), clipped);
+        return;
+    }
+    const auto floats_equal = [&](std::uint32_t a, std::uint32_t b) {
+        // x at +0 and z at +8, compared as floats (so 0.0 == -0.0, NaN never equal).
+        const std::int32_t words[4] = {read_word(rdram, a), read_word(rdram, a + 8U), read_word(rdram, b),
+                                       read_word(rdram, b + 8U)};
+        const float ax = std::bit_cast<float>(words[0]), az = std::bit_cast<float>(words[1]);
+        const float bx = std::bit_cast<float>(words[2]), bz = std::bit_cast<float>(words[3]);
+        return ax == bx && az == bz;
+    };
+    std::int32_t added = 0;
+    std::uint32_t added_at[kPolygonVertices]{};
+    for (std::int32_t i = 0; i < clipped; ++i) {
+        const std::uint32_t vertex = polygon + 0x10U * static_cast<std::uint32_t>(i);
+        if (static_cast<std::int16_t>(read_word(rdram, vertex + 0xCU) & 0xFFFF) >= 0) {
+            continue; // An existing index: nothing is appended.
+        }
+        bool found = false;
+        for (std::int32_t j = 0; j < vertices && !found; ++j) {
+            found = floats_equal(vertex, addresses.vertices + 0x10U * static_cast<std::uint32_t>(j));
+        }
+        for (std::int32_t j = 0; j < added && !found; ++j) {
+            found = floats_equal(vertex, added_at[j]);
+        }
+        if (!found) {
+            added_at[added++] = vertex;
+            if (vertices + added > kVertexSlots) {
+                context->r2 = 0;
+                note_shadow_drop("a shadow's vertices would run onto the clip counters after the vertex array",
+                                 vertices, added);
+                return;
+            }
+        }
+    }
+}
+
+// func_8002E904 (floor shadows): the clipped polygon is at sp+0xD0.
+extern "C" void dkr_shadow_polygon_budget(std::uint8_t* rdram, recomp_context* context) {
+    shadow_polygon_budget(rdram, context, 0xD0U);
+}
+
+// func_8002EEEC (water shadows) appends the same way, from sp+0xA8.
+extern "C" void dkr_shadow_water_polygon_budget(std::uint8_t* rdram, recomp_context* context) {
+    shadow_polygon_budget(rdram, context, 0xA8U);
+}
+
+// Inside func_8002FF6C, where it appends a clip point to D_8011B330: v1 is the
+// entry's index, group * 32 + the group's count (the count is clamped at 31 just
+// before). D_8011B330 holds 120 entries, so an index of 120 or more is a write
+// past the array. It is redirected to the last entry (119), which overwrites one
+// clip point of this shadow, instead of the polygon count and the arrays behind.
+// Both callers go through here, so this covers floor and water shadows.
+extern "C" void dkr_shadow_clip_index(std::uint8_t*, recomp_context* context) {
+    if (dkr::runtime::legacy::frozen_online_resources() || owned_vanilla_bootstrap())
+        return;
+    constexpr std::uint32_t kEntries = 120; // D_8011B330[120]
+    const auto index = static_cast<std::uint32_t>(context->r3);
+    if (index >= kEntries) {
+        context->r3 = static_cast<gpr>(kEntries - 1U);
+        // The guest increments a0 and saves it as this group's count. Saturate
+        // that too, or the next edge reads entries beyond the 120-point array.
+        context->r4 = 23;
+        note_shadow_drop("a shadow's clip points would run onto the polygon count after the clip array",
+                         static_cast<std::int32_t>(index), static_cast<std::int32_t>(kEntries));
     }
 }

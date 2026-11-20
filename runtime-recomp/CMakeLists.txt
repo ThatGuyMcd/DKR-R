@@ -2020,6 +2020,12 @@ if(BUILD_TESTING)
         add_test(NAME DKRPicoHashCallbacks COMMAND DKRPicoHashCallbackTests)
     endif()
 
+    # The Python integration test links this harness with generated guest code.
+    # Compile it here too so every host build and clang-tidy can check it.
+    add_library(DKRCustomBossFinishHarness OBJECT tests/custom_boss_finish_harness.c)
+    target_compile_features(DKRCustomBossFinishHarness PRIVATE c_std_11)
+    target_include_directories(DKRCustomBossFinishHarness PRIVATE "${DKR_RECOMP_SOURCE}/include")
+
     foreach(
         tooling_test
         IN
@@ -2030,6 +2036,7 @@ if(BUILD_TESTING)
             "DKRToolingUtilities|tooling_utilities_tests.py"
             "DKRSourcePackaging|source_packaging_tests.py"
             "DKRBuildIteration|build_iteration_tests.py"
+            "DKRCustomBossFinish|custom_boss_finish_tests.py"
             "DKRDeveloperEntrypoints|developer_entrypoint_tests.py"
             "DKRAssetScan|asset_scan_tests.py"
             "DKRRegressionHarness|regression_harness_tests.py"
@@ -3266,6 +3273,7 @@ if(BUILD_TESTING)
                 "${DKR_RT64_SOURCE}/src/contrib"
                 "${DKR_DEPENDENCIES_DIR}/n64-modern-runtime/N64Recomp/include"
         )
+        target_compile_definitions(DKRCustomTracksRuntimeTests PRIVATE DKR_EXPERIMENTAL_RACE_TEST)
         dkr_guest_symbols(DKRCustomTracksRuntimeTests)
         add_test(NAME DKRCustomTracksRuntime COMMAND DKRCustomTracksRuntimeTests)
         add_executable(
