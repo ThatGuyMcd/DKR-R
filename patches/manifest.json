@@ -482,6 +482,10 @@
       "sha256": "f6fb8a7c2ec16b35d48a3a036c3912037d383c0adcd6e385f3bb64b903cfa423"
     },
     {
+      "path": "patches/enhanced-water/dkr-caustics-lowpass.patch",
+      "sha256": "74412e8984e6fd469cb95ec77147170249b923e24f7302f414c3f8dc63dda81f"
+    },
+    {
       "path": "patches/enhanced-water/dkr-field-portability.patch",
       "sha256": "7cbd337b32d9803d8c513cc57f87382eba686adf479f8ec21dcd5af40c8c620e"
     },
