@@ -8,6 +8,7 @@
 #include "online_stability/qualification_delivery.hpp"
 #include "../policy.hpp"
 #include "../owner_state.hpp"
+#include "../online_stability/control.hpp"
 #include "../departure.hpp"
 #include "../start_gate.hpp"
 #include "../rollback_check.hpp"
@@ -235,6 +236,7 @@ DirectSession::~DirectSession() {
     dkr::runtime::party_start::forget(this);
     dkr::runtime::spectators::forget_party_link(this);
     dkr::online::native::forget(this);
+    dkr::online_stability::forget(this);
 }
 
 void DirectSession::log_locked(const char* format, ...) {

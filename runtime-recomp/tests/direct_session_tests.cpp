@@ -1,4 +1,5 @@
 #include "direct_session.hpp"
+#include "online_stability/control.hpp"
 #include "online_input_broker.hpp"
 #include "progress_budget.hpp"
 #include "rollback_check.hpp"
@@ -1369,6 +1370,19 @@ void pump_sessions(const std::array<dkr::runtime::netplay::DirectSession*, Count
 } // namespace
 
 int main() {
+    {
+        namespace stability = dkr::online_stability;
+        const int mod_link = 0;
+        {
+            dkr::runtime::netplay::DirectSession session;
+            stability::bind_mod_sync(&mod_link, &session);
+            assert(stability::mod_control(&mod_link));
+            session.disconnect("Return to the launcher.");
+            assert(stability::mod_control(&mod_link));
+        }
+        assert(!stability::mod_control(&mod_link));
+        stability::unbind_mod_sync(&mod_link);
+    }
     dkr::runtime::netplay::DirectSessionTestAccess::session_log_queue();
     dkr::runtime::netplay::DirectSessionTestAccess::owned_lane_isolation();
     dkr::runtime::netplay::DirectSessionTestAccess::experimental_admission_isolation();
