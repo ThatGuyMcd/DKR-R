@@ -55,6 +55,31 @@ class IdentityGuardTests(unittest.TestCase):
     def test_repository_record_is_current(self):
         self.assertEqual(identity_guard.check(), [])
 
+    def test_wire_contract_sources_are_guarded(self):
+        # Codec and schema changes need a compatibility decision even if no
+        # rollback engine source or protocol version was edited.
+        wire_sources = (
+            "netplay/netplay_protocol.cpp",
+            "netplay/netplay_protocol.hpp",
+            "netplay/netplay_types.cpp",
+            "netplay/netplay_types.hpp",
+            "netplay/netplay_build_identity.hpp",
+            "netplay/authoritative_state.cpp",
+            "netplay/authoritative_state.hpp",
+            "netplay/authoritative_state_codec.cpp",
+            "netplay/authoritative_state_codec.hpp",
+            "mods/online_mod_manifest.cpp",
+            "mods/online_mod_manifest.hpp",
+            "mods/online_mod_transfer.cpp",
+            "mods/online_mod_transfer.hpp",
+            "mods/online_mod_wire_version.hpp",
+        )
+        record = identity_guard.load(identity_guard.LOCK)
+        guarded = identity_guard.inputs(record["globs"])
+        for source in wire_sources:
+            with self.subTest(source=source):
+                self.assertIn(f"runtime-recomp/src/game/{source}", guarded)
+
     def test_clean_tree_passes(self):
         self.assertEqual(self.check(), [])
 
