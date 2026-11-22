@@ -10,12 +10,11 @@ void DrawLanguageSetting(float width) {
         if (preference() == choices[i].code)
             selected = int(i + 1);
     }
-    PaddockGap(14.F);
     const auto caption = text("common.language");
     if (SettingsDropdown("launcher-language", caption, &selected, options, width)) {
         if (select(selected == 0 ? "auto" : choices[std::size_t(selected - 1)].code))
             SaveSettings();
     }
-    PaddockGap(6.F);
+    PaddockGap(5.F);
     PaddockText(PaddockReading(13.F, false, 1.5F), PaddockRgb(0xABC0CC), text("common.language_help"), width);
 }

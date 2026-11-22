@@ -54,7 +54,7 @@
       "id": "COPY-008",
       "file": "runtime_play_ui.inl",
       "previous": "Portable mode preference saved. Existing saves and settings were not moved or replaced.",
-      "approved": "Restart DKR-R to apply. Existing saves aren't moved automatically.",
+      "approved": "Restart DKR-R to apply.",
       "verification": "literal"
     },
     {

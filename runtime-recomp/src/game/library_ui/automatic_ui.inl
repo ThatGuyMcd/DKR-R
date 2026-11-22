@@ -1,10 +1,8 @@
 void DrawSkipLauncherSetting(float width) {
     if (PaddockCheckbox("##skip-launcher", "Skip launcher", &dkr::library_ui::skip_launcher, width))
         SaveSettings();
-    PaddockGap(6.F);
-    PaddockText(PaddockReading(13.F, false, 1.5F), PaddockRgb(0xABC0CC),
+    PaddockText(PaddockReading(13.F, false, 1.4F), PaddockRgb(0xABC0CC),
                 dkr::localisation::text("play.skip_launcher_help"), width);
-    PaddockGap(8.F);
 }
 
 bool AutomaticStartHasMods() {
