@@ -403,21 +403,6 @@ void DrawLanguageSetting(float);
 #include "library_ui/automatic_ui.inl"
 #include "library_ui/handoff_ui.inl"
 
-void DrawPlayIntroSettings(float width, bool live) {
-    ImGui::BeginDisabled(live);
-    if (PaddockCheckbox("##skip-intro", "Skip intro", &g_skip_intro, width))
-        SaveSettings();
-    if (g_skip_intro) {
-        PaddockGap(4.F);
-        if (SettingsDropdown("skip-intro-destination", "Start at", &g_skip_intro_destination,
-                             {"Start menu", "Character select"}, width, false, {}))
-            SaveSettings();
-        PaddockGap(5.F);
-        PaddockText(PaddockReading(13.F, false, 1.4F), PaddockRgb(0xB0C9CC), "Offline launches only.", width);
-    }
-    ImGui::EndDisabled();
-}
-
 void DrawPlayPortableSetting(float width, bool entered, bool live) {
     if (!dkr::runtime::portable::supported())
         return;
@@ -452,17 +437,28 @@ void DrawPlayLaunchOptions(float width, bool entered, bool live) {
     const float column = paired ? (width - gap) * .5F : width;
     const auto at = ImGui::GetCursorScreenPos();
     ImGui::BeginGroup();
-    DrawPlayIntroSettings(column, live);
-    PaddockGap(8.F);
-    DrawLanguageSetting(column);
+    DrawPlayPortableSetting(column, entered, live);
+    DrawSkipLauncherSetting(column);
+    PaddockGap(6.F);
+    ImGui::BeginDisabled(live);
+    if (PaddockCheckbox("##skip-intro", "Skip intro", &g_skip_intro, column))
+        SaveSettings();
+    ImGui::EndDisabled();
     ImGui::EndGroup();
     if (paired)
         ImGui::SetCursorScreenPos({at.x + column + gap, at.y});
     else
         PaddockGap(10.F);
     ImGui::BeginGroup();
-    DrawPlayPortableSetting(column, entered, live);
-    DrawSkipLauncherSetting(column);
+    if (g_skip_intro) {
+        if (SettingsDropdown("skip-intro-destination", "Start at", &g_skip_intro_destination,
+                             {"Start menu", "Character select"}, column, live, {}))
+            SaveSettings();
+        PaddockGap(5.F);
+        PaddockText(PaddockReading(13.F, false, 1.4F), PaddockRgb(0xB0C9CC), "Offline launches only.", column);
+        PaddockGap(8.F);
+    }
+    DrawLanguageSetting(column);
     ImGui::EndGroup();
 }
 
