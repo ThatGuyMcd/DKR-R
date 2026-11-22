@@ -60,6 +60,94 @@ replace = '''    after_7:
     { extern void dkr_custom_tracks_object_map_links(uint8_t*,recomp_context*); dkr_custom_tracks_object_map_links(rdram,ctx); }
     // 0x8000CAC8: lw          $a0, 0x3C($sp)'''
 
+# Custom bosses have no entry in the retail intro/outro table. Skip the lookup
+# before any table read and use retail's rematch finish, including its music,
+# transition and timer. This is offline only: owned resources reject boss maps.
+[[hook]]
+id = "custom-boss-finish"
+function = "racer_boss_finish"
+payloads = ["funcs"]
+entry = '''    int custom_boss_finish = 0;
+'''
+[hook.vars.77]
+lookup_end = "8005CBF8"
+after_music = "8005CC5C"
+rematch = "8005CE1C"
+[hook.vars.80]
+lookup_end = "8005CD98"
+after_music = "8005CDFC"
+rematch = "8005CFBC"
+[[hook.edits]]
+match = 'MEM_W(0X44, ctx->r29) = ctx->r2;'
+replace = '''MEM_W(0X44, ctx->r29) = ctx->r2;
+    extern int dkr_custom_tracks_is_boss_level(int32_t);
+    custom_boss_finish = dkr_custom_tracks_is_boss_level(MEM_BU(ctx->r2, 0X49));
+    if (custom_boss_finish) {
+        ctx->r10 = ctx->r2;
+        ctx->r16 = 0;
+        goto L_{lookup_end};
+    }'''
+[[hook.edits]]
+match = 'ctx->r16 = MEM_B(ctx->r24, 0X1);'
+replace = 'ctx->r16 = custom_boss_finish ? 0 : MEM_B(ctx->r24, 0X1);'
+[[hook.edits]]
+match = 'L_{after_music}:'
+replace = '''L_{after_music}:
+    if (custom_boss_finish) goto dkr_custom_boss_rematch;'''
+[[hook.edits]]
+match = '    // 0x{rematch}: lw          $t8, 0x34($sp)'
+replace = '''dkr_custom_boss_rematch:
+    // 0x{rematch}: lw          $t8, 0x34($sp)'''
+
+# Offline shadow generation uses fixed arrays: 32 vertices, 32 polygons and
+# 120 clip points. Dense custom geometry can overflow them. Refuse a polygon
+# before its append and saturate the final clip group at 24 entries.
+# All three hooks are funcs-only; the owned online payload remains unchanged.
+# func_8002E904, floor shadows: the clipped polygon is at sp+0xD0.
+[[hook]]
+id = "shadow-polygon-budget"
+function = "func_8002E904"
+payloads = ["funcs"]
+[hook.vars.77]
+at = "// 0x8002ED0C: lw          $t5, 0x88($sp)"
+after = "after_2:"
+[hook.vars.80]
+at = "// 0x8002ED4C: lw          $t5, 0x88($sp)"
+after = "after_2:"
+[[hook.edits]]
+match = "{after}\n    {at}"
+replace = "{after}\n    { extern void dkr_shadow_polygon_budget(uint8_t*,recomp_context*); dkr_shadow_polygon_budget(rdram,ctx); }\n    {at}"
+
+# func_8002EEEC, water shadows: the same append, from sp+0xA8.
+[[hook]]
+id = "shadow-water-polygon-budget"
+function = "func_8002EEEC"
+payloads = ["funcs"]
+[hook.vars.77]
+at = "// 0x8002F120: lui         $t5, 0x8012"
+after = "after_1:"
+[hook.vars.80]
+at = "// 0x8002F160: lui         $t5, 0x8012"
+after = "after_1:"
+[[hook.edits]]
+match = "{after}\n    {at}"
+replace = "{after}\n    { extern void dkr_shadow_water_polygon_budget(uint8_t*,recomp_context*); dkr_shadow_water_polygon_budget(rdram,ctx); }\n    {at}"
+
+# func_8002FF6C, the clip: v1 is the new clip point's index, group * 32 + count.
+[[hook]]
+id = "shadow-clip-index"
+function = "func_8002FF6C"
+payloads = ["funcs"]
+[hook.vars.77]
+at = "// 0x8003029C: lwc1        $f8, 0x0($t1)"
+after = "L_8003029C:"
+[hook.vars.80]
+at = "// 0x800302DC: lwc1        $f8, 0x0($t1)"
+after = "L_800302DC:"
+[[hook.edits]]
+match = "{after}\n    {at}"
+replace = "{after}\n    { extern void dkr_shadow_clip_index(uint8_t*,recomp_context*); dkr_shadow_clip_index(rdram,ctx); }\n    {at}"
+
 # Custom vehicles: character events around model and wheel draws.
 [[hook]]
 id = "vehicle-model-scope"

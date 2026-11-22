@@ -891,28 +891,17 @@ python scripts/generate_legacy_menu_qualification.py --characters --character-me
 Point `DKR_GENERATED_SOURCE_V77` / `_V80` at `generated-v77` / `generated-v80`
 in that folder. The presentation step accepts only the reviewed ELF images.
 
-**A vehicle set holds up to 127 checkpoints.** `checkpoint_update_all` loads
+**A vehicle set holds up to 60 checkpoints.** `checkpoint_update_all` loads
 one set's gates (those whose `vehicleType` matches the header's `unk4F` entry
 for the vehicle), main and alternate route together, into `gTrackCheckpoints`
 in spawn order, and silently skips any past `MAX_CHECKPOINTS` (`objects.c`).
-Retail's is 60, which caps how finely a course can steer its AI racing line.
-Two `instructionPatches` in each versioned recomp policy raise it to 127: the
-table's allocation in `allocate_object_pools` (`addiu a0, zero, 0xE10` becomes
-`0x1DC4`, 127 × the 0x3C-byte `CheckpointNode`) and the load bound in
-`checkpoint_update_all` (`slti at, a3, 60` becomes `127`). 127 is the real
-ceiling: a gate's place in the table lives in signed bytes
-(`Object_Racer.nextCheckpoint` at 0x192, `Object_Weapon.checkpoint`,
-`CheckpointNode.altRouteID`), and the racer code increments `nextCheckpoint`
-before comparing it with the count, so the count may not exceed 127. Nothing
-else in the game or the runtime sizes anything by checkpoint count: the AI and
-homing-rocket splines take four or five consecutive gates and wrap their index,
-`courseCheckpoint` is an `s16`, and the netplay state checksum (the portable
-authoritative state, `determinism_state_hash.cpp` and `authoritative_state.cpp`)
-does not read the table. It covers racer fields, including each racer's
-`nextCheckpoint` (`Object_Racer` `0x192`, inside the word at `0x190`), plus
-authored actors and a few globals. The table's contents are fixed by the map,
-which every peer must already match. Track Lab reports a set over 127 as an error and one over 60 as
-a warning, since older DKR-R builds and original hardware still load only 60.
+Current DKR-R retains retail's allocation and load bound. Track Lab reports a
+set over 60 as an error, including alternate gates, because the game would
+silently drop the extra gates and break the displayed racing line and laps.
+The proposed increase to 127 is deferred: enlarging the pool moves subsequent
+guest allocations on every course and requires an explicitly approved online
+identity change. The signed-byte checkpoint indices allow at most 127, but
+that representation limit does not enlarge the current runtime's pool.
 
 **`mods/` belongs to librecomp.** N64ModernRuntime ships its own mod system,
 it is live in DKR-R, and it scans `mods/` for its `.nrm` format. A `.dkrmap`
