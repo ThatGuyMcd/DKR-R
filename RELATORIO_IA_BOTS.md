@@ -344,7 +344,7 @@ e evita voltar.
 
 ### 4.3 Máquina de estados (`unk1CD`)
 
-Nesta tabela, `P[i]` são os percentuais do header da fase ([§4.5](#45-percentuais-por-fase-headerunk2a)).
+Nesta tabela, `P[i]` são os percentuais do header da fase ([§4.5](#45-percentuais-por-fase-headerunk2a10)).
 
 | Estado | Nome | Quando entra | O que faz | Quando sai |
 |---|---|---|---|---|

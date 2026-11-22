@@ -18,8 +18,9 @@ validation and patch-layer handoffs retain their original version, commands,
 limits and test results. They are engineering history, not installation advice
 for v1.0.9. The documentation index separates them from current guides.
 
-All changes come from the
-[documentation Patch Pipeline](../patches/release-prep/v1.0.9/documentation/pipeline.py).
+All changes come from the documentation Patch Pipeline
+(`patches/release-prep/v1.0.9/documentation/pipeline.py` before the fold, in
+git history).
 It creates a recoverable pre-edit source ZIP/hash ledger, preflights every
 target, records before/after hashes and checks that unrelated first-party files
 and submodule revisions remain unchanged. Its external
