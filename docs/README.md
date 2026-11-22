@@ -103,31 +103,34 @@ the separate SDK includes the Bible in TXT, HTML and PDF.
 These files keep the original findings, version numbers, commands and test
 counts. They are not instructions for installing the current release, and
 their limits/results do not automatically apply to later builds.
-Paths stay intact so contributor discussions and source references still work.
+The moved reports live in [`history/`](history/); the files that packaging scripts
+still ship by path (most `BETA*` and `PLAYTEST*` notes), the Track Lab and custom
+music/minimap plans that source comments cite, and the earlier `BETA*-1.0.7` notes
+stay at the top level, listed below.
 Recorded local paths and line numbers are snapshots; they may not resolve on
 another machine or against today's source. Use the current guides for setup.
 
 ### Earlier Android and ARM work
 
-- [Android compatibility candidate â€” 27 September 2026](ANDROID-COMPATIBILITY-IMPLEMENTATION-20260927.md)
-- [Android compatibility and performance audit â€” 26 September 2026](ANDROID-COMPATIBILITY-PERFORMANCE-AUDIT-20260926.md)
-- [Android frame-pacing pass â€” build 1050025](ANDROID-FRAMEPACING-20260927.md)
-- [Android mobile launcher and touch controls â€” preview.5](ANDROID-MOBILE-UI.md)
-- [OPPO/Mali Android startup freeze â€” 25 September 2026](ANDROID-OPPO-STARTUP-20260925.md)
-- [Android performance follow-up â€” 26 September 2026](ANDROID-PERFORMANCE-FOLLOWUP-20260926.md)
-- [Android quality-preserving scheduling pass â€” 1050026](ANDROID-REALWORK-PRIORITY-20260927.md)
-- [Android recording-enabled startup crash â€” build 1050024](ANDROID-RECORDING-STARTUP-20260927.md)
-- [Android quality-preserving renderer pass â€” build 1050027](ANDROID-RENDER-PASS-20260927.md)
-- [Android stability and follow-up optimisation â€” 25 September 2026](ANDROID-STABILITY-20260925.md)
-- [Android startup regression correction â€” build 1050023](ANDROID-STARTUP-CORRECTION-20260927.md)
-- [ARM platform preview â€” 1.0.5 beta 11](ARM-PLATFORM-PREVIEW.md)
-- [ARM preview validation â€” 2026-09-21](ARM-PLATFORM-VALIDATION.md)
+- [Android compatibility candidate â€” 27 September 2026](history/ANDROID-COMPATIBILITY-IMPLEMENTATION-20260927.md)
+- [Android compatibility and performance audit â€” 26 September 2026](history/ANDROID-COMPATIBILITY-PERFORMANCE-AUDIT-20260926.md)
+- [Android frame-pacing pass â€” build 1050025](history/ANDROID-FRAMEPACING-20260927.md)
+- [Android mobile launcher and touch controls â€” preview.5](history/ANDROID-MOBILE-UI.md)
+- [OPPO/Mali Android startup freeze â€” 25 September 2026](history/ANDROID-OPPO-STARTUP-20260925.md)
+- [Android performance follow-up â€” 26 September 2026](history/ANDROID-PERFORMANCE-FOLLOWUP-20260926.md)
+- [Android quality-preserving scheduling pass â€” 1050026](history/ANDROID-REALWORK-PRIORITY-20260927.md)
+- [Android recording-enabled startup crash â€” build 1050024](history/ANDROID-RECORDING-STARTUP-20260927.md)
+- [Android quality-preserving renderer pass â€” build 1050027](history/ANDROID-RENDER-PASS-20260927.md)
+- [Android stability and follow-up optimisation â€” 25 September 2026](history/ANDROID-STABILITY-20260925.md)
+- [Android startup regression correction â€” build 1050023](history/ANDROID-STARTUP-CORRECTION-20260927.md)
+- [ARM platform preview â€” 1.0.5 beta 11](history/ARM-PLATFORM-PREVIEW.md)
+- [ARM preview validation â€” 2026-09-21](history/ARM-PLATFORM-VALIDATION.md)
 - [DKR-R Beta 15 - Android presentation/performance candidate](BETA15-ANDROID-RENDER-FLOW.txt)
 
 ### Beta and playtest release records
 
-- [v1.0.5 Beta 10 â€” model-load crash and missing HUD investigation](BETA10-REGRESSION-VALIDATION.md)
-- [Beta 12 optimisation scope and qualification](BETA12-OPTIMISATION.md)
+- [v1.0.5 Beta 10 â€” model-load crash and missing HUD investigation](history/BETA10-REGRESSION-VALIDATION.md)
+- [Beta 12 optimisation scope and qualification](history/BETA12-OPTIMISATION.md)
 - [DKR-R v1.0.5 beta 15 - online stability correction (2026-10-07)](BETA15-ONLINE-STABILITY-20261007.txt)
 - [DKR-R v1.0.5 Beta 15 - Playtest 10](BETA15-PLAYTEST10-SAVE-PROTECTION.txt)
 - [DKR-R v1.0.5 Beta 15 Playtest 11 - Custom Character Roster](BETA15-PLAYTEST11-CUSTOM-ROSTER.txt)
@@ -140,7 +143,7 @@ another machine or against today's source. Use the current guides for setup.
 - [DKR-R 1.0.5 Beta 15 Playtest 16 - Memory Safety Correction 1](BETA15-PLAYTEST16-MEMORY-SAFETY.txt)
 - [DKR-R 1.0.5 Beta 15 Playtest 16 Fix 2 - Mod library](BETA15-PLAYTEST16-MOD-LIBRARY.txt)
 - [DKR-R 1.0.5 Beta 15 - Playtest 16](BETA15-PLAYTEST16-WATER-PERFORMANCE.txt)
-- [DKR-R 1.0.5 Beta 15 Playtest 2 - Implementation / handoff](BETA15-PLAYTEST2-STARTUP.txt)
+- [DKR-R 1.0.5 Beta 15 Playtest 2 - Implementation / handoff](history/BETA15-PLAYTEST2-STARTUP.txt)
 - [DKR-R 1.0.5 Beta 15 Playtest 3 - restoration candidate](BETA15-PLAYTEST3-PARITY.txt)
 - [DKR-R 1.0.5 Beta 15 Playtest 4 - bounded output-efficiency candidate](BETA15-PLAYTEST4-PERFORMANCE.txt)
 - [DKR-R v1.0.5 Beta 15 Playtest 5 - boss victory scene correction](BETA15-PLAYTEST5-BOSS-DIAGNOSTICS.txt)
@@ -149,33 +152,33 @@ another machine or against today's source. Use the current guides for setup.
 - [DKR-R 1.0.5 Beta 15 - Playtest 8: local scenery/performance candidate](BETA15-PLAYTEST8-SCENERY.txt)
 - [DKR-R 1.0.5 Beta 15 - Playtest 9](BETA15-PLAYTEST9-CAMERA.txt)
 - [DKR-R 1.0.5 Beta 15](BETA15-RELEASE.txt)
-- [DKR-R Playtest 12 crash investigation / corrective rebuild - 5 October 2026](PLAYTEST12-CRASH-INVESTIGATION-20261005.txt)
-- [DKR-R Playtest 12 expanded-roster rebuild - 5 October 2026](PLAYTEST12-EXPANDED-ROSTER-20261005.txt)
-- [Modded multiplayer finish-line investigation and candidate correction](PLAYTEST14-FINISH-OUTPUT-FIX-20261006.txt)
+- [DKR-R Playtest 12 crash investigation / corrective rebuild - 5 October 2026](history/PLAYTEST12-CRASH-INVESTIGATION-20261005.txt)
+- [DKR-R Playtest 12 expanded-roster rebuild - 5 October 2026](history/PLAYTEST12-EXPANDED-ROSTER-20261005.txt)
+- [Modded multiplayer finish-line investigation and candidate correction](history/PLAYTEST14-FINISH-OUTPUT-FIX-20261006.txt)
 - [DKR-R 1.0.5-beta.15-playtest.14 - shared online mod sources rebuild](PLAYTEST14-MOD-SYNC-PERFORMANCE-20261006.txt)
-- [DKR-R 1.0.5-beta.15-playtest.14 - model-reference safety candidate](PLAYTEST14-MODEL-REFERENCE-CANDIDATE-20261006.txt)
+- [DKR-R 1.0.5-beta.15-playtest.14 - model-reference safety candidate](history/PLAYTEST14-MODEL-REFERENCE-CANDIDATE-20261006.txt)
 - [DKR-R 1.0.5 Beta 15 Playtest 14 - online mod admission rebuild](PLAYTEST14-ONLINE-RETENTION-AND-PROGRESS.txt)
-- [Playtest 14: trophy scenery model loading and Windows launcher recovery](PLAYTEST14-SPAWN-ASSET-TYPE-FIX-20261006.txt)
-- [DKR-R: PR46 integration rebuild (2026-10-04)](PR46-INTEGRATION-20261004.txt)
+- [Playtest 14: trophy scenery model loading and Windows launcher recovery](history/PLAYTEST14-SPAWN-ASSET-TYPE-FIX-20261006.txt)
+- [DKR-R: PR46 integration rebuild (2026-10-04)](history/PR46-INTEGRATION-20261004.txt)
 
 ### Online and rollback investigations
 
 - [Experimental Rollback local graphics: restored implementation status](EXPERIMENTAL-LOCAL-SCENERY-STATUS-20261003.txt)
-- [Experimental rollback â€” development checkpoint, updated 1 October 2026](EXPERIMENTAL-ROLLBACK-IMPLEMENTATION-20260927.md)
-- [Experimental rollback performance pass â€” 2 October 2026](EXPERIMENTAL-ROLLBACK-PERFORMANCE-20261002.md)
+- [Experimental rollback â€” development checkpoint, updated 1 October 2026](history/EXPERIMENTAL-ROLLBACK-IMPLEMENTATION-20260927.md)
+- [Experimental rollback performance pass â€” 2 October 2026](history/EXPERIMENTAL-ROLLBACK-PERFORMANCE-20261002.md)
 - [DKR-R v1.0.5 Beta 15 Playtest 2 - EXPERIMENTAL ROLLBACK](EXPERIMENTAL-ROLLBACK-TESTING.txt)
-- [Beta 12 â€” host task lifetime correction](HOST-TASK-LIFETIME-20260925.md)
-- [Online latency candidate â€” 1.0.5-beta.12-online.1](ONLINE-LATENCY-CANDIDATE-20260927.md)
+- [Beta 12 â€” host task lifetime correction](history/HOST-TASK-LIFETIME-20260925.md)
+- [Online latency candidate â€” 1.0.5-beta.12-online.1](history/ONLINE-LATENCY-CANDIDATE-20260927.md)
 - [DKR-R v1.0.5 Beta 3: Online input delivery and boss introductions](ONLINE-STABILITY.md)
 
 ### Legacy import and character milestones
 
-- [Legacy activation phase â€” v1.0.5 Beta 5](LEGACY-ACTIVATION-WORK.md)
-- [Additive legacy Custom Characters â€” implementation proposal](LEGACY-CUSTOM-CHARACTERS-PLAN.md)
+- [Legacy activation phase â€” v1.0.5 Beta 5](history/LEGACY-ACTIVATION-WORK.md)
+- [Additive legacy Custom Characters â€” implementation proposal](history/LEGACY-CUSTOM-CHARACTERS-PLAN.md)
 - [Legacy mod compatibility â€” v1.0.5 Beta 7](LEGACY-MOD-COMPATIBILITY-BETA7.md)
-- [v1.0.5 Beta 5 â€” legacy importer preview](LEGACY-MOD-IMPORT-PREVIEW.md)
-- [Native-stage custom character selection â€” revised proposal](LEGACY-NATIVE-CHARACTER-STAGE-PLAN.md)
-- [Native-stage character selector â€” private candidate](LEGACY-NATIVE-STAGE-IMPLEMENTATION.md)
+- [v1.0.5 Beta 5 â€” legacy importer preview](history/LEGACY-MOD-IMPORT-PREVIEW.md)
+- [Native-stage custom character selection â€” revised proposal](history/LEGACY-NATIVE-CHARACTER-STAGE-PLAN.md)
+- [Native-stage character selector â€” private candidate](history/LEGACY-NATIVE-STAGE-IMPLEMENTATION.md)
 
 ### Track Lab implementation plans
 
@@ -186,23 +189,25 @@ another machine or against today's source. Use the current guides for setup.
 ### Presentation and optimisation investigations
 
 - [DKR-R - NSO controller investigation and launcher options](CONTROLLER-STUTTER-AND-LAUNCHER-OPTIONS-20261004.txt)
-- [Beta 12 CPU/power follow-up â€” 25 September 2026](CPU-POWER-OPTIMISATION.md)
+- [Beta 12 CPU/power follow-up â€” 25 September 2026](history/CPU-POWER-OPTIMISATION.md)
 - [DKR-R 1.0.5 beta 15 - enhanced-water preview (2026-10-08)](ENHANCED-WATER-BETA15.txt)
-- [v1.0.5 Beta 3 â€” finish presentation rebuild](FINISH-PRESENTATION-VALIDATION.md)
-- [Further optimisation pass â€” 25 September 2026](FURTHER-OPTIMISATION-20260925.md)
-- [Optional mipmaps â€” v1.0.5 Beta 2](GENERATED-MIPMAP-VALIDATION.md)
-- [Beta 5 HUD reference alignment â€” 2026-09-08](HUD-REFERENCE-ALIGNMENT.md)
-- [Standalone launcher performance â€” 1.0.4](LAUNCHER-PERFORMANCE.md)
-- [Live texture LOD bias â€” v1.0.5-beta.1 candidate](LIVE-TEXTURE-LOD.md)
-- [Magic Codes: v1.0.4 repair and validation](MAGIC-CODES.md)
-- [Optional generated texture mipmaps â€” approved plan and implementation record](OPTIONAL-MIPMAP-PLAN.md)
-- [v1.0.5 Beta 1 split-screen presentation validation](SPLIT-SCREEN-VALIDATION.md)
-- [Track performance pass â€” v1.0.5 Beta 1](TRACK-PERFORMANCE.md)
-- [Water-heavy level performance investigation â€” 26 September 2026](WATER-LEVEL-PERFORMANCE-INVESTIGATION-20260926.md)
-- [Water performance pass â€” implementation and qualification](WATER-PERFORMANCE-IMPLEMENTATION-20260926.md)
+- [v1.0.5 Beta 3 â€” finish presentation rebuild](history/FINISH-PRESENTATION-VALIDATION.md)
+- [Further optimisation pass â€” 25 September 2026](history/FURTHER-OPTIMISATION-20260925.md)
+- [Optional mipmaps â€” v1.0.5 Beta 2](history/GENERATED-MIPMAP-VALIDATION.md)
+- [Beta 5 HUD reference alignment â€” 2026-09-08](history/HUD-REFERENCE-ALIGNMENT.md)
+- [Standalone launcher performance â€” 1.0.4](history/LAUNCHER-PERFORMANCE.md)
+- [Live texture LOD bias â€” v1.0.5-beta.1 candidate](history/LIVE-TEXTURE-LOD.md)
+- [Magic Codes: v1.0.4 repair and validation](history/MAGIC-CODES-1.0.4.md)
+- [Optional generated texture mipmaps â€” approved plan and implementation record](history/OPTIONAL-MIPMAP-PLAN.md)
+- [v1.0.5 Beta 1 split-screen presentation validation](history/SPLIT-SCREEN-VALIDATION.md)
+- [Track performance pass â€” v1.0.5 Beta 1](history/TRACK-PERFORMANCE.md)
+- [Water-heavy level performance investigation â€” 26 September 2026](history/WATER-LEVEL-PERFORMANCE-INVESTIGATION-20260926.md)
+- [Water performance pass â€” implementation and qualification](history/WATER-PERFORMANCE-IMPLEMENTATION-20260926.md)
 
 ### Other historical research
 
+- [Earlier release validation records](history/) (1.0.8 to 1.0.14) and
+  [playtest and investigation notes](notes/), which hold the dated working notes.
 - [Original legacy test milestones](../runtime-recomp/tests/legacy_mods/HISTORY.md).
 - [Contributor report on retail AI](../RELATORIO_IA_BOTS.md), retained in its
   original language and author voice.

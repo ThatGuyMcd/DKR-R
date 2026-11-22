@@ -217,7 +217,7 @@ check those on an iPhone or iPad before distributing a release.
 Use the reviewed Linux ARM64 toolchain/sysroot and separate compiled
 outputs. Compose both normal and owned payloads above, with matching
 visual-model inputs, then configure through the v1.0.15 release overlay.
-The older [ARM recipes](ARM-PLATFORM-PREVIEW.md) describe the initial
+The older [ARM recipes](history/ARM-PLATFORM-PREVIEW.md) describe the initial
 cross-build setup; their preview versions and results stay historical.
 
 The release package.py uses --arch aarch64, matching ARM64 libraries and
