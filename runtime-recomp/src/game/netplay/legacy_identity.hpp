@@ -1,12 +1,14 @@
 #pragma once
 // Online identity: the owned rollback contracts peers compare before they
-// admit each other, frozen at the shipped v1.0.15 values. docs/contracts/ONLINE_IDENTITY.md
+// admit each other. v1.0.15 shipped e5c8df41... (v77) and a9a0d18f... (v80);
+// the 127-checkpoint pool moved guest allocations, so each value is now
+// sha256("<v1.0.15 value>|checkpoints-127-v1"). docs/contracts/ONLINE_IDENTITY.md
 // records them and where they came from. They change only by a deliberate
 // edit here, never because a source file changed, and a change makes this
 // build refuse older incompatible peers. cmake/OnlineIdentity.cmake reads them into
 // the DKR_OWNED_BUILD_ID_V77/V80 compile definitions.
-#define DKR_LEGACY_OWNED_BUILD_ID_V77 "e5c8df41e92c766cb46d137111a289793308e398033127160ff321ff4672a4bf"
-#define DKR_LEGACY_OWNED_BUILD_ID_V80 "a9a0d18fccc59d42aaa8b9cd6fdee50c22fa0699283eee8087a82f99ac85ef80"
+#define DKR_LEGACY_OWNED_BUILD_ID_V77 "5e4546d1209d785da50787207228884e02a47a6a8aad06838c3df1243dd321d4"
+#define DKR_LEGACY_OWNED_BUILD_ID_V80 "a52b30e2761b60e7526296858cf858478244b1d6308b63174c9e5310f1d9d57b"
 
 // The owned engine identity (experimental_runtime.cpp runtime_engine_identity,
 // the manifest's owned_engine_hash) is sha256 of the owned adapter identity

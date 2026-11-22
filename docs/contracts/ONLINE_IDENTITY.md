@@ -2,13 +2,14 @@
 
 Before two players' engines run a rollback match, they compare the owned
 rollback contract of the ROM revision they share. If the contracts differ,
-the lobby refuses the peer. The contracts are frozen at the values v1.0.15
-shipped, so a build from this tree uses the current release contracts.
+the lobby refuses the peer. The contracts were changed on purpose after
+v1.0.15, so a build from this tree refuses v1.0.15 and earlier peers until the
+next release ships.
 
 | Revision | Define | Contract |
 |---|---|---|
-| US v1.0 (v77) | `DKR_OWNED_BUILD_ID_V77` | `e5c8df41e92c766cb46d137111a289793308e398033127160ff321ff4672a4bf` |
-| US v1.1 (v80) | `DKR_OWNED_BUILD_ID_V80` | `a9a0d18fccc59d42aaa8b9cd6fdee50c22fa0699283eee8087a82f99ac85ef80` |
+| US v1.0 (v77) | `DKR_OWNED_BUILD_ID_V77` | `5e4546d1209d785da50787207228884e02a47a6a8aad06838c3df1243dd321d4` |
+| US v1.1 (v80) | `DKR_OWNED_BUILD_ID_V80` | `a52b30e2761b60e7526296858cf858478244b1d6308b63174c9e5310f1d9d57b` |
 
 ## Where they live
 
@@ -27,7 +28,17 @@ The rollback test frontend (`DKR-R-RollbackTest`, not shipped) negotiates
 
 ## Provenance
 
-The header holds the shipped v1.0.15 values: both contracts and all four engine
+The contracts are `sha256("<v1.0.15 contract>|checkpoints-127-v1")` for each
+revision. The checkpoint pool grew from 60 to 127 entries
+(`instructionPatches` in both recomp policies), which moves every guest
+allocation after it, so a build with it and a build without it simulate
+different memory. Steve Whittaker approved the change on 17 November 2026; no
+release had shipped from this tree since v1.0.15. The v1.0.15 contracts were
+`e5c8df41e92c766cb46d137111a289793308e398033127160ff321ff4672a4bf` (v77) and
+`a9a0d18fccc59d42aaa8b9cd6fdee50c22fa0699283eee8087a82f99ac85ef80` (v80).
+
+The four engine salts are still the shipped v1.0.15 values. Before this change
+the header held the shipped v1.0.15 values: both contracts and all four engine
 salts, which v1.0.14 and v1.0.15 changed. They were read from the official
 v1.0.15 Windows, Linux x86_64 and ARM64 runtimes without running them; Steam
 Deck has the same published hash as Linux x86_64. Steve Whittaker approved

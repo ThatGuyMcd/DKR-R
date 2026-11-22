@@ -465,8 +465,11 @@ def _check_checkpoint_counts(checkpoints, positions) -> List[Issue]:
 
     ``checkpoint_update_all`` loads one set's gates, main and alternate route
     together, into a fixed table in spawn order and silently skips the rest.
-    Current DKR-R and retail both hold 60. Count alternate gates too: a set
-    above the runtime limit must fail export rather than lose gates in game.
+    Retail's table holds 60. DKR-R's holds 127: a gate's place in it is kept in
+    signed bytes (``Object_Racer.nextCheckpoint``, ``CheckpointNode.altRouteID``),
+    so 127 is the runtime's real ceiling, and past it a set is an error. Past 60
+    it still plays on DKR-R, but older builds and original hardware drop gates,
+    which is worth a warning.
     """
     sets = collections.defaultdict(list)
     for checkpoint in checkpoints:
@@ -479,9 +482,10 @@ def _check_checkpoint_counts(checkpoints, positions) -> List[Issue]:
             issues.append(Issue(
                 ERROR,
                 "vehicle type %s has %d checkpoints, main and alternate route "
-                "together; DKR-R loads at most %d per vehicle type and "
+                "together; DKR-R loads at most %d per vehicle type (the "
+                "racer's next-checkpoint counter is a signed byte) and "
                 "silently skips the last %d placed, so their laps and AI line "
-                "break. Original hardware also loads only %d"
+                "break. Older DKR-R builds and original hardware load only %d"
                 % (vehicle_type, count, race_ai.MAX_CHECKPOINTS,
                    count - race_ai.MAX_CHECKPOINTS,
                    race_ai.RETAIL_MAX_CHECKPOINTS),
