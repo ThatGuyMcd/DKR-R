@@ -1,19 +1,47 @@
+import { handleSpeedrun, cleanupSpeedruns } from './speedrun_api.mjs';
 import library, { HttpError } from './library_api.mjs';
 import { handleLauncherProfile, launcherVerifiedSocial } from './profile_api.mjs';
 import { handleCommunity, communityCatalogue, cleanupCommunity } from './community_api.mjs';
 
+// The website uses a read-only projection. Never forward browser credentials
+// or actor headers to the directory.
+async function publicOnline(request, env, url) {
+  const headers = { 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': '*' };
+  const error = (status, code) => Response.json({ error: { code } }, { status, headers });
+  if (request.method !== 'GET') return error(405, 'method');
+  if (url.protocol !== 'https:') return error(400, 'https');
+  if (env.ONLINE_ENABLED !== 'true' || !env.ONLINE_DIRECTORY) return error(503, 'disabled');
+
+  const cursor = url.searchParams.get('cursor') || '';
+  if (cursor && !/^[a-f0-9]{32}$/.test(cursor)) return error(400, 'cursor');
+  const forwarded = new URL('/v1/online/public', url.origin);
+  if (cursor) forwarded.searchParams.set('cursor', cursor);
+  try {
+    const response = await env.ONLINE_DIRECTORY.fetch(new Request(forwarded));
+    if (!response.ok) return error(503, 'unavailable');
+    headers['Cache-Control'] = 'public, max-age=15, s-maxage=15';
+    return Response.json(await response.json(), { headers });
+  } catch {
+    return error(503, 'unavailable');
+  }
+}
+
 export default {
   scheduled(event,env,ctx) {
     ctx.waitUntil(cleanupCommunity(env).catch(() => {}));
+    ctx.waitUntil(cleanupSpeedruns(env).catch(() => { console.error('Speedrun cleanup failed.'); }));
     return library.scheduled(event,env,ctx);
   },
   async fetch(request, env, ctx) {
     try {
       const community = await handleCommunity(request, env, ctx);
       if (community) return community;
+      const speedrun = await handleSpeedrun(request, env);
+      if (speedrun) return speedrun;
       const profile = await handleLauncherProfile(request, env);
       if(profile)return profile;
       const url=new URL(request.url);
+      if (url.pathname === '/v1/online/public') return publicOnline(request, env, url);
       if(url.pathname==='/v1/online/capabilities' && request.method==='GET') {
         const response=await library.fetch(request,env,ctx);
         if(!response.ok)return response;

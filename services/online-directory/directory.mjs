@@ -141,6 +141,15 @@ export class WorldwideDirectory extends DurableObject {
     return { rooms: active.slice(0, 50).map(room => publicRoom(room, this.env.RUNNING_SPECTATORS_ENABLED === 'true')), nextCursor: active.length > 50 ? active[49].id : '',
       online: this.count(), revision: this.revision(), serverTime: Date.now() };
   }
+  publicSnapshot(cursor) {
+    const { rooms, online, nextCursor, serverTime } = this.list(cursor);
+    return {
+      online, nextCursor, serverTime,
+      rooms: rooms.map(({ id, title, phase, racers, maxRacers, spectators, maxSpectators, canJoin, canSpectate }) => ({
+        id, title, phase, racers, maxRacers, spectators, maxSpectators, canJoin, canSpectate
+      }))
+    };
+  }
   cleanup() {
     const now = Date.now(); let changed = false;
     for (const [id, session] of this.sessions) if (!this.live(session.data, now)) {
@@ -190,6 +199,9 @@ export class WorldwideDirectory extends DurableObject {
   async fetch(request) {
     try {
       const url = new URL(request.url);
+      // This route is only reachable through the private service binding.
+      if (url.pathname === '/v1/online/public' && request.method === 'GET')
+        return json(this.publicSnapshot(url.searchParams.get('cursor') || ''));
       let who;
       if (url.pathname === '/v1/online/connect') {
         const protocols = (request.headers.get('Sec-WebSocket-Protocol') || '').split(',').map(s => s.trim());

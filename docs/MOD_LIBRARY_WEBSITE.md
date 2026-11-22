@@ -15,7 +15,8 @@ Use Python 3.11+ and Node.js 24+ on Windows or Linux. On Windows substitute
 ```sh
 npm install --prefix build/library-community-tools --no-save --ignore-scripts --package-lock=false esbuild@0.28.2 jsdom@29.1.1
 python3 services/library-workflow/build.py community --output build/library-community-release/stage --baseline build/mod-library-community-20261029/baseline --archive build/library-community-release/DKR-R-website-update.zip
-node runtime-recomp/tests/mod_library_community_tests.cjs build/library-workflow-d1-runtime/node_modules/miniflare build/library-community-tools/node_modules/jsdom
+npm ci --prefix services/test-tools --ignore-scripts
+node runtime-recomp/tests/mod_library_community_tests.cjs services/test-tools/node_modules/miniflare build/library-community-tools/node_modules/jsdom
 python3 scripts/check.py --suite guard,tooling
 ```
 
@@ -87,3 +88,30 @@ and a 60 ms stagger capped after eight groups. Featured mods crossfade every
 Reduced-motion preferences disable entrances and automatic rotation by default.
 The companion picker keeps checked inputs mounted while filtering so existing
 draft/preview serialization includes selections outside the visible results.
+
+## Online and ranked replay review
+
+The Online page at `#online` reads `GET /v1/online/public`. The private
+directory Worker creates the projection from the same live account leases and
+room list as the launcher. This endpoint never forwards a browser credential
+or a private room. The browser polls every 30 seconds while visible. A missing
+count is shown as unavailable, and an available count of zero is shown as zero.
+
+Copy a public lobby link and choose **Find lobby from website** under **Public
+lobbies** in the updated launcher. The link selects a room from the current
+signed-in launcher list. The existing host, compatibility, mod and slot checks
+still govern requests to join or spectate.
+
+Leaderboards at `#leaderboards` use the existing library account. The flow is
+**Sign in → attach replay → check the detected event and recorded time → Post
+run**. My runs tracks the upload, independent verification and review. Only
+published verified PBs count on each board. The website is staged with no
+qualified boards or upload access by default.
+
+Custom tracks are discovered automatically from the live catalogue, including
+newly published releases. A board identifies an exact release and the server
+checks the catalogue's verified SHA-256. Publish a new board after qualifying a
+new release. Previous eligible versions stay available under their own boards.
+
+See [Ranked replay review](notes/2026-11-22-ranked-replay-review.md) for the
+replay format, open qualification work and checks before opening submissions.

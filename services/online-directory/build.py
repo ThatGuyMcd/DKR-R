@@ -51,6 +51,7 @@ def compose(output, esbuild, rollback_api=None, rollback_directory=None):
     )
     shutil.copy2(API / "discord_schema.sql", output / "PRIVATE-API/001-launcher-discord-profiles.sql")
     shutil.copy2(API / "profile_schema.sql", output / "PRIVATE-API/002-launcher-profiles.sql")
+    shutil.copy2(API / "speedrun_schema.sql", output / "PRIVATE-API/003-speedruns.sql")
     for name in ("directory.mjs", "wrangler-online.jsonc"):
         shutil.copy2(AUTH / name, output / "ONLINE-WORKER" / name)
     for source, name in ((rollback_api, "worker-single-file.mjs"), (rollback_directory, "directory.mjs")):
@@ -93,6 +94,7 @@ and feature settings. A new installation still needs the existing directory setu
         shutil.copy2(path, output / path.name)
     sources = [
         *sorted(API.glob("*")),
+        ROOT / "runtime-recomp/src/game/mod_library/website/assets/replay-format.js",
         AUTH / "directory.mjs",
         AUTH / "wrangler-online.jsonc",
         *docs,

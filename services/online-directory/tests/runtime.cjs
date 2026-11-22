@@ -85,6 +85,12 @@ async function main(){
   const state={title:'Private test',epoch:'epoch-one',compatibility:'test-network',visibility:'private',phase:'waiting',racers:1,maxRacers:2,spectators:0,maxSpectators:8,reservedRacers:0,reservedSpectators:0,roster:'1',code:'ABCD1',bootstrap:'ABCD1',canSpectateRunning:true};
   let room=(await host.call({type:'room',revision:0,state})).data;
   check(room.id,'private room created');
+  const webPrivate=await (await http('/v1/online/public')).json();
+  equal(webPrivate.online,3,'website sees the same deduplicated active player count');
+  equal(webPrivate.rooms.length,0,'website excludes live private rooms');
+  equal((await http('/v1/online/public',null,null,'POST')).status,405,'website projection is read-only');
+  equal((await http('/v1/online/public?cursor=invalid')).status,400,'invalid public cursor is refused');
+  equal((await http('/v1/online/lobbies')).status,401,'launcher list remains authenticated');
   equal((await guest.call({type:'list'})).data.rooms.length,0,'private room omitted from public payload');
   equal((await guest.call({type:'join',room:room.id,role:'racer',key:key(),compatibility:'test-network'})).error.code,'unavailable','private room identifier grants no public access');
   equal((await guest.call({type:'resolve',code:'WRONG',role:'racer',key:key(),compatibility:'test-network'})).error.code,'unavailable','unknown private code is not searchable');
@@ -99,6 +105,16 @@ async function main(){
   const wire=JSON.stringify(list);
   check(!wire.includes('ABCD1')&&!wire.includes('admission')&&!wire.includes('owner')&&!wire.includes('account'),'public payload excludes connection secrets and account identifiers');
   equal(list.rooms[0].host,'Player host','verified display name preserved');
+  const webResponse=await http('/v1/online/public');
+  equal(webResponse.headers.get('Cache-Control'),'public, max-age=15, s-maxage=15','website projection is briefly cacheable');
+  const web=await webResponse.json();
+  equal(web.rooms.length,1,'public lobby visible on the website');
+  const projection=web.rooms[0];
+  assert.deepEqual(Object.keys(projection).sort(),
+    ['canJoin','canSpectate','id','maxRacers','maxSpectators','phase','racers','spectators','title']);
+  equal(projection.id,room.id,'public reference matches the launcher room');
+  equal(projection.title,'Public test','public title matches the launcher room');
+  equal((await (await http('/v1/online/public?cursor='+room.id)).json()).rooms.length,0,'public cursor advances the list');
   equal((await other.call({type:'room',revision:room.revision,state:{...state,epoch:'bad',visibility:'invalid'}})).error.code,'invalid','invalid host state rejected');
   const firstKey=key();
   const intent=await guest.call({type:'join',room:room.id,role:'racer',key:firstKey,compatibility:'test-network'},'idempotent');

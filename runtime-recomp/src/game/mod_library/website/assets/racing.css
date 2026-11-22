@@ -1,0 +1,17 @@
+#dkr-mod-library .dkr-racing-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
+  gap: 1rem;
+}
+#dkr-mod-library .dkr-racing-grid .dkr-panel { min-width: 0; overflow-wrap: anywhere; }
+#dkr-mod-library .dkr-racing-count { color: var(--dkr-gold, #ffc15a); font-size: 1.5rem; }
+#dkr-mod-library .dkr-racing-list { display: grid; grid-template-columns: minmax(0, 1fr); gap: .65rem; }
+#dkr-mod-library .dkr-run-table { width: 100%; border-collapse: collapse; }
+#dkr-mod-library .dkr-run-table th, #dkr-mod-library .dkr-run-table td {
+  text-align: left;
+  padding: .55rem;
+  border-bottom: 1px solid #31515d;
+  overflow-wrap: anywhere;
+}
+#dkr-mod-library .dkr-run-table th:last-child, #dkr-mod-library .dkr-run-table td:last-child { text-align: right; }
+#dkr-mod-library .dkr-racing-file { width: 100%; max-width: 100%; }

@@ -40,7 +40,15 @@ class BundleTests(unittest.TestCase):
         inputs = json.loads((out / "API-BUILD-INPUTS.json").read_text())["inputs"]
         self.assertEqual(
             {Path(name).name for name in inputs},
-            {"worker.mjs", "library_api.mjs", "profile_api.mjs", "community_api.mjs"},
+            {
+                "worker.mjs",
+                "library_api.mjs",
+                "profile_api.mjs",
+                "community_api.mjs",
+                "speedrun_api.mjs",
+                "speedrun_replay.mjs",
+                "replay-format.js",
+            },
         )
         self.assertEqual((out / "ROLLBACK/worker-single-file.mjs").read_bytes(), previous.read_bytes())
         self.assertTrue((out / "PRIVATE-API/002-launcher-profiles.sql").is_file())
