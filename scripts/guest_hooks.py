@@ -3,7 +3,9 @@
 
 runtime-recomp/guest-hooks/hooks.toml lists every hook the runtime puts into
 N64Recomp output: the guest function, which payloads it applies to (``funcs``:
-the DKRRecompiledFuncsV77/V80 payload, ``owned``: the experimental owned game),
+the DKRRecompiledFuncsV77/V80 payload, ``owned``: the experimental owned game,
+``camera``: the private Camera++ scene kernel, whose generator
+scripts/camera_scene_kernel.py applies them with ``load`` and ``hooked_body``),
 and up to three edits inside that function's body:
 
 * ``entry``: text inserted at the top of the body;
@@ -17,7 +19,7 @@ per-revision ``vars``. The body is the generated ``dkr_code_body_<function>``
 when the code-mod dispatcher wrapped the function, else the ``RECOMP_FUNC``
 itself.
 
-Each hook must apply in exactly one file of the payload, or nothing is written.
+Each hook must apply in exactly one file of the funcs/owned payloads, or nothing is written.
 Hooked files go to OUT under their own names, and OUT/hooked.txt lists them;
 the build compiles those in place of the originals (cmake/GuestHooks.cmake).
 
@@ -39,7 +41,9 @@ import sys
 import tomllib
 
 ROOT = Path(__file__).resolve().parents[1]
-PAYLOADS = ("funcs", "owned")
+PAYLOADS = ("funcs", "owned", "camera")
+# The payloads `apply` hooks as files; the camera kernel hooks its own routines.
+FILE_PAYLOADS = ("funcs", "owned")
 REVISIONS = ("77", "80")
 
 
@@ -239,7 +243,7 @@ def main(argv: list[str] | None = None) -> int:
     apply_parser.add_argument("--in", dest="input", type=Path, required=True)
     apply_parser.add_argument("--out", type=Path, required=True)
     apply_parser.add_argument("--revision", choices=REVISIONS, required=True)
-    apply_parser.add_argument("--payload", choices=PAYLOADS, required=True)
+    apply_parser.add_argument("--payload", choices=FILE_PAYLOADS, required=True)
     args = parser.parse_args(argv)
     return run_apply(args)
 

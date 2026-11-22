@@ -14,20 +14,21 @@
 2. **Launcher copy.** 71 reviewed strings are superseded by v1.0.11; see
    [launcher-copy-review.md](launcher-copy-review.md).
 
-3. **Road-wheel hooks in the camera scene kernel.** v1.0.14 (`531d265`)
-   changed `patches/camera-plus/scene_kernel_pipeline.py`: `render_3d_model`
-   and `render_sprite_billboard` call `dkr_native_road_wheel_scope` with
-   events 200 to 203, and the kernel includes `vehicle_lighting/road_wheels.h`.
-   The release recipe compiles the capsule's pinned kernel
-   (`release-prep/v1.0.7/release.py` passes `capsule/prepared/CAMERA_KERNEL_V*`
-   and `capsule.py` checks its hashes), which predates the change, so the
-   v1.0.15 binaries have the native handlers but nothing calls them. The fold
-   keeps that: `scripts/camera_scene_kernel.py` does not carry the hooks, and
-   the fold deletes the layer script. The change is in git at
-   `Version1.0.15:patches/camera-plus/scene_kernel_pipeline.py`. Porting it
-   changes guest code in every Camera++ scene and both camera kernel digests
-   in `build-inputs.lock.json`, so it's a follow-up to make on purpose and
-   test with custom vehicles. Was leaving the kernel pinned intended?
+3. **Road-wheel hooks in the camera scene kernel: ported, needs an in-game
+   check.** v1.0.14 (`531d265`) changed
+   `patches/camera-plus/scene_kernel_pipeline.py` so `render_3d_model` and
+   `render_sprite_billboard` call `dkr_native_road_wheel_scope` with events 200
+   to 203, but the release recipe compiled the capsule's older pinned kernel,
+   so no shipped build ever ran the hooks. `scripts/camera_scene_kernel.py` now
+   emits them from the `camera` payload of
+   `runtime-recomp/guest-hooks/hooks.toml` (applied with `scripts/guest_hooks.py`,
+   tested in `runtime-recomp/tests/camera_scene_kernel_tests.py`), which moves the two
+   `camera-kernel-*` digests in `build-inputs.lock.json`. Built and booted on
+   macOS; nothing has run the hooks in a race. Still to do: a playtest with a
+   custom character on the original car, Camera++ and look-behind on, checking
+   the tyres are lit and no display-list task is rejected. Online identity is
+   unchanged. `scripts/fold/prepared.py` still compares the kernel bytes with
+   the old reference and isn't run in CI, so it will report this difference.
 
 4. **`DKRQuickJoinLifecycle` is intermittent** on the Linux host presets
    (amd64 under emulation on the devops Mac). Alone it fails about half its

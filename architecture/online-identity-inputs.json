@@ -72,8 +72,8 @@
       "reason": "online identity changed to cfc1d8e0d92c"
     },
     "runtime-recomp/guest-hooks/hooks.toml": {
-      "sha256": "dc38a5194b8b946aca87942076935d6787555bdbf3792f97dd379ac8becdaf4f",
-      "reason": "The boss-finish and shadow hooks apply only to offline funcs payloads and return for frozen online resources or owned bootstrap. The owned hook set is identical to main for both revisions, and probe behavior and recomp policies are unchanged. Track Lab retains the runtime limit of 60 checkpoints."
+      "sha256": "6644a6c981a6c94e64ae462784031a7082c3b70dd4bf1c1d1d78a955ea389d28",
+      "reason": "Camera payload hooks added to hooks.toml: funcs and owned payload output unchanged, camera kernel output differs only by the road-wheel scope calls"
     },
     "runtime-recomp/legacy-character-menu.v77.recomp-fragment.json": {
       "sha256": "82db39e16f1e30eff1851d74eaf443cd962a2b65517d95f531f4cc0924357ce0",
@@ -708,8 +708,8 @@
       "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
     },
     "scripts/guest_hooks.py": {
-      "sha256": "4058af2139c1211c2db79c8748734c2c1f231ec6168e964166d90c83bb48c6cc",
-      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+      "sha256": "c6f4674da918d4efa82243faf1ab105758bf9f7ac7f002e20424f2f06230b71a",
+      "reason": "Camera payload hooks added to hooks.toml: funcs and owned payload output unchanged, camera kernel output differs only by the road-wheel scope calls"
     },
     "scripts/host_task_policy.py": {
       "sha256": "aa28c9bcd8110d0ef16b2f6dfde7ec51b8767578f46d3bc5371f197efb016f78",
