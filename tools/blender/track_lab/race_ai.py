@@ -9,7 +9,7 @@ where the bots drive is worse than none.
 
 **The line.** ``checkpoint_update_all`` (``objects.c``) keeps the checkpoints
 whose ``vehicleType`` equals ``header.unk4F[vehicle]``, at most
-:data:`MAX_CHECKPOINTS` of them (60 on retail and current DKR-R), numbers an
+:data:`MAX_CHECKPOINTS` of them (60 on retail, 127 on DKR-R), numbers an
 alternate-route gate ``index + 255``, bubble-sorts on that, and pairs each
 alternate with the main gate of the same ``index``. ``func_80045C48`` (``racer.c``) then takes four consecutive gates,
 moves each by the racer's lane -
@@ -58,12 +58,17 @@ ALTERNATE_OFFSET = 255
 
 #: ``gNumberOfMainCheckpoints < MAX_CHECKPOINTS`` (``objects.c``): gates past
 #: this many in one set are never loaded, alternates included, and nothing says
-#: so in game. The runtime still uses retail's 60-entry allocation and load
-#: bound. Raising it moves later guest allocations and requires an approved
-#: online compatibility change; an editor warning cannot make extra gates load.
-MAX_CHECKPOINTS = 60
+#: so in game. Retail's ``MAX_CHECKPOINTS`` is 60; DKR-R patches the table's
+#: allocation and that bound in ``allocate_object_pools`` and
+#: ``checkpoint_update_all`` up to 127, because a gate's place in the table
+#: lives in signed bytes - ``Object_Racer.nextCheckpoint``,
+#: ``Object_Weapon.checkpoint``, ``CheckpointNode.altRouteID`` - and 127 is the
+#: most for which ``nextCheckpoint + 1`` still fits one. So this is the runtime's
+#: ceiling, not the format's.
+MAX_CHECKPOINTS = 127
 
-#: What the original game loads per set.
+#: What retail, original hardware and older DKR-R builds load per set. A set
+#: past this plays on a current DKR-R and loses its last gates elsewhere.
 RETAIL_MAX_CHECKPOINTS = 60
 
 #: ``obj_init_checkpoint`` clamps a smaller scale byte up to this.
