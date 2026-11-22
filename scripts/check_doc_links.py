@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 from collections.abc import Iterator
+import os
 from pathlib import Path
 import re
 import subprocess
@@ -106,19 +107,21 @@ def check(root: Path, files: list[str] | None = None) -> list[str]:
                 continue
             path_part, _, fragment = target.partition("#")
             path_part = unquote(path_part.partition("?")[0])
-            resolved = root / path_part.lstrip("/") if path_part.startswith("/") else source.parent / path_part
-            resolved = resolved.resolve() if path_part else source
-            if not resolved.is_relative_to(root):
+            linked = root / path_part.lstrip("/") if path_part.startswith("/") else source.parent / path_part
+            # Normalised by name, not through symlinks: extern/<dep> can be a link to a
+            # checkout another worktree shares, and its path is still this repository's.
+            linked = Path(os.path.normpath(linked)) if path_part else source
+            if not linked.is_relative_to(root):
                 # It may exist on this machine; it won't in anyone else's clone.
                 problems.append(f"{name}:{number}: {target} points outside the repository")
-            elif path_part and not resolved.exists():
-                if not resolved.is_relative_to(root / "extern"):
+            elif path_part and not linked.exists():
+                if not linked.is_relative_to(root / "extern"):
                     problems.append(f"{name}:{number}: missing file {target}")
-            elif fragment and resolved.suffix == ".md" and resolved.is_file():
-                if resolved not in cache:
-                    cache[resolved] = anchors(resolved.read_text(encoding="utf-8"))
-                if unquote(fragment).lower() not in cache[resolved]:
-                    problems.append(f"{name}:{number}: no anchor #{fragment} in {resolved.relative_to(root)}")
+            elif fragment and linked.suffix == ".md" and linked.is_file():
+                if linked not in cache:
+                    cache[linked] = anchors(linked.read_text(encoding="utf-8"))
+                if unquote(fragment).lower() not in cache[linked]:
+                    problems.append(f"{name}:{number}: no anchor #{fragment} in {linked.relative_to(root).as_posix()}")
     return problems
 
 

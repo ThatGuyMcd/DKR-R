@@ -83,6 +83,23 @@ class DocLinkTests(unittest.TestCase):
         docs = {"a.md": "[rt64](extern/rt64/README.md) [typo](extren/rt64/README.md)\n"}
         self.assertEqual(self.problems(docs), ["a.md:1: missing file extren/rt64/README.md"])
 
+    def test_a_symlinked_dependency_checkout_counts_as_inside(self):
+        # A worktree can share another checkout's extern/<dep> through a symlink.
+        with tempfile.TemporaryDirectory() as tmp:
+            shared = Path(tmp) / "shared" / "rt64"
+            shared.mkdir(parents=True)
+            (shared / "README.md").write_text("# Build\n", encoding="utf-8")
+            root = Path(tmp) / "repo"
+            (root / "extern").mkdir(parents=True)
+            try:
+                (root / "extern" / "rt64").symlink_to(shared, target_is_directory=True)
+            except OSError:
+                self.skipTest("this account cannot create symlinks")
+            text = "[ok](extern/rt64/README.md#build) [bad](extern/rt64/README.md#nope)\n"
+            (root / "a.md").write_text(text, encoding="utf-8")
+            found = check_doc_links.check(root, ["a.md"])
+        self.assertEqual(found, ["a.md:1: no anchor #nope in extern/rt64/README.md"])
+
     def test_the_tracked_docs_have_no_broken_links(self):
         found = check_doc_links.check(ROOT)
         self.assertEqual(found, [], "\n" + "\n".join(found))
