@@ -2569,11 +2569,20 @@ if(BUILD_TESTING)
         target_include_directories(DKRQuickJoinLifecycleTests PRIVATE "${DKR_LIBDATACHANNEL_SOURCE}/deps/json/include")
         add_test(NAME DKRQuickJoinLifecycle COMMAND DKRQuickJoinLifecycleTests)
         set_tests_properties(DKRQuickJoinLifecycle PROPERTIES TIMEOUT 90)
-        add_executable(DKRExperimentalQuickJoinTests tests/experimental_network_tests.cpp)
+        # DKRNetplayCore reaches the online mod profile, whose Game Pak matching
+        # calls rom::inspect. Nothing here needs it at run time, but a linker
+        # that takes that archive member has to resolve it, so the revision
+        # reader comes along as in the other tests that link the profile.
+        add_executable(
+            DKRExperimentalQuickJoinTests
+            tests/experimental_network_tests.cpp
+            src/game/rom_revision.cpp
+            src/game/startup_performance.cpp
+        )
         target_link_libraries(DKRExperimentalQuickJoinTests PRIVATE DKRNetplayCore DKRCustomMagicCodes)
         target_include_directories(
             DKRExperimentalQuickJoinTests
-            PRIVATE "${DKR_LIBDATACHANNEL_SOURCE}/deps/json/include"
+            PRIVATE "${DKR_LIBDATACHANNEL_SOURCE}/deps/json/include" "${DKR_MODERN_RUNTIME_SOURCE}/thirdparty"
         )
         target_compile_definitions(DKRExperimentalQuickJoinTests PRIVATE DKR_EXPERIMENTAL_QUICKJOIN_TEST=1)
         add_test(NAME DKRExperimentalQuickJoin COMMAND DKRExperimentalQuickJoinTests)
