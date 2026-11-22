@@ -431,35 +431,56 @@ void DrawPlayPortableSetting(float width, bool entered, bool live) {
     PaddockGap(6.F);
 }
 
+void SettingsLabel(std::string_view label, float width);
+
 void DrawPlayLaunchOptions(float width, bool entered, bool live) {
     constexpr float gap = 14.F;
     const bool paired = width >= 318.F;
     const float column = paired ? (width - gap) * .5F : width;
     const auto at = ImGui::GetCursorScreenPos();
+    const float fields_x = paired ? at.x + column + gap : at.x;
+    const auto draw_skip_intro = [&] {
+        ImGui::BeginDisabled(live);
+        if (PaddockCheckbox("##skip-intro", "Skip intro", &g_skip_intro, column))
+            SaveSettings();
+        ImGui::EndDisabled();
+    };
+
     ImGui::BeginGroup();
     DrawPlayPortableSetting(column, entered, live);
     DrawSkipLauncherSetting(column);
-    PaddockGap(6.F);
-    ImGui::BeginDisabled(live);
-    if (PaddockCheckbox("##skip-intro", "Skip intro", &g_skip_intro, column))
-        SaveSettings();
-    ImGui::EndDisabled();
     ImGui::EndGroup();
-    if (paired)
-        ImGui::SetCursorScreenPos({at.x + column + gap, at.y});
-    else
+    const float startup_bottom = ImGui::GetItemRectMax().y;
+
+    if (paired) {
+        ImGui::SetCursorScreenPos({fields_x, at.y});
+    } else {
+        PaddockGap(6.F);
+        draw_skip_intro();
         PaddockGap(10.F);
+    }
+
     ImGui::BeginGroup();
+    DrawLanguageSetting(column);
+    const float pair_top = std::max(startup_bottom, ImGui::GetCursorScreenPos().y) + 8.F;
+    float skip_y = pair_top;
     if (g_skip_intro) {
-        if (SettingsDropdown("skip-intro-destination", "Start at", &g_skip_intro_destination,
+        ImGui::SetCursorScreenPos({fields_x, pair_top});
+        SettingsLabel("Start at", column);
+        // Match the centres of the 42 px checkbox row and the 52 px field.
+        skip_y = ImGui::GetCursorScreenPos().y + 5.F;
+        if (SettingsDropdown("skip-intro-destination", {}, &g_skip_intro_destination,
                              {"Start menu", "Character select"}, column, live, {}))
             SaveSettings();
         PaddockGap(5.F);
         PaddockText(PaddockReading(13.F, false, 1.4F), PaddockRgb(0xB0C9CC), "Offline launches only.", column);
-        PaddockGap(8.F);
     }
-    DrawLanguageSetting(column);
     ImGui::EndGroup();
+
+    if (paired) {
+        ImGui::SetCursorScreenPos({at.x, skip_y});
+        draw_skip_intro();
+    }
 }
 
 #include "library_ui/play_launch_bar.inl"
