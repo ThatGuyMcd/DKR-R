@@ -98,6 +98,25 @@ class ProofTests(unittest.TestCase):
             self.assertTrue(check(old, moved, "base", "head", {"a.hpp": "M"}))
             self.assertTrue(check(old, {**new, "identity": "j"}, "base", "head", {"a.hpp": "M"}))
 
+    def test_the_identity_record_check_reads_digests_beside_their_reasons(self):
+        blobs = {("base", "a.hpp"): b"int  a;\n", ("head", "a.hpp"): b"int a;\n"}
+
+        def entry(rev: str, reason: str) -> dict[str, str]:
+            return {"sha256": hashlib.sha256(blobs[(rev, "a.hpp")]).hexdigest(), "reason": reason}
+
+        still = {"sha256": "0" * 64, "reason": "earlier"}
+        old = {"globs": ["*.hpp"], "identity": "i", "inputs": {"a.hpp": entry("base", "earlier"), "b.hpp": still}}
+        new = {**old, "inputs": {"a.hpp": entry("head", "format"), "b.hpp": still}}
+        check = format_sources.identity_record_problems
+        with mock.patch.object(format_sources, "show", lambda rev, name: blobs.get((rev, name))):
+            self.assertEqual(check(old, new, "base", "head", {"a.hpp": "M"}), [])
+            self.assertTrue(check(old, new, "base", "head", {}))
+            moved = {**new, "inputs": {**new["inputs"], "b.hpp": {"sha256": "1" * 64, "reason": "format"}}}
+            self.assertTrue(check(old, moved, "base", "head", {"a.hpp": "M"}))
+            # A range that starts at a record from before per-input reasons.
+            flat = {**old, "inputs": {"a.hpp": entry("base", "")["sha256"], "b.hpp": "0" * 64}}
+            self.assertEqual(check(flat, new, "base", "head", {"a.hpp": "M"}), [])
+
 
 class NeverListTests(unittest.TestCase):
     def test_every_never_formatted_file_is_in_the_ignore_file(self):

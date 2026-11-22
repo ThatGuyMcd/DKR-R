@@ -172,6 +172,11 @@ class IdentityGuardTests(unittest.TestCase):
             ["digest changed without a new reason: sim/engine.c"],
         )
 
+    def test_an_unresolvable_base_is_an_error_not_a_skip(self):
+        # A shallow checkout without the base must not pass --against unchecked.
+        with self.assertRaises(SystemExit):
+            identity_guard.record_at("refs/heads/no-such-branch-for-the-identity-guard")
+
     def test_two_branches_that_record_different_inputs_merge_and_check_cleanly(self):
         """Each branch changes one input and records why; the merge has both, with no re-run of update."""
         for name in ("a", "b", "c"):

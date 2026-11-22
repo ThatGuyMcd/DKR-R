@@ -134,12 +134,21 @@ def reasons_changed(old: dict[str, Any], new: dict[str, Any]) -> list[str]:
 
 
 def record_at(ref: str, root: Path = ROOT) -> dict[str, Any] | None:
-    """The record as of the merge base of `ref` and HEAD, or None when there is none to compare with."""
-    base = subprocess.run(["git", "merge-base", ref, "HEAD"], cwd=root, capture_output=True, text=True)
+    """The record as of the merge base of `ref` and HEAD.
+
+    None when that commit has no record to compare with: the file did not exist
+    yet, or it predates per-input reasons. A ref git cannot resolve is an error,
+    not a reason to skip: a shallow checkout would otherwise pass unchecked.
+    """
+
+    def git(*arguments: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(["git", *arguments], cwd=root, capture_output=True, text=True)
+
+    if git("rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}").returncode != 0:
+        raise SystemExit(f"identity_guard: cannot resolve {ref}; --against needs that commit fetched")
+    base = git("merge-base", ref, "HEAD")
     commit = base.stdout.strip() if base.returncode == 0 and base.stdout.strip() else ref
-    shown = subprocess.run(
-        ["git", "show", f"{commit}:{LOCK.relative_to(ROOT).as_posix()}"], cwd=root, capture_output=True, text=True
-    )
+    shown = git("show", f"{commit}:{LOCK.relative_to(ROOT).as_posix()}")
     if shown.returncode != 0:
         return None
     old = json.loads(shown.stdout)
@@ -206,7 +215,8 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"  {problem}", file=sys.stderr)
             if missing:
                 print(
-                    'Re-run `identity_guard.py update --compatible "REASON"` so each changed input says why.',
+                    'Re-run `identity_guard.py update --compatible "REASON"` so each changed input says why. '
+                    "A reason worded exactly like the one it replaces counts as unchanged.",
                     file=sys.stderr,
                 )
                 return 1
