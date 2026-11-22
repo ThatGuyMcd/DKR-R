@@ -99,7 +99,14 @@ their state hashes (below).
 ## Who is driving
 
 The racers steer themselves along the track's checkpoints the way the game's
-CPU racers do (`netplay/check_autopilot.cpp`), holding the accelerator. Every
+CPU racers do (`netplay/check_autopilot.cpp`). They hold the accelerator, use
+held items (rockets at a racer ahead, drops at one behind, nitro on straights,
+everything else after at most 900 frames), reverse for a second when stuck, and
+steer the plane's pitch. `DKR_OWNED_CHECK_SKILL=expert` makes one peer drive
+like a strong human instead: a perfect start boost, a longer look-ahead (tighter
+line), lifting the accelerator over zipper pads and while firing nitro for the
+empowered boost, R through corners, aligned rocket shots, a detour to weapon
+balloons when empty handed, and a faster unstick. Every
 60 race frames (about two seconds) each peer logs
 
 ```text
@@ -111,6 +118,16 @@ CPU racers do (`netplay/check_autopilot.cpp`), holding the accelerator. Every
 `[rollback][render]` line. `valid=0` means the old pattern was used for that
 frame: there was no race to read (menus, loading), or
 `DKR_OWNED_CHECK_INPUT=wave` is set.
+
+Every lap, each peer also logs
+
+```text
+[check][lap] port=.. mode=cpu|expert|steer lap=N done frame=F lap_frames=D
+```
+
+(plus a `go frame=..` line when the light goes green). On the same track and
+vehicle `lap_frames` should shrink from `steer` to `cpu` to `expert`; run one
+peer of each and compare. Frames are session frames, the same for both peers.
 
 Each peer joins the lobby under a name it picks for itself, a race number
 and a moniker such as `#27 Ping Kong`, and logs it as `[check][name]`. The
@@ -166,6 +183,8 @@ anything in a self-test run.
 | --- | --- |
 | `DKR_OWNED_CHECK_NAME=<name>` | Race under this name (1 to 24 printable ASCII characters). Without it each peer picks its own (see "Who is driving"). |
 | `DKR_OWNED_CHECK_INPUT=wave` | Drive with the old pattern: accelerator held, stick left and right every 15 frames. |
+| `DKR_OWNED_CHECK_INPUT=steer` | Steer along the checkpoints only, accelerator held, no items (the first autopilot, for comparing old runs). |
+| `DKR_OWNED_CHECK_SKILL=cpu\|expert` | How the autopilot races (default `cpu`). Per process, so one peer can be an expert and the other a CPU. Ignored with `wave` or `steer`. |
 | `DKR_OWNED_CHECK_MODERN=1` | Use the Modern presentation preset. Needed for the three below. |
 | `DKR_OWNED_CHECK_FPS=60\|120\|180` | Fixed refresh target. |
 | `DKR_OWNED_CHECK_API=Vulkan` | Force Vulkan. |

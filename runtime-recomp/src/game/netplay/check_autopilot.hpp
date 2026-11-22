@@ -6,7 +6,11 @@
 // checkpoint spline, a port of the steering half of func_80045C48 (decomp
 // src/racer.c, called from racer_AI_pathing_inputs). When the guest state is
 // unreadable (menus, loading, no race) it falls back to that square wave.
-// Setting DKR_OWNED_CHECK_INPUT=wave selects the square wave outright.
+// Setting DKR_OWNED_CHECK_INPUT=wave selects the square wave outright and
+// DKR_OWNED_CHECK_INPUT=steer the old steer-only driver (A held, no items).
+// DKR_OWNED_CHECK_SKILL=cpu|expert (default cpu) picks how the driver races:
+// cpu follows the game's CPU racers (items, reverse when stuck), expert adds
+// what a strong human does (see AutopilotSkill).
 //
 // Test-only: it only ever produces the value a local controller would have
 // supplied, which is then sent to peers like any real input.
@@ -37,13 +41,54 @@ struct AutopilotObservation {
     // Nodes nextCheckpoint-2 .. nextCheckpoint+1, wrapped, alternate route
     // applied. Spline segment [1] -> [2] is the one the racer is on.
     std::array<CheckpointPoint, 4> nodes{};
+
+    // Race and racer state for items and throttle discipline. Defaults mean
+    // "nothing known": no item, race running, nobody around.
+    // gRaceStartTimer: counts down to 0 at the green light (0 while racing).
+    std::int32_t race_start_timer = 0;
+    // Object_Racer::velocity (negative is forward), boostTimer, groundedWheels,
+    // lap, raceFinished, zipperDirCorrection.
+    float velocity = 0;
+    std::int8_t boost_timer = 0;
+    std::int8_t grounded_wheels = 4;
+    std::int8_t lap = 0;
+    bool race_finished = false;
+    bool zipper_correction = false;
+    // Racer object's x_rotation (pitch), for the plane's Y stick.
+    std::int16_t pitch = 0;
+    // Held item: Object_Racer::balloon_quantity, and the WeaponType it resolves
+    // to through the balloon table (-1 when unknown or none).
+    std::int8_t balloon_quantity = 0;
+    std::int8_t weapon_id = -1;
+    // Nearest other racer ahead of / behind this one by course progress.
+    bool has_ahead = false, has_behind = false;
+    CheckpointPoint ahead, behind;
+    // Nearest pad that boosts this vehicle, and nearest weapon balloon, in
+    // front of the racer and within a few hundred units.
+    bool has_zipper = false, has_balloon = false;
+    CheckpointPoint zipper, balloon;
 };
+
+enum class AutopilotSkill { Cpu, Expert };
+// What DKR_OWNED_CHECK_INPUT and DKR_OWNED_CHECK_SKILL select.
+enum class AutopilotMode { Wave, Steer, Cpu, Expert };
+// Null or unknown strings are the defaults (cpu skill, no input override).
+AutopilotMode parse_autopilot_mode(const char* input, const char* skill);
 
 // Previous tangent angle: the game keeps it in the racer (unk1BE) and uses
 // its frame-to-frame change as a feed-forward steer term.
+// The rest is the driver's own memory: the game's stuck-in-reverse counters
+// (unk213/214/215), the item button, and how long an item has been held.
 struct AutopilotState {
     bool has_tangent = false;
     std::uint16_t tangent = 0;
+    int turn = 0;
+    bool has_pitch = false;
+    std::uint16_t pitch_tangent = 0;
+    int off_path = 0;
+    int stuck = 0, reverse = 0, cooldown = 0;
+    bool z_down = false;
+    int item_hold = 0;
 };
 
 inline constexpr int AutopilotStickLimit = 75; // CLAMP in racer_AI_pathing_inputs
@@ -54,6 +99,17 @@ PackedInput check_square_wave_input(std::uint32_t frame);
 // Stick X for one frame of CPU-style steering. Pure given (obs, state).
 // An invalid observation returns the square wave for `frame`.
 PackedInput check_autopilot_steer(const AutopilotObservation& obs, std::uint32_t frame, AutopilotState& state);
+
+// One frame of racing: steering as above, plus the buttons for `skill`.
+//   Cpu    port of the CPU's reverse-when-stuck kick (racer_AI_pathing_inputs),
+//          and its item use (func_80042D20): rockets at a racer ahead, drops at
+//          one behind, nitro when not boosting, A held after the countdown.
+//   Expert tighter line (longer look-ahead, balloons when empty handed), the
+//          perfect start boost, lifting A over zipper pads and while firing
+//          nitro (empowered boosts), R in corners, aligned shots, quick unstick.
+// Pure given (obs, state); state must advance once per frame.
+PackedInput check_autopilot_drive(const AutopilotObservation& obs, std::uint32_t frame, AutopilotState& state,
+                                  AutopilotSkill skill);
 
 // Convenience for the self-test call sites: one observation per port, the port
 // this process drives, the frame. Keeps its own AutopilotState (thread local),
