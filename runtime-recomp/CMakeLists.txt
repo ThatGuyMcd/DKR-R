@@ -220,6 +220,12 @@ if(MSVC)
         set_property(TARGET miniz PROPERTY C_COMPILER_LAUNCHER "")
     endif()
 endif()
+if(TARGET miniz AND CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_C_COMPILER_ID MATCHES "Clang")
+    # miniz takes its 64-bit file functions from _GNU_SOURCE, which upstream
+    # defines for GCC only. Under Clang with CMAKE_C_EXTENSIONS off, glibc then
+    # declares neither ftello64 nor ftello and miniz_zip.c does not compile.
+    target_compile_definitions(miniz PRIVATE _GNU_SOURCE)
+endif()
 
 if(NOT EXISTS "${DKR_GEKKONET_SOURCE}/GekkoLib/CMakeLists.txt")
     message(FATAL_ERROR "GekkoNet has not been prepared at ${DKR_GEKKONET_SOURCE}. " "Run Build-DKR-Runtime.cmd first.")
