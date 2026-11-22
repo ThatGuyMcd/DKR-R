@@ -129,7 +129,8 @@ int main() {
     assert(pages.size() == PageCount);
     for (int page = 0; page < PageCount + 3; ++page)
         assert(pages.contains(page) == (page != 8 && page != 4 && page != 9));
-    assert(sidebar_parent(4) == 0 && sidebar_parent(9) == 0);
+    assert(sidebar_parent(4) == 0 && sidebar_parent(9) == 0 && sidebar_parent(LeaderboardsPage) == 0);
+    assert(!pages.contains(LeaderboardsPage));
     for (int page : SidebarOrder)
         assert(sidebar_parent(page) == page);
     assert(ModsSections.size() == 5);

@@ -1018,7 +1018,7 @@
     } catch(error){bootError=errorMessage(error);}
     finally {started=true;bootLoading=false;render();}
   }
-  const publicPage = {'#online':'online','#leaderboards':'speedruns'}[location.hash];
+  const publicPage = {'#online':'online','#leaderboards':'speedruns','#post-run':'post-run'}[location.hash];
   if(publicPage||/^#lobby=[a-f0-9]{32}$/.test(location.hash))s.view=publicPage||'online';
   initialise();
 }());

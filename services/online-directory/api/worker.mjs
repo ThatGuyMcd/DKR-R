@@ -3,6 +3,22 @@ import library, { HttpError } from './library_api.mjs';
 import { handleLauncherProfile, launcherVerifiedSocial } from './profile_api.mjs';
 import { handleCommunity, communityCatalogue, cleanupCommunity } from './community_api.mjs';
 
+// Account totals change slowly. Coalesce concurrent reads and keep one
+// aggregate per database binding for at most a minute.
+let accountTotals;
+async function registeredPlayers(db) {
+  if (!db) return null;
+  const stamp = Date.now();
+  if (accountTotals?.db === db && accountTotals.until > stamp) return accountTotals.result;
+  const today = Math.floor(stamp / 86_400_000) * 86400;
+  const result = Promise.resolve().then(() => db.prepare(`SELECT COUNT(*) AS total,
+    COUNT(CASE WHEN created_at>=? THEN 1 END) AS new7,
+    COUNT(CASE WHEN created_at>=? THEN 1 END) AS new30 FROM accounts WHERE status='active'`)
+    .bind(today - 6 * 86400, today - 29 * 86400).first()).catch(() => null);
+  accountTotals = { db, result, until: stamp + 60_000 };
+  return result;
+}
+
 // The website uses a read-only projection. Never forward browser credentials
 // or actor headers to the directory.
 async function publicOnline(request, env, url) {
@@ -20,7 +36,13 @@ async function publicOnline(request, env, url) {
     const response = await env.ONLINE_DIRECTORY.fetch(new Request(forwarded));
     if (!response.ok) return error(503, 'unavailable');
     headers['Cache-Control'] = 'public, max-age=15, s-maxage=15';
-    return Response.json(await response.json(), { headers });
+    const snapshot = await response.json();
+    if (!cursor) {
+      const accounts = await registeredPlayers(env.DB);
+      snapshot.totalSignedUp = accounts?.total ?? null;
+      snapshot.newSignups = { '7': accounts?.new7 ?? null, '30': accounts?.new30 ?? null };
+    }
+    return Response.json(snapshot, { headers });
   } catch {
     return error(503, 'unavailable');
   }

@@ -1,3 +1,4 @@
+#include "leaderboards_page.inl"
 // One page router owns both surfaces. Live capability checks stay in each
 // service; presentation does not grant save/import/update permissions.
 struct SharedPlaySnapshot {
@@ -18,12 +19,14 @@ bool LibraryContentInputCaptured() {
 void DrawSharedUiPage(float width, int page, bool live, const PlayPageContext* launcher = nullptr) {
     LibraryNavigationContentWindow();
     const float top = ImGui::GetCursorPosY();
+    static std::array<int, 2> previous_page{-1, -1};
     // Paired SDL readbacks use the real live page branch inside the existing
     // authenticated, disposable layout harness. Normal startup cannot arm it.
     if (!live && !g_launcher_layout_root.empty()) {
         const char* surface = std::getenv("DKR_OWNED_CHECK_LAYOUT_SURFACE");
         live = surface && std::string_view(surface) == "overlay";
     }
+    const bool entered = std::exchange(previous_page[live ? 1 : 0], page) != page;
     g_store_in_game = live;
     if (DrawLibraryControlsFieldCheck(width)) {
         LibrarySurfaceProbe(live, page, width, ImGui::GetCursorPosY() - top);
@@ -62,6 +65,8 @@ void DrawSharedUiPage(float width, int page, bool live, const PlayPageContext* l
     } else if (page == kPageAchievements) {
         DrawPlayToolBack(width);
         DrawAchievementsPage(width);
+    } else if (page == dkr::library_ui::LeaderboardsPage) {
+        DrawLeaderboardsPage(width, entered);
     } else if (page == kPageOnlineMp)
         DrawOnlinePage(width, !live, live || play->rom_ready);
     else if (page == kPageModLibrary)

@@ -4,6 +4,7 @@ import { DurableObject } from 'cloudflare:workers';
 
 const PROTOCOL = 1;
 const LEASE = 60_000, AUTH_LEASE = 125_000, RESERVATION = 30_000;
+const HOUR = 3_600_000, DAY = 24 * HOUR, MAX_HISTORY_HOURS = 30 * 24;
 const MAX_BODY = 16_384, MAX_ROOMS = 1000, MAX_SESSIONS = 5000;
 const phases = new Set(['waiting', 'testing', 'starting', 'loading', 'racing', 'returning']);
 const identifier = /^[A-Za-z0-9_-]{1,160}$/;
@@ -94,7 +95,13 @@ export class WorldwideDirectory extends DurableObject {
       CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY, value INTEGER NOT NULL);
       INSERT OR IGNORE INTO meta VALUES('revision',1);
       INSERT OR IGNORE INTO meta VALUES('published',0);
-      INSERT OR IGNORE INTO meta VALUES('connection',0);`);
+      INSERT OR IGNORE INTO meta VALUES('connection',0);
+      CREATE TABLE IF NOT EXISTS online_hourly_peaks(hour INTEGER PRIMARY KEY, players INTEGER NOT NULL);
+      CREATE TABLE IF NOT EXISTS online_monthly_peaks(month INTEGER PRIMARY KEY, players INTEGER NOT NULL);
+      CREATE TABLE IF NOT EXISTS online_yearly_peaks(year INTEGER PRIMARY KEY, players INTEGER NOT NULL);
+      CREATE TABLE IF NOT EXISTS online_peak(singleton INTEGER PRIMARY KEY CHECK(singleton=1), players INTEGER NOT NULL, observed_at INTEGER NOT NULL);`);
+    this.onlineHour = -1;
+    this.hourPeak = 0;
     for (const socket of ctx.getWebSockets()) {
       const data = socket.deserializeAttachment();
       if (data?.instance && data?.account && (!this.sessions.has(data.instance) || (data.connection || 0) > (this.sessions.get(data.instance).data.connection || 0)))
@@ -134,21 +141,107 @@ export class WorldwideDirectory extends DurableObject {
     catch { try { session.socket.close(1013, 'Reconnect to refresh'); } catch {} }
   }
   count() { return new Set([...this.sessions.values()].filter(s => this.live(s.data)).map(s => s.data.account)).size; }
-  list(cursor = '') {
+  observeOnline(players, time = Date.now()) {
+    if (players === 0) return;
+    try {
+      const hour = Math.floor(time / HOUR);
+      if (hour !== this.onlineHour) {
+        this.hourPeak = this.rows('SELECT players FROM online_hourly_peaks WHERE hour=?', hour)[0]?.players ?? 0;
+        this.sql.exec('DELETE FROM online_hourly_peaks WHERE hour<?', hour - MAX_HISTORY_HOURS + 1);
+        this.onlineHour = hour;
+      }
+      if (players <= this.hourPeak) return;
+      const date = new Date(time);
+      const month = date.getUTCFullYear() * 12 + date.getUTCMonth();
+      const day = Math.floor(time / DAY);
+      this.ctx.storage.transactionSync(() => {
+        this.sql.exec(`INSERT INTO online_hourly_peaks VALUES(?,?)
+          ON CONFLICT(hour) DO UPDATE SET players=MAX(players,excluded.players)`, hour, players);
+        this.sql.exec(`INSERT INTO online_peak VALUES(1,?,?)
+          ON CONFLICT(singleton) DO UPDATE SET players=excluded.players,observed_at=excluded.observed_at
+          WHERE excluded.players>online_peak.players`, players, time);
+        this.sql.exec(`INSERT INTO online_monthly_peaks VALUES(?,?)
+          ON CONFLICT(month) DO UPDATE SET players=MAX(players,excluded.players)`, month, players);
+        this.sql.exec('DELETE FROM online_monthly_peaks WHERE month<?', month - 11);
+        this.sql.exec(`INSERT INTO online_yearly_peaks VALUES(?,?)
+          ON CONFLICT(year) DO UPDATE SET players=MAX(players,excluded.players)`, date.getUTCFullYear(), players);
+        const lastDay = this.rows("SELECT value FROM meta WHERE key='online_stats_last_day'")[0]?.value;
+        if (lastDay === undefined || day > lastDay) {
+          this.sql.exec("INSERT OR IGNORE INTO meta VALUES('online_stats_started',?)", time);
+          this.sql.exec("INSERT OR REPLACE INTO meta VALUES('online_stats_last_day',?)", day);
+          this.sql.exec(`INSERT INTO meta VALUES('online_stats_active_days',1)
+            ON CONFLICT(key) DO UPDATE SET value=value+1`);
+        }
+      });
+      this.hourPeak = players;
+    } catch {
+      console.error('Failed to record directory activity.');
+    }
+  }
+  onlineHistory(time) {
+    const hour = Math.floor(time / HOUR);
+    const day = Math.floor(time / DAY);
+    const peak = this.rows('SELECT players,observed_at AS observedAt FROM online_peak WHERE singleton=1')[0] ?? null;
+    const hourly = this.rows('SELECT hour,players FROM online_hourly_peaks WHERE hour>=? ORDER BY hour',
+      (day - 29) * 24);
+    const range = days => {
+      const cutoff = (day - days + 1) * 24;
+      let busiest = null;
+      const daily = new Map();
+      for (const row of hourly) {
+        if (row.hour < cutoff) continue;
+        const dayStart = Math.floor(row.hour / 24) * DAY;
+        daily.set(dayStart, Math.max(row.players, daily.get(dayStart) ?? 0));
+        if (!busiest || row.players > busiest.players) busiest = row;
+      }
+      return { peak: busiest?.players ?? null,
+        busiestHour: busiest ? { startsAt: busiest.hour * HOUR, players: busiest.players } : null,
+        activeDays: daily.size, history: [...daily].map(([startsAt, players]) => ({ startsAt, players })) };
+    };
+    const date = new Date(time);
+    const month = date.getUTCFullYear() * 12 + date.getUTCMonth();
+    const metadata = Object.fromEntries(this.rows("SELECT key,value FROM meta WHERE key IN ('online_stats_started','online_stats_active_days')").map(row => [row.key,row.value]));
+    const oldestMonth = Date.UTC(Math.floor((month - 11) / 12), (month - 11) % 12, 1);
+    const yearly = metadata.online_stats_started < oldestMonth;
+    const lifetime = yearly
+      ? this.rows('SELECT year,players FROM online_yearly_peaks ORDER BY year')
+        .map(row => ({ startsAt: Date.UTC(row.year, 0, 1), players: row.players }))
+      : this.rows('SELECT month,players FROM online_monthly_peaks WHERE month>=? ORDER BY month', month - 11)
+        .map(row => ({ startsAt: Date.UTC(Math.floor(row.month / 12), row.month % 12, 1), players: row.players }));
+    return { peak, trackedSince: metadata.online_stats_started ?? null, periods: {
+      '7': range(7), '30': range(30), all: {
+        peak: peak?.players ?? null,
+        busiestHour: peak ? { startsAt: Math.floor(peak.observedAt / HOUR) * HOUR, players: peak.players } : null,
+        activeDays: metadata.online_stats_active_days ?? 0, interval: yearly ? 'year' : 'month', history: lifetime
+      }
+    } };
+  }
+  list(cursor = '', web = false) {
     need(typeof cursor === 'string' && (!cursor || identifier.test(cursor)), 400, 'cursor', 'Invalid list cursor.');
     const active = this.rows('SELECT data FROM rooms WHERE id>? ORDER BY id', cursor)
       .map(row => JSON.parse(row.data)).filter(room => room.visibility === 'public' && this.roomLive(room));
-    return { rooms: active.slice(0, 50).map(room => publicRoom(room, this.env.RUNNING_SPECTATORS_ENABLED === 'true')), nextCursor: active.length > 50 ? active[49].id : '',
-      online: this.count(), revision: this.revision(), serverTime: Date.now() };
+    const rooms = active.slice(0, 50).map(room => publicRoom(room, this.env.RUNNING_SPECTATORS_ENABLED === 'true'));
+    return { rooms, nextCursor: active.length > 50 ? active[49].id : '',
+      online: this.count(), revision: this.revision(), serverTime: Date.now(), ...(web && !cursor ? {
+        publicLobbies: active.length,
+        publicRacers: active.reduce((total, room) => total + room.racers, 0),
+        publicSpectators: active.reduce((total, room) => total + room.spectators, 0)
+      } : {}) };
   }
   publicSnapshot(cursor) {
-    const { rooms, online, nextCursor, serverTime } = this.list(cursor);
-    return {
-      online, nextCursor, serverTime,
+    const { rooms, online, nextCursor, serverTime, publicLobbies, publicRacers, publicSpectators } = this.list(cursor, true);
+    const snapshot = { online, nextCursor, serverTime,
       rooms: rooms.map(({ id, title, phase, racers, maxRacers, spectators, maxSpectators, canJoin, canSpectate }) => ({
         id, title, phase, racers, maxRacers, spectators, maxSpectators, canJoin, canSpectate
       }))
     };
+    if (!cursor) {
+      snapshot.stats = { publicLobbies, publicRacers, publicSpectators };
+      try {
+        Object.assign(snapshot.stats, this.onlineHistory(serverTime));
+      } catch { console.error('Failed to read directory activity history.'); }
+    }
+    return snapshot;
   }
   cleanup() {
     const now = Date.now(); let changed = false;
@@ -237,7 +330,10 @@ export class WorldwideDirectory extends DurableObject {
         this.ctx.acceptWebSocket(socket); socket.serializeAttachment(data);
         this.sessions.set(who.instance, { socket, data });
         if (old) { try { old.socket.close(1000, 'Reconnected'); } catch {} }
-        this.changed(); this.send({ socket, data }, { type: 'snapshot', ...this.list() });
+        this.changed();
+        const snapshot = this.list();
+        this.observeOnline(snapshot.online, now);
+        this.send({ socket, data }, { type: 'snapshot', ...snapshot });
         return new Response(null, { status: 101, webSocket: client, headers: { 'Sec-WebSocket-Protocol': 'dkrr-online-v1' } });
       }
       const current = this.sessions.get(who.instance);
@@ -478,13 +574,15 @@ export class WorldwideDirectory extends DurableObject {
   async alarm() {
     this.sql.exec("INSERT OR REPLACE INTO meta VALUES('alarm',0)");
     this.cleanup();
+    const online = this.count();
+    this.observeOnline(online);
     const revision = this.revision();
     if (revision > this.rows("SELECT value FROM meta WHERE key='published'")[0].value) {
       const changes = this.rows('SELECT id,data FROM changes');
       const batches = Math.max(1, Math.ceil(changes.length / 50));
       for (let index = 0; index < batches; index++) {
         const batch = changes.slice(index * 50, (index + 1) * 50);
-        const delta = { type: 'delta', revision, online: this.count(),
+        const delta = { type: 'delta', revision, online,
           upsert: batch.filter(row => row.data !== 'null').map(row => JSON.parse(row.data)),
           remove: batch.filter(row => row.data === 'null').map(row => row.id) };
         for (const session of this.sessions.values()) if (this.live(session.data)) this.send(session, delta);

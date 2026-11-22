@@ -97,6 +97,17 @@ room list as the launcher. This endpoint never forwards a browser credential
 or a private room. The browser polls every 30 seconds while visible. A missing
 count is shown as unavailable, and an available count of zero is shown as zero.
 
+The Online card shows currently connected unique accounts against the number
+of active accounts that have signed in through the shared library sign-in.
+People with several launcher instances count once. Live public lobby, racer
+and spectator totals only include publicly listed lobbies.
+
+Player activity has 7-day, 30-day and All-time views. Each view shows the
+peak and days with activity. The recent views also show the busiest hour, new
+sign-ups and daily peaks. All time keeps the first timestamp of the lifetime
+peak, the total active days and a lifetime history chart. The chart groups peaks by month at first and by year once activity spans more than 12 months. Activity history starts when the directory Worker starts collecting
+it. Date buckets are UTC and peak times display in the visitor's time zone.
+
 Copy a public lobby link and choose **Find lobby from website** under **Public
 lobbies** in the updated launcher. The link selects a room from the current
 signed-in launcher list. The existing host, compatibility, mod and slot checks
@@ -107,6 +118,11 @@ Leaderboards at `#leaderboards` use the existing library account. The flow is
 run**. My runs tracks the upload, independent verification and review. Only
 published verified PBs count on each board. The website is staged with no
 qualified boards or upload access by default.
+
+The launcher and in-game overlay use the same Leaderboards page. Open it
+next to Achievements on Play. Its category tabs, track cards and rankings
+read the public website API. Post a run opens the signed-in website flow.
+The launcher keeps the last successful catalogue in memory for the session.
 
 Custom tracks are discovered automatically from the live catalogue, including
 newly published releases. A board identifies an exact release and the server

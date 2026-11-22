@@ -15,3 +15,45 @@
 }
 #dkr-mod-library .dkr-run-table th:last-child, #dkr-mod-library .dkr-run-table td:last-child { text-align: right; }
 #dkr-mod-library .dkr-racing-file { width: 100%; max-width: 100%; }
+#dkr-mod-library .dkr-online-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 7.5rem), 1fr));
+  gap: .9rem 1.25rem;
+  border-top: 1px solid #31515d;
+  margin: 0;
+  padding-top: .9rem;
+}
+#dkr-mod-library .dkr-online-stats dt { color: #abc4cd; font-size: .8rem; }
+#dkr-mod-library .dkr-online-stats dd { margin: .25rem 0 0; }
+#dkr-mod-library .dkr-online-stats dd:not(.dkr-small) { font-size: 1.25rem; font-weight: 700; }
+#dkr-mod-library .dkr-online-history-stats { border: 0; padding: 0; }
+#dkr-mod-library .dkr-online-periods { border-top: 1px solid #31515d; padding-top: .9rem; }
+#dkr-mod-library .dkr-online-periods button[aria-pressed="true"] {
+  background: #b53722;
+  border-color: #ffc15a;
+  color: #fff1c1;
+}
+#dkr-mod-library .dkr-online-history {
+  background: #091d2a;
+  border: 1px solid #31515d;
+  border-radius: 8px;
+  padding: .65rem .8rem;
+}
+#dkr-mod-library .dkr-online-bars {
+  list-style: none;
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: clamp(2px, 1vw, 8px);
+  height: 3.25rem;
+  padding: 0;
+  margin: .55rem 0 .35rem;
+  border-bottom: 1px solid #31515d;
+}
+#dkr-mod-library .dkr-online-bars li {
+  flex: 1;
+  max-width: 3rem;
+  height: max(2px, var(--peak));
+  background: #1abfa9;
+  border-radius: 3px 3px 0 0;
+}

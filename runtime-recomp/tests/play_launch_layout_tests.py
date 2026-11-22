@@ -25,8 +25,11 @@ def main():
     parser.add_argument("--surface", choices=("launcher", "overlay"), default="launcher")
     parser.add_argument("--language", default="en")
     parser.add_argument("--sidebar", choices=("shoulders", "dpad"), default="shoulders")
+    parser.add_argument("--leaderboards", action="store_true", help="Capture Play, leaderboard categories and results")
     parser.add_argument("--save", type=Path, help="Check the Save Manager draft bar using an isolated copy")
     args = parser.parse_args()
+    if args.leaderboards and args.save:
+        parser.error("Choose a single layout check")
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=False)
     profile = output / ("dkr-ui-navigation-check-" + secrets.token_hex(8))
@@ -56,7 +59,8 @@ def main():
     env.update(
         DKR_LAUNCHER_UI_CHECK_TOKEN=token,
         DKR_OWNED_CHECK_LAYOUT_UI=args.size,
-        DKR_OWNED_CHECK_PLAY_LAUNCH="save" if args.save else "1",
+        DKR_OWNED_CHECK_PLAY_LAUNCH="save" if args.save else "0" if args.leaderboards else "1",
+        DKR_OWNED_CHECK_LEADERBOARD_LAYOUT="1" if args.leaderboards else "0",
         DKR_OWNED_CHECK_LAYOUT_SURFACE=args.surface,
         SDL_AUDIODRIVER="dummy",
         APPDATA=str(output / "appdata"),
@@ -93,6 +97,18 @@ def main():
             proc.wait(timeout=15)
             raise AssertionError("The isolated layout check did not finish") from None
     text = (profile / "logs/runtime.log").read_text(errors="replace")
+    if args.leaderboards:
+        matches = re.findall(
+            r"\[launcher-layout\]\[isolated-check\] step=(\d+) page=(\d+) width=(\d+) height=(\d+) captured", text
+        )
+        assert code == 0 and len(matches) == 4, matches
+        assert [int(match[1]) for match in matches] == [0, 14, 14, 14]
+        for step, _, width, height in matches:
+            data = (profile / f"layout-{step}.bmp").read_bytes()
+            assert data[:2] == b"BM" and struct.unpack_from("<I", data, 2)[0] == len(data)
+            assert struct.unpack_from("<ii", data, 18) == (int(width), int(height))
+        print(json.dumps({"surface": args.surface, "size": args.size, "layout": matches}, indent=2))
+        return
     rows = []
     label = "save-draft" if args.save else "play-launch"
     for match in re.finditer(r"\[" + label + r"\]\[isolated-check\] ([^\r\n]+)", text):

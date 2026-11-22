@@ -22,6 +22,9 @@ struct Image {
 };
 struct Snapshot {
     std::shared_ptr<const Json> items = std::make_shared<const Json>(Json::array());
+    std::shared_ptr<const Json> speedrun_catalogue, speedrun_board;
+    std::string speedrun_request, speedrun_error;
+    bool speedrun_loading = false;
     Json user = nullptr, personal = Json::object(), staff = Json::object(), admin = Json::object();
     Json reviews = Json::object(), uploads = Json::array(), assets = Json::array(), upload = Json::object();
     std::vector<Download> downloads;
@@ -42,6 +45,7 @@ class Service {
     void configure(const std::filesystem::path&, std::string version);
     std::shared_ptr<const Snapshot> view() const;
     void refresh();
+    void load_leaderboards(std::string board = {}, std::string cursor = {});
     void gameplay(bool active);
     bool refresh_names();
     void layout(int);

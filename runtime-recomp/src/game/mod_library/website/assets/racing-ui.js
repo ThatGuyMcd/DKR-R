@@ -1,6 +1,7 @@
 (function () {
   'use strict';
   const replayModule = new URL('replay-format.js?v=1', document.currentScript?.src || new URL('assets/racing-ui.js', document.baseURI).href);
+  const activityPeriods = [['7','7 days'],['30','30 days'],['all','All time']];
   const sections = [['vanilla','Vanilla Tracks'],['custom','Custom Tracks'],['full-game','Full Game']];
   const phases = {waiting:'In lobby',testing:'Testing connection',starting:'Starting',loading:'Loading',racing:'Racing',returning:'Returning to lobby'};
   const states = {uploading:'Upload incomplete',queued:'Waiting for verification',verified:'Waiting for moderator review',published:'Published',rejected:'Rejected'};
@@ -13,6 +14,7 @@
 
   window.DKRRacingUI = {create({ root, config, Auth, view, user, isStaff, esc, icon, button, pagehead, requireSignedIn, go, renderIcons }) {
     const linkedRoom = /^#lobby=([a-f0-9]{32})$/.exec(location.hash)?.[1];
+    let activityPeriod = 'all';
     let online, directoryError, directoryBusy = false, directoryTimer;
     let catalogue, board, selectedBoard = '', section = 'vanilla', listingTab = 'boards';
     let privateRows = [];
@@ -58,19 +60,74 @@
       return pagehead('DKR-R Online', 'See who’s online and find a public lobby.') +
         '<div class="dkr-stack" data-online-region>' + onlineContent() + '</div>';
     }
+    const players = value => Number.isSafeInteger(value) && value >= 0 ? value.toLocaleString() : '—';
+    function activityTime(value) {
+      return Number.isSafeInteger(value) && value > 0 ? new Intl.DateTimeFormat(undefined, {
+        weekday:'short', month:'short', day:'numeric', hour:'numeric', minute:'2-digit', timeZoneName:'short'
+      }).format(value) : '';
+    }
+    function stat(label, count, detail = '') {
+      return '<div><dt>' + label + '</dt><dd>' + players(count) +
+        '</dd>' + (detail ? '<dd class="dkr-small dkr-muted">' + esc(detail) + '</dd>' : '') + '</div>';
+    }
+    function activityHistory(history, interval) {
+      if (!Array.isArray(history) || !history.length) return '';
+      const valid = history.filter(point => Number.isSafeInteger(point.startsAt) &&
+        Number.isSafeInteger(point.players) && point.players >= 0);
+      if (!valid.length) return '';
+      const maximum = Math.max(1, ...valid.map(point => point.players));
+      const date = new Intl.DateTimeFormat(undefined, interval === 'year' ? {year:'numeric',timeZone:'UTC'} :
+        interval === 'month' ? {month:'short',year:'numeric',timeZone:'UTC'} : {month:'short',day:'numeric',timeZone:'UTC'});
+      const label = interval === 'year' ? 'Yearly peaks' :
+        interval === 'month' ? 'Monthly peaks' : 'Daily peaks · days with recorded activity (UTC)';
+      return '<div class="dkr-online-history"><h3 class="dkr-small">' + label + '</h3>' +
+        '<ol class="dkr-online-bars" aria-label="' + label + '">' + valid.map(point => {
+          const tip = date.format(point.startsAt) + ' · ' + players(point.players) + ' online';
+          return '<li style="--peak:' + Math.round(100 * point.players / maximum) + '%" title="' + esc(tip) +
+            '" aria-label="' + esc(tip) + '"></li>';
+        }).join('') + '</ol><p class="dkr-row dkr-between dkr-small dkr-muted"><span>' +
+        esc(date.format(valid[0].startsAt)) + '</span>' +
+        (valid.length > 1 ? '<span>' + esc(date.format(valid.at(-1).startsAt)) + '</span>' : '') + '</p></div>';
+    }
+    function onlineStats(live) {
+      const stats = online?.stats;
+      const period = stats?.periods?.[activityPeriod];
+      const lifetime = activityPeriod === 'all';
+      const peakTime = activityTime(stats?.peak?.observedAt);
+      const busiest = period?.busiestHour;
+      const busiestTime = activityTime(busiest?.startsAt);
+      return '<dl class="dkr-online-stats">' + stat('Public lobbies',live ? stats?.publicLobbies : undefined) +
+        stat('Racers in public lobbies',live ? stats?.publicRacers : undefined) +
+        stat('Spectators in public lobbies',live ? stats?.publicSpectators : undefined) + '</dl>' +
+        '<div class="dkr-row dkr-between dkr-online-periods"><h2 class="dkr-subtitle">Player activity</h2>' +
+        '<div class="dkr-row" role="group" aria-label="Activity period">' +
+        activityPeriods.map(([id,label]) => '<button type="button" class="dkr-button quiet small" data-action="online-period" data-id="' +
+          id + '" aria-pressed="' + (activityPeriod === id) + '">' + label + '</button>').join('') + '</div></div>' +
+        '<dl class="dkr-online-stats dkr-online-history-stats">' +
+        stat(lifetime ? 'All-time concurrent peak' : 'Peak concurrent players', period?.peak,
+          lifetime ? peakTime : '') +
+        stat('Days with activity',period?.activeDays) +
+        (lifetime ? '<div><dt>Activity recorded since</dt><dd class="dkr-small">' +
+          esc(stats?.trackedSince ? new Intl.DateTimeFormat(undefined,{dateStyle:'medium'}).format(stats.trackedSince) : 'Collecting activity') + '</dd></div>' :
+          '<div><dt>Busiest hour</dt><dd class="dkr-small">' + esc(busiestTime || 'Collecting activity') + '</dd>' +
+          (busiestTime ? '<dd class="dkr-small dkr-muted">' + players(busiest.players) + ' at peak</dd>' : '') + '</div>' +
+          stat('New sign-ups',online?.newSignups?.[activityPeriod])) + '</dl>' + activityHistory(period?.history,lifetime ? period?.interval || 'month' : 'day');
+    }
     function onlineContent() {
       const age = online && Date.now() - online.serverTime;
       const live = online && age < 90000 && !directoryError;
-      const count = live ? online.online : '—';
+      const count = players(live ? online.online : undefined);
+      const registered = players(online?.totalSignedUp);
       const status = directoryError === 'disabled' ? 'The public lobby browser is currently disabled.' :
         online && !live ? 'Last known rooms. Open DKR-R Online to check availability.' :
         directoryError ? 'The lobby list could not be loaded.' :
         online ? 'Updates every 30 seconds.' : 'Loading the public lobby list…';
       const rooms = online ? [...online.rooms] : [];
       if (linkedRoom) rooms.sort((a, b) => Number(b.id === linkedRoom) - Number(a.id === linkedRoom));
-      return '<section class="dkr-panel dkr-row dkr-between"><div><strong class="dkr-racing-count">' + count +
-        '</strong> players online<p class="dkr-small dkr-muted" role="status">' + esc(status) + '</p></div>' +
-        button('online-refresh',icon('refresh-cw') + 'Refresh','quiet small') + '</section>' +
+      return '<section class="dkr-panel dkr-stack"><div class="dkr-row dkr-between"><div><strong class="dkr-racing-count">' +
+        count + ' / ' + registered + '</strong><p class="dkr-small">Total online / Total signed up</p>' +
+        '<p class="dkr-small dkr-muted" role="status">' + esc(status) + '</p></div>' +
+        button('online-refresh',icon('refresh-cw') + 'Refresh','quiet small') + '</div>' + onlineStats(live) + '</section>' +
         '<p class="dkr-small dkr-muted">Copy a link and use Find lobby from website in the launcher’s Public lobbies panel. The host approves requests to race or spectate.</p>' +
         (onlineNotice ? '<p role="status">' + esc(onlineNotice) + '</p>' : '') +
         (rooms.length ? '<div class="dkr-racing-grid">' + rooms.map(room =>
@@ -96,7 +153,7 @@
         if (more && online) {
           const rooms = new Map(online.rooms.map(room => [room.id, room]));
           data.rooms.forEach(room => rooms.set(room.id, room));
-          online = {...data, rooms:[...rooms.values()]};
+          online = {...online, ...data, rooms:[...rooms.values()]};
         } else online = data;
         directoryError = '';
       } catch (error) {
@@ -257,6 +314,13 @@
 
     async function action(action, id, target) {
       if (action === 'online' || action === 'speedruns' || action === 'post-run') { await go(action); return true; }
+      if (action === 'online-period') {
+        if (activityPeriods.some(([value]) => value === id)) {
+          activityPeriod = id;
+          refreshRegion('[data-online-region]',onlineContent);
+        }
+        return true;
+      }
       if (action === 'online-refresh' || action === 'online-more') {
         await loadOnline({ fresh:action === 'online-refresh', more:action === 'online-more' }); return true;
       }

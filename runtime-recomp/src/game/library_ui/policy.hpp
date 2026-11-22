@@ -9,10 +9,10 @@
 
 namespace dkr::library_ui {
 // Existing page identities stay stable. Only visual order changes.
-inline constexpr int LibraryPage = 10, PageCount = 11;
+inline constexpr int LibraryPage = 10, PageCount = 11, LeaderboardsPage = 14;
 inline constexpr std::array<int, PageCount> SidebarOrder{0, 5, LibraryPage, 6, 1, 2, 3, 7, 13, 11, 12};
 inline constexpr int sidebar_parent(int page) {
-    return page == 4 || page == 9 ? 0 : page;
+    return page == 4 || page == 9 || page == LeaderboardsPage ? 0 : page;
 }
 inline constexpr int TexturesSection = 4;
 // Preserve existing section identities used by links and import callbacks.

@@ -1389,6 +1389,59 @@ void Service::refresh() {
     auto& p = *impl_;
     p.queue([&p](std::stop_token stop) { p.refresh(stop); });
 }
+void Service::load_leaderboards(std::string board, std::string cursor) {
+    if ((!board.empty() && !identifier(board)) || (!cursor.empty() && !identifier(cursor)))
+        return;
+    auto& p = *impl_;
+    {
+        std::lock_guard lock(p.mutex);
+        if (!p.configured || p.state.speedrun_loading)
+            return;
+        p.state.speedrun_loading = true;
+        p.state.speedrun_request = board;
+        p.state.speedrun_error.clear();
+        p.publish();
+    }
+    if (!p.queue([&p, board = std::move(board), cursor = std::move(cursor)](std::stop_token stop) {
+            try {
+                const auto url = board.empty()
+                                     ? "/v1/speedruns" + (cursor.empty() ? std::string{} : "?cursor=" + cursor)
+                                     : "/v1/speedruns/boards/" + board;
+                auto data = p.get(url, stop);
+                if (board.empty() && (!data.contains("boards") || !data["boards"].is_array() ||
+                                      !data.contains("customTracks") || !data["customTracks"].is_array()))
+                    throw Error("The leaderboard service returned an invalid track list.");
+                if (!board.empty() && (!data.contains("board") || !data["board"].is_object() ||
+                                       !data.contains("entries") || !data["entries"].is_array()))
+                    throw Error("The leaderboard service returned an invalid result list.");
+                p.update([&](Snapshot& state) {
+                    state.speedrun_loading = false;
+                    if (!board.empty()) {
+                        state.speedrun_board = std::make_shared<const Json>(std::move(data));
+                        return;
+                    }
+                    if (!cursor.empty() && state.speedrun_catalogue) {
+                        Json combined = *state.speedrun_catalogue;
+                        for (auto& track : data["customTracks"])
+                            combined["customTracks"].push_back(std::move(track));
+                        combined["nextCursor"] = data["nextCursor"];
+                        data = std::move(combined);
+                    }
+                    state.speedrun_catalogue = std::make_shared<const Json>(std::move(data));
+                });
+            } catch (const std::exception&) {
+                p.update([](Snapshot& state) {
+                    state.speedrun_loading = false;
+                    state.speedrun_error = "Leaderboards are unavailable. Try refreshing.";
+                });
+            }
+        })) {
+        p.update([](Snapshot& state) {
+            state.speedrun_loading = false;
+            state.speedrun_error = "Wait for the current library request to finish.";
+        });
+    }
+}
 bool Service::refresh_names() {
     auto& p = *impl_;
     {

@@ -517,6 +517,8 @@ void DrawPlayPage(float available_width, const PlayPageContext& play, bool live 
     ImGui::PopStyleVar();
     LibraryNavigationScrollWindow(ImGui::GetCurrentWindow());
     width = std::max(1.F, std::min(available_width, ImGui::GetContentRegionAvail().x - 8.F));
+    DrawPlayTools(width);
+    PaddockGap(14.F);
     DrawLauncherFeatured(width, live);
 
     // The ROM pass: status, the ROM list, and the actions for it.
@@ -665,19 +667,13 @@ void DrawPlayPage(float available_width, const PlayPageContext& play, bool live 
         ImGui::EndDisabled();
         ImGui::PopStyleColor();
         const float options_x = side ? at.x + width - options_width - 26.F : at.x + 26.F;
-        const float tools_width = side ? options_x - at.x - 58.F : width - 52.F;
-        const float tools_height = PlayToolsHeight(tools_width);
-        const float left_height = height + tools_height + 16.F;
-        const float options_y = side ? at.y + 26.F : at.y + left_height + 8.F;
+        const float options_y = side ? at.y + 26.F : at.y + height + 8.F;
         ImGui::SetCursorScreenPos({options_x, options_y});
         ImGui::BeginGroup();
         DrawPlayLaunchOptions(options_width, entered, live);
         ImGui::EndGroup();
         const float options_height = ImGui::GetItemRectSize().y;
-        const float final_height =
-            side ? std::max(left_height, options_height + 52.F) : left_height + options_height + 34.F;
-        ImGui::SetCursorScreenPos({at.x + 26.F, at.y + (side ? final_height : left_height) - 26.F - tools_height});
-        DrawPlayTools(tools_width);
+        const float final_height = side ? std::max(height, options_height + 52.F) : height + options_height + 34.F;
         if (side)
             draw->AddLine({options_x - 16.F, at.y + 26.F}, {options_x - 16.F, at.y + final_height - 26.F},
                           PaddockCol(0x325365));

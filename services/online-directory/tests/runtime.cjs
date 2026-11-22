@@ -25,7 +25,7 @@ async function main(){
   const now=Math.floor(Date.now()/1000),tokens={};
   for(const name of ['host','guest','other','intruder','closer']){
    const token=randomBytes(32).toString('base64url');tokens[name]=token;
-   await db.prepare('INSERT INTO accounts VALUES(?,?,?,?,?,?,?)').bind(name,name,'Player '+name,'player','active',now,now).run();
+   await db.prepare('INSERT INTO accounts VALUES(?,?,?,?,?,?,?)').bind(name,name,'Player '+name,'player','active',name==='closer'?now-45*86400:now,now).run();
    await db.prepare('INSERT INTO sessions VALUES(?,?,?,?,?,?,NULL)').bind(createHash('sha256').update(token).digest('base64url'),name,now,now,now+3600,now+86400).run();
   }
   const api={fetch:(...args)=>mf.dispatchFetch(...args)};
@@ -77,6 +77,27 @@ async function main(){
    };
    await client.event('snapshot');return client;
   }
+  // Use a separate private object to exercise retention without waiting months.
+  const namespace=await mf.getDurableObjectNamespace('DIRECTORY','online');
+  const historyObject=namespace.get(namespace.idFromName('activity-history-test'));
+  const today=Date.now(), day=86400000;
+  await historyObject.observeOnline(45,today-400*day);
+  await historyObject.observeOnline(30,today-15*day);
+  await historyObject.observeOnline(9,today);
+  const history=await historyObject.onlineHistory(today);
+  equal(history.periods['7'].peak,9,'weekly peak ignores older activity');
+  equal(history.periods['30'].peak,30,'monthly peak includes activity from two weeks ago');
+  equal(history.periods.all.peak,45,'old records retain the lifetime peak');
+  equal(history.periods.all.activeDays,3,'lifetime tracks active days beyond recent retention');
+  equal(history.periods.all.interval,'year','lifetime chart groups old observations by year');
+  check(history.periods.all.history.some(point=>point.players===45),'the yearly chart keeps older records');
+  const emptyActivity=await (await http('/v1/online/public')).json();
+  equal(emptyActivity.online,0,'empty directory has a real zero online count');
+  equal(emptyActivity.totalSignedUp,5,'registered count uses the library account table');
+  equal(emptyActivity.stats.peak,null,'unobserved peak is not invented');
+  equal(emptyActivity.stats.periods.all.busiestHour,null,'unobserved peak time is not invented');
+  equal(emptyActivity.newSignups['7'],4,'weekly sign-ups exclude an older account');
+  equal(emptyActivity.newSignups['30'],4,'monthly sign-ups exclude an older account');
   let host=await open('host');const guest=await open('guest'),duplicate=await open('guest'),other=await open('other');
   equal((await guest.call({type:'heartbeat'})).data.online,3,'online count deduplicates accounts across instances');
   equal((await api.fetch('https://test.invalid/v1/online/session',{method:'POST',headers:{Origin:'https://positron-portal.com',Authorization:'bearer '+tokens.other,'X-DKRR-Instance':other.instance},body:'{}'})).status,200,'authorization scheme casing does not change session binding');
@@ -88,6 +109,20 @@ async function main(){
   const webPrivate=await (await http('/v1/online/public')).json();
   equal(webPrivate.online,3,'website sees the same deduplicated active player count');
   equal(webPrivate.rooms.length,0,'website excludes live private rooms');
+  equal(webPrivate.stats.publicLobbies,0,'private rooms do not appear in public lobby totals');
+  equal(webPrivate.stats.peak.players,3,'peak counts distinct concurrent accounts');
+  check(webPrivate.stats.peak.observedAt<=webPrivate.serverTime,'recorded peak has a server timestamp');
+  for (const span of ['7','30','all']) {
+   const period=webPrivate.stats.periods[span];
+   equal(period.peak,3,'the current peak uses the same count for '+span);
+   equal(period.busiestHour.startsAt%3600000,0,'busiest hour starts on a UTC hour boundary for '+span);
+   equal(period.activeDays,1,'activity counts the current date once for '+span);
+   equal(period.history[0].players,3,'recorded history has the observed peak for '+span);
+  }
+  equal(webPrivate.stats.periods.all.interval,'month','new lifetime history is grouped by month');
+  check(webPrivate.stats.trackedSince<=webPrivate.stats.peak.observedAt,'all-time tracking begins before the peak');
+  equal(webPrivate.stats.publicRacers,0,'private racers are not counted in public totals');
+  equal(webPrivate.stats.publicSpectators,0,'private spectators are not counted in public totals');
   equal((await http('/v1/online/public',null,null,'POST')).status,405,'website projection is read-only');
   equal((await http('/v1/online/public?cursor=invalid')).status,400,'invalid public cursor is refused');
   equal((await http('/v1/online/lobbies')).status,401,'launcher list remains authenticated');
@@ -109,6 +144,10 @@ async function main(){
   equal(webResponse.headers.get('Cache-Control'),'public, max-age=15, s-maxage=15','website projection is briefly cacheable');
   const web=await webResponse.json();
   equal(web.rooms.length,1,'public lobby visible on the website');
+  equal(web.stats.publicLobbies,1,'live public lobby appears in the aggregate');
+  equal(web.stats.publicRacers,1,'public racer occupancy is included');
+  equal(web.stats.publicSpectators,0,'public spectator occupancy is separate');
+  equal(web.stats.peak.observedAt,webPrivate.stats.peak.observedAt,'equal counts preserve the first all-time peak timestamp');
   const projection=web.rooms[0];
   assert.deepEqual(Object.keys(projection).sort(),
     ['canJoin','canSpectate','id','maxRacers','maxSpectators','phase','racers','spectators','title']);
