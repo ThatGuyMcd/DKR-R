@@ -7,11 +7,18 @@ symbols = [
   "gRacersByPort",
   "gTrackCheckpoints",
   "gNumberOfMainCheckpoints",
+  "gNumRacers",
+  "gRaceStartTimer",
+  "gObjPtrList",
+  "gObjectCount",
+  "gAssetsMiscSection",
+  "gAssetsMiscTable",
+  "gAssetsMiscTableLength",
 ]
 template = '''#pragma once
 #include <cstdint>
 namespace dkr::runtime::netplay::experimental::check_autopilot_symbols {
-struct Symbols {std::uint32_t racers_by_port;std::uint32_t checkpoints;std::uint32_t checkpoint_count;};
+struct Symbols {std::uint32_t racers_by_port;std::uint32_t checkpoints;std::uint32_t checkpoint_count;std::uint32_t racer_count;std::uint32_t race_start_timer;std::uint32_t object_list;std::uint32_t object_count;std::uint32_t misc_section;std::uint32_t misc_table;std::uint32_t misc_table_length;};
 inline constexpr Symbols symbols77{@ALL:77@};
 inline constexpr Symbols symbols80{@ALL:80@};
 }
