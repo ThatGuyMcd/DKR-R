@@ -13,7 +13,8 @@ records keep their original versions and results. The v1.0.9 validation record
 is archived separately. Version-independent format references, licences,
 credits, SDK numbers and Blender addon versions keep their existing meaning.
 
-The [release Patch Pipeline](../patches/release-prep/v1.0.10/release.py) creates
+The release Patch Pipeline (`patches/release-prep/v1.0.10/release.py` before the
+fold, in git history) creates
 a verified source backup, applies the authored documentation and records the
 before/after hashes. It checks unrelated pre-existing source remains unchanged.
 The release handoff includes a documentation inventory and local-link results.

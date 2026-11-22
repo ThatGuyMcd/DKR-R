@@ -231,7 +231,9 @@ Before handing over a feature or fix:
 2. Update the changelog and any packaged readme affected.
 3. State platform gates, limits and unfinished parts next to the feature.
 4. Retain historical investigations with a clear historical/proposal status.
-5. Check local links, example arguments and release metadata references.
+5. Check example arguments and release metadata references.
+   `python3 scripts/check_doc_links.py` checks the local links, and the tooling
+   suite runs it.
 6. Keep contributor attribution and licence texts intact.
 
 Use direct, practical British English. Explain the user action first, then
