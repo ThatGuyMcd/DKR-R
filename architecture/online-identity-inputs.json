@@ -316,8 +316,8 @@
       "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
     },
     "runtime-recomp/src/game/netplay/experimental_runtime.cpp": {
-      "sha256": "7784b8e94652c749fa3f0762a4e4c513ca0e773b8508802e65879caa713ccb00",
-      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+      "sha256": "770acd6c9bbe19ca8f3e609ba3a130cc7409e5298fa1237368c59e5a7cb9056d",
+      "reason": "The self-test's [check][course] line also logs how many checkpoints the race loaded; nothing peers simulate or send changes."
     },
     "runtime-recomp/src/game/netplay/experimental_runtime.hpp": {
       "sha256": "e2bd584098e45af7e67b6198f650d18a204d3b57be6bbe3214639e3abe73598c",

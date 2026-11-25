@@ -916,7 +916,10 @@ allocation made after it, so a build with the patches and one without can't
 race each other: the owned rollback contracts changed with it
 (`docs/contracts/ONLINE_IDENTITY.md`). Track Lab reports a set over 127 as an
 error and one over 60 as a warning, since older DKR-R builds and original
-hardware still load only 60.
+hardware still load only 60. Retail's largest set is 48 gates, so the stock
+courses never reach the added entries: `tools/blender/make_dense_checkpoint_track.py`
+grows a retail course's set to 127, and the rollback self-test races it online
+([Racing a Track Lab course](ROLLBACK-SELF-TEST.md#racing-a-track-lab-course)).
 
 **`mods/` belongs to librecomp.** N64ModernRuntime ships its own mod system,
 it is live in DKR-R, and it scans `mods/` for its `.nrm` format. A `.dkrmap`
