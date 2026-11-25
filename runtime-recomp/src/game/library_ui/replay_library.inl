@@ -254,7 +254,8 @@ std::string ReplayDate(std::filesystem::file_time_type saved) {
 #else
     const auto stamp = std::chrono::file_clock::to_sys(saved);
 #endif
-    return LocalReplayDate(std::chrono::system_clock::to_time_t(stamp), "%Y-%m-%d");
+    const auto system_stamp = std::chrono::time_point_cast<std::chrono::system_clock::duration>(stamp);
+    return LocalReplayDate(std::chrono::system_clock::to_time_t(system_stamp), "%Y-%m-%d");
 }
 
 void RenameLocalReplay(const std::filesystem::path& file, const std::string& title) {
