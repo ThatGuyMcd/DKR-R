@@ -10,6 +10,8 @@
 - Add Badge Gallery, compact Play settings and Speedrunning loading transitions.
 - Integrate contributor work on custom levels, checkpoint capacity, controllers,
   water, road wheels, relay, build tooling and tests.
+- Allow rollback self-tests to race a Track Lab course and report the number
+  of checkpoints loaded.
 - See the [release notes](docs/releases/1.0.16/RELEASE-NOTES.txt) for details.
 
 ## 1.0.16 playtest 5 — 2026-11-25

@@ -55,7 +55,8 @@ Graphics and modding
   1080p at 60 fps where the category permits, with a host render profile.
 - Contributor work includes water caustics and vehicle spray, road wheels,
   Track Lab challenge/boss/hub support, SDK schema documentation, generated
-  symbols and build tooling.
+  symbols and build tooling. The rollback self-test also accepts a Track Lab
+  course and reports the number of checkpoints it loaded.
 
 Extract the complete Windows ZIP and use DKR-R.exe. On Linux or Steam Deck
 make the AppImage executable. Keep your profile and supply your own US v1.0

@@ -2,7 +2,7 @@
 
 ## v1.0.16 local review
 
-The candidate includes the contributor history through upstream commit 66c1923
+The candidate includes the contributor history through upstream commit 669b916
 and the local integration changes. The local release handoff records its exact
 commit, build and updater evidence, package hashes and remaining device checks.
 Only publish from the approved release commit after the compatibility review,
