@@ -17,11 +17,16 @@ from urllib.error import HTTPError
 from urllib.request import Request, build_opener
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-
 from ranked_track_package import origin, retrieve_track
 from render_ranked_video import MAX_MOVIE_BYTES
 from run_public_ranked import (
-    MAX_ADVENTURE_BYTES, MAX_REPLAY_BYTES, NoRedirect, file_digest, renew_claim, replay_metadata, replay_rom_for,
+    MAX_ADVENTURE_BYTES,
+    MAX_REPLAY_BYTES,
+    NoRedirect,
+    file_digest,
+    renew_claim,
+    replay_metadata,
+    replay_rom_for,
     runtime_binary,
 )
 

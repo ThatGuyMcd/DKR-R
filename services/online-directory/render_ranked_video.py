@@ -26,7 +26,6 @@ from verify_time_trial import (  # noqa: E402
     verification_result,
 )
 
-
 WIDTH, HEIGHT = 1920, 1080
 REPLAY_HZ, VIDEO_FPS = 30, 60
 BOOKEND_FRAMES = 2 * VIDEO_FPS
