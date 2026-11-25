@@ -21,7 +21,8 @@ No old Apple asset may be relabelled as v1.0.9 or inserted into its manifest.
 
 ## Source and native evidence
 
-The [v1.0.9 Patch Pipeline](patches/release-prep/v1.0.9/BUILDING.txt) composes
+The v1.0.9 Patch Pipeline (`patches/release-prep/v1.0.9/BUILDING.txt` before the
+fold, in git history) composes
 over the owner-accepted directory, Scoreboard, checkpoint/start/departure,
 spectator, vehicle, achievement and texture layers. The four source audits
 verified 2,343 existing authored files against a recoverable pre-release
@@ -65,8 +66,8 @@ made that it is enabled in production. FTP upload behaviour is retained.
 Physical ROM import, both-revision play, GPU/audio, controller/touch, native
 TLS/keyring behaviour, suspend/resume, sustained performance, WAN connectivity,
 swaps, checkpoints and updater installation still need acceptance on the
-actual target hardware. Follow [platform support](docs/PLATFORMS.md),
-[Online](docs/ONLINE_MULTIPLAYER.md) and [Updates](docs/UPDATES.md).
+actual target hardware. Follow [platform support](../PLATFORMS.md),
+[Online](../ONLINE_MULTIPLAYER.md) and [Updates](../UPDATES.md).
 
 ## Publishing and update assets
 
@@ -77,6 +78,6 @@ not a substitute. A separate signing receipt records verification; this build
 record does not imply a signature, GitHub publication, tag, FTP upload or API
 deployment was performed by the build tools.
 
-The [v1.0.8 build record](docs/history/RELEASE-VALIDATION-1.0.8.md) is retained
+The [v1.0.8 build record](RELEASE-VALIDATION-1.0.8.md) is retained
 verbatim as historical evidence. Earlier stable records remain under
 `patches/startup-memory/history` and `patches/release-prep/v1.0.7/history`.

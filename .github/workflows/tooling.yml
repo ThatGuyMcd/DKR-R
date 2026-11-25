@@ -60,6 +60,13 @@ jobs:
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: python3 scripts/pattern_guard.py --diff "$BASE_SHA"
+      # Every identity input whose digest changed in the PR must say why: a new
+      # reason beside it in architecture/online-identity-inputs.json.
+      - name: Identity record against the PR base
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: python3 scripts/identity_guard.py check --against "$BASE_SHA"
       # Report only until shellcheck's remaining warnings are fixed by hand.
       - name: shellcheck (advisory)
         continue-on-error: true

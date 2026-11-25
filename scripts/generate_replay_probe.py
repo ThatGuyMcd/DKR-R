@@ -614,7 +614,10 @@ INPUT_NATIVE_HASH = {
     # every hook here, so retail courses and the frozen online world are untouched. New stores:
     # skip_custom_boss_intro, return_lent_boss_flags, the links hook; new call: get_settings
     # (through GuestCallContext), only when a custom boss level is loaded.
-    "runtime-recomp/src/game/custom_tracks_hooks.cpp": "e3ae095263320767115d25b29e1cdcbb72a3905e8a0835590a5449de4bebc4e8",
+    # Nov 20: boss-finish predicate and shadow budgets are funcs-only and return
+    # before touching guest state when resources are frozen or owned bootstrap
+    # is active. No owned/probe hooks or native bindings are added.
+    "runtime-recomp/src/game/custom_tracks_hooks.cpp": "751390958b0001317a796159e26cfdbd2a6dadaf1d238bba7bf13e461cba43db",
     # Online mod owner: same no-session returns, explicit TLS namespace and
     # closed private guest callback table; no live/default dispatch fallback.
     # Oct 6: bounded sparse model-slot scan and pre-dereference allocation

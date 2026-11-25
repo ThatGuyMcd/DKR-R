@@ -19,6 +19,7 @@ Windows). Commands with options describe them with `--help`.
 | Prepare/verify/sign updates | `python scripts/release/update_assets.py --help` | Finished packages, committed source, original Ed25519 private key for signing only |
 | Check release docs | `python scripts/release/check_docs.py --help` | The previous release tag |
 | Validate release metadata | `python3 scripts/validate_release_metadata.py` | Repository files |
+| Check Markdown links | `python3 scripts/check_doc_links.py` | Git and Python; the tooling suite runs it on every tracked `*.md` |
 | Stage the source code-mod SDK | `python3 scripts/stage_magic_code_sdk.py --output <fresh-directory>` | Authored SDK, guide and address-only kits; optional sample NRMs |
 | Render the modder's book | `python3 scripts/render_magic_code_guide.py --output <fresh-guide.html>` | `modding/MODDERS-GUIDE.txt` and exact public headers; no game execution |
 | Scan source assets | `python3 scripts/scan_for_game_assets.py` | Prunes ignored build/dependency directories |

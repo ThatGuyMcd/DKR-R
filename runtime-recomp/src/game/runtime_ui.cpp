@@ -1878,6 +1878,8 @@ void SaveSettings() {
         output << "controller_assignment_mode="
                << static_cast<int>(dkr::runtime::platform::controller_assignment_mode()) << '\n';
         output << "keyboard_player=" << dkr::runtime::input::keyboard_player() << '\n';
+        // A file with this key was saved by a build that reloads bindings as written.
+        output << "controller_binding_version=1\n";
         const auto controller_assignments = dkr::runtime::platform::controller_assignment_keys();
         for (std::size_t player = 0; player < dkr::runtime::input::kPlayerCount; ++player) {
             output << "player" << (player + 1U) << ".controller_key=" << controller_assignments[player] << '\n';
@@ -2017,6 +2019,7 @@ void LoadSettings() {
     auto profile = dkr::runtime::enhancements::PresentationProfile::Accurate;
     bool profile_value_valid = true;
     bool migrated = false;
+    int controller_binding_version = 0;
     bool modern_scenery_settings_v2 = false;
     bool has_automatic_backend_setting = false;
     bool has_rollback_optin_setting = false;
@@ -2494,6 +2497,8 @@ void LoadSettings() {
                                       : dkr::runtime::controllers::AssignmentMode::Automatic;
             } else if (key == "keyboard_player") {
                 dkr::runtime::input::set_keyboard_player(number);
+            } else if (key == "controller_binding_version") {
+                controller_binding_version = number;
             } else if (LoadPlayerBindingSetting(key, number)) {
             } else if (LoadLegacyBindingSetting(key, number)) {
             }
@@ -2505,6 +2510,20 @@ void LoadSettings() {
     // still owns an open handle. Migration may call SaveSettings below, so
     // release the read handle before attempting that replacement.
     input.close();
+    // A file without the key may still hold what the v1.0.14 and v1.0.15 reload
+    // did to it. It is checked this once; later choices are the player's.
+    if (controller_binding_version < 1) {
+        std::size_t restored = 0;
+        for (std::size_t player = 0; player < dkr::runtime::input::kPlayerCount; ++player) {
+            restored += dkr::runtime::input::repair_reload_unbound_defaults(
+                player, dkr::runtime::driving::profile(static_cast<unsigned>(player)).enabled);
+        }
+        if (restored != 0) {
+            std::fprintf(stderr, "[boot][settings] restored %zu controller bindings an earlier version unbound\n",
+                         restored);
+        }
+        migrated = true;
+    }
     // Canonicalize legacy backend flags after reading the complete file.
     // Retain valid delay/player/development preferences, not the removed modes.
     const bool migrated_rollback_backend = !has_legacy_backend_setting || !has_automatic_backend_setting ||

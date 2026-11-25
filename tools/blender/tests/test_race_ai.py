@@ -346,7 +346,35 @@ def check_skill_words():
     return None
 
 
+#: ``sizeof(CheckpointNode)``, what ``allocate_object_pools`` sizes the table by.
+_CHECKPOINT_NODE_SIZE = 0x3C
+
+
+def check_runtime_checkpoint_limit():
+    """The editor's ceiling is the one both recomp policies patch in: the
+    table's allocation and the load bound, read back from the instructions."""
+    root = os.path.abspath(os.path.join(_HERE, "..", "..", ".."))
+    # ``addiu a0, zero, bytes`` and ``slti at, a3, count``: opcode and registers
+    # in the high half, the immediate in the low half.
+    patches = {"allocate_object_pools": 0x2404, "checkpoint_update_all": 0x28E1}
+    for revision in (77, 80):
+        policy_path = os.path.join(root, "runtime-recomp", "dkr.us.v%d.recomp-policy.json" % revision)
+        with open(policy_path, encoding="utf-8") as stream:
+            policy = json.load(stream)
+        found = {}
+        for entry in policy.get("instructionPatches", []):
+            word = int(entry["value"], 16)
+            if patches.get(entry.get("function")) == word >> 16:
+                found[entry["function"]] = word & 0xFFFF
+        if found.get("allocate_object_pools") != race_ai.MAX_CHECKPOINTS * _CHECKPOINT_NODE_SIZE:
+            return "v%d does not allocate %d checkpoints" % (revision, race_ai.MAX_CHECKPOINTS)
+        if found.get("checkpoint_update_all") != race_ai.MAX_CHECKPOINTS:
+            return "v%d does not load %d checkpoints" % (revision, race_ai.MAX_CHECKPOINTS)
+    return None
+
+
 CHECKS = [
+    ("runtime checkpoint limit", check_runtime_checkpoint_limit),
     ("lane offsets", check_lane_offsets),
     ("spline passes the gates", check_spline_passes_the_gates),
     ("loading rules", check_loading_rules),

@@ -1,6 +1,7 @@
 # Guest hooks: what the runtime adds to N64Recomp output (scripts/guest_hooks.py
 # documents the format). payloads: funcs = DKRRecompiledFuncsV77/V80, owned =
-# the experimental owned game. Every hook applies exactly once per payload.
+# the experimental owned game, camera = the private Camera++ scene kernel
+# (scripts/camera_scene_kernel.py). Every hook applies exactly once per payload.
 schema = 1
 
 # Local Time Trial recording and playback have their own input cadence.
@@ -197,6 +198,94 @@ replace = '''    after_7:
     { extern void dkr_custom_tracks_object_map_links(uint8_t*,recomp_context*); dkr_custom_tracks_object_map_links(rdram,ctx); }
     // 0x8000CAC8: lw          $a0, 0x3C($sp)'''
 
+# Custom bosses have no entry in the retail intro/outro table. Skip the lookup
+# before any table read and use retail's rematch finish, including its music,
+# transition and timer. This is offline only: owned resources reject boss maps.
+[[hook]]
+id = "custom-boss-finish"
+function = "racer_boss_finish"
+payloads = ["funcs"]
+entry = '''    int custom_boss_finish = 0;
+'''
+[hook.vars.77]
+lookup_end = "8005CBF8"
+after_music = "8005CC5C"
+rematch = "8005CE1C"
+[hook.vars.80]
+lookup_end = "8005CD98"
+after_music = "8005CDFC"
+rematch = "8005CFBC"
+[[hook.edits]]
+match = 'MEM_W(0X44, ctx->r29) = ctx->r2;'
+replace = '''MEM_W(0X44, ctx->r29) = ctx->r2;
+    extern int dkr_custom_tracks_is_boss_level(int32_t);
+    custom_boss_finish = dkr_custom_tracks_is_boss_level(MEM_BU(ctx->r2, 0X49));
+    if (custom_boss_finish) {
+        ctx->r10 = ctx->r2;
+        ctx->r16 = 0;
+        goto L_{lookup_end};
+    }'''
+[[hook.edits]]
+match = 'ctx->r16 = MEM_B(ctx->r24, 0X1);'
+replace = 'ctx->r16 = custom_boss_finish ? 0 : MEM_B(ctx->r24, 0X1);'
+[[hook.edits]]
+match = 'L_{after_music}:'
+replace = '''L_{after_music}:
+    if (custom_boss_finish) goto dkr_custom_boss_rematch;'''
+[[hook.edits]]
+match = '    // 0x{rematch}: lw          $t8, 0x34($sp)'
+replace = '''dkr_custom_boss_rematch:
+    // 0x{rematch}: lw          $t8, 0x34($sp)'''
+
+# Offline shadow generation uses fixed arrays: 32 vertices, 32 polygons and
+# 120 clip points. Dense custom geometry can overflow them. Refuse a polygon
+# before its append and saturate the final clip group at 24 entries.
+# All three hooks are funcs-only; the owned online payload remains unchanged.
+# func_8002E904, floor shadows: the clipped polygon is at sp+0xD0.
+[[hook]]
+id = "shadow-polygon-budget"
+function = "func_8002E904"
+payloads = ["funcs"]
+[hook.vars.77]
+at = "// 0x8002ED0C: lw          $t5, 0x88($sp)"
+after = "after_2:"
+[hook.vars.80]
+at = "// 0x8002ED4C: lw          $t5, 0x88($sp)"
+after = "after_2:"
+[[hook.edits]]
+match = "{after}\n    {at}"
+replace = "{after}\n    { extern void dkr_shadow_polygon_budget(uint8_t*,recomp_context*); dkr_shadow_polygon_budget(rdram,ctx); }\n    {at}"
+
+# func_8002EEEC, water shadows: the same append, from sp+0xA8.
+[[hook]]
+id = "shadow-water-polygon-budget"
+function = "func_8002EEEC"
+payloads = ["funcs"]
+[hook.vars.77]
+at = "// 0x8002F120: lui         $t5, 0x8012"
+after = "after_1:"
+[hook.vars.80]
+at = "// 0x8002F160: lui         $t5, 0x8012"
+after = "after_1:"
+[[hook.edits]]
+match = "{after}\n    {at}"
+replace = "{after}\n    { extern void dkr_shadow_water_polygon_budget(uint8_t*,recomp_context*); dkr_shadow_water_polygon_budget(rdram,ctx); }\n    {at}"
+
+# func_8002FF6C, the clip: v1 is the new clip point's index, group * 32 + count.
+[[hook]]
+id = "shadow-clip-index"
+function = "func_8002FF6C"
+payloads = ["funcs"]
+[hook.vars.77]
+at = "// 0x8003029C: lwc1        $f8, 0x0($t1)"
+after = "L_8003029C:"
+[hook.vars.80]
+at = "// 0x800302DC: lwc1        $f8, 0x0($t1)"
+after = "L_800302DC:"
+[[hook.edits]]
+match = "{after}\n    {at}"
+replace = "{after}\n    { extern void dkr_shadow_clip_index(uint8_t*,recomp_context*); dkr_shadow_clip_index(rdram,ctx); }\n    {at}"
+
 # Custom vehicles: character events around model and wheel draws.
 [[hook]]
 id = "vehicle-model-scope"
@@ -360,3 +449,31 @@ replace = '''    MEM_W(0X5C, ctx->r29) = ctx->r7;
     // Identical resident models on all peers; graphics stays local.
     if((uint32_t)ctx->r30<=2U)ctx->r5&=~(gpr)12U; // primary-driver-lod-residency-v2: fp is vehicle, a3 is Settings row
     spawn_object(rdram, ctx);'''
+
+# Camera++ scene kernel: the native road-wheel scope around the private copies
+# of the model and wheel draws (events 200 to 203, vehicle_lighting/road_wheels.h).
+[[hook]]
+id = "camera-road-wheel-model"
+function = "render_3d_model"
+payloads = ["camera"]
+entry = '''    dkr_road_wheel_call road_call={0};
+    road_call.event=200;
+    road_call.object=(uint32_t)ctx->r4;
+    road_call.intensity={symbol:gCurrentLightIntensity}U;
+    road_call.inverse_view={symbol:gInverseViewMatrixF}U;
+    road_call.viewport_layout={symbol:gViewportLayout}U;
+    dkr_native_road_wheel_scope(rdram,0x1000000U,&road_call);
+'''
+returns = '''road_call.event=201;dkr_native_road_wheel_scope(rdram,0x1000000U,&road_call);'''
+
+[[hook]]
+id = "camera-road-wheel-sprite"
+function = "render_sprite_billboard"
+payloads = ["camera"]
+entry = '''    dkr_road_wheel_call road_call={0};
+    road_call.event=202;
+    road_call.object=(uint32_t)ctx->r7;
+    road_call.holder=(uint32_t)ctx->r4;road_call.sprite=MEM_W(16,ctx->r29);road_call.flags=MEM_W(20,ctx->r29);
+    dkr_native_road_wheel_scope(rdram,0x1000000U,&road_call);
+'''
+returns = '''road_call.event=203;dkr_native_road_wheel_scope(rdram,0x1000000U,&road_call);'''

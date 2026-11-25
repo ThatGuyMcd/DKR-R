@@ -911,8 +911,12 @@ authoritative state, `determinism_state_hash.cpp` and `authoritative_state.cpp`)
 does not read the table. It covers racer fields, including each racer's
 `nextCheckpoint` (`Object_Racer` `0x192`, inside the word at `0x190`), plus
 authored actors and a few globals. The table's contents are fixed by the map,
-which every peer must already match. Track Lab reports a set over 127 as an error and one over 60 as
-a warning, since older DKR-R builds and original hardware still load only 60.
+which every peer must already match. The larger table does move every guest
+allocation made after it, so a build with the patches and one without can't
+race each other: the owned rollback contracts changed with it
+(`docs/contracts/ONLINE_IDENTITY.md`). Track Lab reports a set over 127 as an
+error and one over 60 as a warning, since older DKR-R builds and original
+hardware still load only 60.
 
 **`mods/` belongs to librecomp.** N64ModernRuntime ships its own mod system,
 it is live in DKR-R, and it scans `mods/` for its `.nrm` format. A `.dkrmap`

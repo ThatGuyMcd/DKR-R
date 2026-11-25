@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The owned rollback contracts stay frozen at the approved v1.0.15 values: the
+"""The owned rollback contracts stay frozen at the approved values: the
 configure emits exactly those, the contract doc records them, and no source
 hash chain feeds them again."""
 
@@ -14,11 +14,12 @@ ROOT = Path(__file__).resolve().parents[2]
 RUNTIME = ROOT / "runtime-recomp"
 HEADER = RUNTIME / "src/game/netplay/legacy_identity.hpp"
 DOC = ROOT / "docs/contracts/ONLINE_IDENTITY.md"
-# Shipped v1.0.15 values, verified against official Windows/Linux artifacts;
-# see docs/notes/2026-11-13-fold-v1015.md.
-SHIPPED = {
-    "77": "e5c8df41e92c766cb46d137111a289793308e398033127160ff321ff4672a4bf",
-    "80": "a9a0d18fccc59d42aaa8b9cd6fdee50c22fa0699283eee8087a82f99ac85ef80",
+# sha256("<shipped v1.0.15 value>|checkpoints-127-v1"); the v1.0.15 values are
+# in docs/notes/2026-11-13-fold-v1015.md and the derivation in
+# docs/contracts/ONLINE_IDENTITY.md.
+CONTRACTS = {
+    "77": "5e4546d1209d785da50787207228884e02a47a6a8aad06838c3df1243dd321d4",
+    "80": "a52b30e2761b60e7526296858cf858478244b1d6308b63174c9e5310f1d9d57b",
 }
 # The digests v1.0.15 appended to the owned adapter identity, in order
 # (experimental_runtime.cpp runtime_engine_identity).
@@ -31,9 +32,9 @@ ENGINE_SALTS = (
 
 
 class OnlineIdentityTests(unittest.TestCase):
-    def test_header_holds_the_shipped_contracts(self):
+    def test_header_holds_the_approved_contracts(self):
         text = HEADER.read_text(encoding="utf-8")
-        for revision, value in SHIPPED.items():
+        for revision, value in CONTRACTS.items():
             with self.subTest(revision=revision):
                 found = re.findall(rf'^#define DKR_LEGACY_OWNED_BUILD_ID_V{revision} "([0-9a-f]+)"$', text, re.M)
                 self.assertEqual(found, [value])
@@ -58,7 +59,7 @@ class OnlineIdentityTests(unittest.TestCase):
         self.assertEqual(uses, [f"DKR_LEGACY_ENGINE_SALT_{i}" for i in range(1, 5)])
 
     @unittest.skipUnless(shutil.which("cmake"), "needs cmake")
-    def test_configure_emits_the_shipped_contracts(self):
+    def test_configure_emits_the_approved_contracts(self):
         with tempfile.TemporaryDirectory() as scratch:
             script = Path(scratch) / "emit.cmake"
             script.write_text(
@@ -69,11 +70,11 @@ class OnlineIdentityTests(unittest.TestCase):
             )
             done = subprocess.run(["cmake", "-P", str(script)], capture_output=True, text=True, check=True)
         emitted = dict(re.findall(r"^V(77|80)=(\S*)$", done.stderr, re.M))
-        self.assertEqual(emitted, SHIPPED)
+        self.assertEqual(emitted, CONTRACTS)
 
     def test_contract_doc_matches(self):
         text = DOC.read_text(encoding="utf-8")
-        for revision, value in SHIPPED.items():
+        for revision, value in CONTRACTS.items():
             with self.subTest(revision=revision):
                 self.assertRegex(text, rf"\| `DKR_OWNED_BUILD_ID_V{revision}` \| `{value}` \|")
 

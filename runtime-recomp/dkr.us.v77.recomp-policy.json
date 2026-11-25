@@ -1167,6 +1167,18 @@
       "vram": "0x8006F4F4",
       "value": "0x00000000",
       "reason": "Use a safe no-op return delay slot for the virtualized CIC probe."
+    },
+    {
+      "function": "allocate_object_pools",
+      "vram": "0x8000C008",
+      "value": "0x24041DC4",
+      "reason": "Size gTrackCheckpoints for 127 CheckpointNode entries (0x1DC4 = 127 * 0x3C bytes, originally addiu a0, zero, 0xE10 for MAX_CHECKPOINTS 60) so custom tracks can carry finer AI racing lines."
+    },
+    {
+      "function": "checkpoint_update_all",
+      "vram": "0x80017F54",
+      "value": "0x28E1007F",
+      "reason": "Raise the checkpoint load bound to the patched 127-entry gTrackCheckpoints table (originally slti at, a3, 60); 127 keeps every index and nextCheckpoint + 1 inside the s8 Object_Racer.nextCheckpoint, Object_Weapon.checkpoint and CheckpointNode.altRouteID fields."
     }
   ],
   "ignored": [

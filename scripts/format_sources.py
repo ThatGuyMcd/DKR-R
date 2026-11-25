@@ -41,7 +41,7 @@ from pathlib import Path
 import re
 import subprocess
 import sys
-from typing import Any
+from typing import Any, cast
 
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -201,6 +201,15 @@ def canonical_tokens(data: bytes) -> list[str]:
     return out
 
 
+def recorded_digest(entry: object) -> str:
+    """One input's sha256 from the identity record. An entry is the digest with
+    its reason; records from before per-input reasons hold the bare digest, and
+    a range may still start at one."""
+    if isinstance(entry, dict):
+        return str(cast("dict[str, object]", entry)["sha256"])
+    return str(entry)
+
+
 def identity_record_problems(
     old: dict[str, Any], new: dict[str, Any], base: str, head: str, changed: dict[str, str]
 ) -> list[str]:
@@ -212,15 +221,16 @@ def identity_record_problems(
         return [f"{IDENTITY_RECORD}: globs, identity or the input set changed"]
     problems: list[str] = []
     for path in sorted(new["inputs"]):
-        if old["inputs"][path] == new["inputs"][path]:
+        was, now = recorded_digest(old["inputs"][path]), recorded_digest(new["inputs"][path])
+        if was == now:
             continue
         before, after = show(base, path), show(head, path)
         moved = (
             changed.get(path) == "M"
             and before is not None
             and after is not None
-            and old["inputs"][path] == hashlib.sha256(before).hexdigest()
-            and new["inputs"][path] == hashlib.sha256(after).hexdigest()
+            and was == hashlib.sha256(before).hexdigest()
+            and now == hashlib.sha256(after).hexdigest()
         )
         if not moved:
             problems.append(f"{IDENTITY_RECORD}: {path} digest does not follow a change to that file in this range")

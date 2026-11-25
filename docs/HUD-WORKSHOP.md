@@ -36,7 +36,7 @@ interpolation have separate presentation policies; HUD layout does not decide
 when the world returns to 4:3.
 
 Golden Balloon informed the anchor/grouping work. The
-[reference report](HUD-REFERENCE-ALIGNMENT.md) retains the original comparison
+[reference report](history/HUD-REFERENCE-ALIGNMENT.md) retains the original comparison
 and test matrix. It is historical evidence, not a claim that every later
 hardware/layout combination has been visually checked.
 Credits and provenance remain in [THIRD_PARTY.md](../THIRD_PARTY.md).

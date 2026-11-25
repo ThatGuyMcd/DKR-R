@@ -220,6 +220,12 @@ if(MSVC)
         set_property(TARGET miniz PROPERTY C_COMPILER_LAUNCHER "")
     endif()
 endif()
+if(TARGET miniz AND CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_C_COMPILER_ID MATCHES "Clang")
+    # miniz takes its 64-bit file functions from _GNU_SOURCE, which upstream
+    # defines for GCC only. Under Clang with CMAKE_C_EXTENSIONS off, glibc then
+    # declares neither ftello64 nor ftello and miniz_zip.c does not compile.
+    target_compile_definitions(miniz PRIVATE _GNU_SOURCE)
+endif()
 
 if(NOT EXISTS "${DKR_GEKKONET_SOURCE}/GekkoLib/CMakeLists.txt")
     message(FATAL_ERROR "GekkoNet has not been prepared at ${DKR_GEKKONET_SOURCE}. " "Run Build-DKR-Runtime.cmd first.")
@@ -2033,6 +2039,12 @@ if(BUILD_TESTING)
         add_test(NAME DKRPicoHashCallbacks COMMAND DKRPicoHashCallbackTests)
     endif()
 
+    # The Python integration test links this harness with generated guest code.
+    # Compile it here too so every host build and clang-tidy can check it.
+    add_library(DKRCustomBossFinishHarness OBJECT tests/custom_boss_finish_harness.c)
+    target_compile_features(DKRCustomBossFinishHarness PRIVATE c_std_11)
+    target_include_directories(DKRCustomBossFinishHarness PRIVATE "${DKR_RECOMP_SOURCE}/include")
+
     foreach(
         tooling_test
         IN
@@ -2043,6 +2055,7 @@ if(BUILD_TESTING)
             "DKRToolingUtilities|tooling_utilities_tests.py"
             "DKRSourcePackaging|source_packaging_tests.py"
             "DKRBuildIteration|build_iteration_tests.py"
+            "DKRCustomBossFinish|custom_boss_finish_tests.py"
             "DKRDeveloperEntrypoints|developer_entrypoint_tests.py"
             "DKRAssetScan|asset_scan_tests.py"
             "DKRRegressionHarness|regression_harness_tests.py"
@@ -2569,11 +2582,20 @@ if(BUILD_TESTING)
         target_include_directories(DKRQuickJoinLifecycleTests PRIVATE "${DKR_LIBDATACHANNEL_SOURCE}/deps/json/include")
         add_test(NAME DKRQuickJoinLifecycle COMMAND DKRQuickJoinLifecycleTests)
         set_tests_properties(DKRQuickJoinLifecycle PROPERTIES TIMEOUT 90)
-        add_executable(DKRExperimentalQuickJoinTests tests/experimental_network_tests.cpp)
+        # DKRNetplayCore reaches the online mod profile, whose Game Pak matching
+        # calls rom::inspect. Nothing here needs it at run time, but a linker
+        # that takes that archive member has to resolve it, so the revision
+        # reader comes along as in the other tests that link the profile.
+        add_executable(
+            DKRExperimentalQuickJoinTests
+            tests/experimental_network_tests.cpp
+            src/game/rom_revision.cpp
+            src/game/startup_performance.cpp
+        )
         target_link_libraries(DKRExperimentalQuickJoinTests PRIVATE DKRNetplayCore DKRCustomMagicCodes)
         target_include_directories(
             DKRExperimentalQuickJoinTests
-            PRIVATE "${DKR_LIBDATACHANNEL_SOURCE}/deps/json/include"
+            PRIVATE "${DKR_LIBDATACHANNEL_SOURCE}/deps/json/include" "${DKR_MODERN_RUNTIME_SOURCE}/thirdparty"
         )
         target_compile_definitions(DKRExperimentalQuickJoinTests PRIVATE DKR_EXPERIMENTAL_QUICKJOIN_TEST=1)
         add_test(NAME DKRExperimentalQuickJoin COMMAND DKRExperimentalQuickJoinTests)
@@ -3281,6 +3303,7 @@ if(BUILD_TESTING)
                 "${DKR_RT64_SOURCE}/src/contrib"
                 "${DKR_DEPENDENCIES_DIR}/n64-modern-runtime/N64Recomp/include"
         )
+        target_compile_definitions(DKRCustomTracksRuntimeTests PRIVATE DKR_EXPERIMENTAL_RACE_TEST)
         dkr_guest_symbols(DKRCustomTracksRuntimeTests)
         add_test(NAME DKRCustomTracksRuntime COMMAND DKRCustomTracksRuntimeTests)
         add_executable(

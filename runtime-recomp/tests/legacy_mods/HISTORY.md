@@ -253,7 +253,7 @@ their dated checkpoints, not the current import UI.
 - The accepted gameplay/HUD/online Patch Pipeline policies and payload source
   selections are untouched. Only UI/build/packaging glue is integrated so far.
 - Packages include worker startup/hash/invalid-input self-tests and third-party
-  notices. See `docs/LEGACY-MOD-IMPORT-PREVIEW.md` for the honest playtester scope.
+  notices. See `docs/history/LEGACY-MOD-IMPORT-PREVIEW.md` for the honest playtester scope.
 
 Still required before calling the approved modding milestone complete: actual
 in-game mounting/switching qualification; additive Track Select/menu/records;

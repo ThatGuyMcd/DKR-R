@@ -2,9 +2,12 @@
 //
 // The expected hashes were produced by the BuildNetplayManifest that lived in
 // runtime_ui.cpp before it moved, over the same inputs. The two default cases
-// are also what a built game logged for a fresh profile on each ROM revision
-// (arm64, release 1.0.15): manifest hash 3DAC5A0935D9E9D3 / class hash
-// 062F7805BEEC0FBA on v77 and ACA6E414949F8BDB / 1F8BFBC82BA29CB8 on v80.
+// were, with the v1.0.15 patch policies, what a built game logged for a fresh
+// profile on each ROM revision (arm64, release 1.0.15): manifest hash
+// 3DAC5A0935D9E9D3 / class hash 062F7805BEEC0FBA on v77 and ACA6E414949F8BDB /
+// 1F8BFBC82BA29CB8 on v80. The 127-checkpoint policies change the patch policy
+// digest, so every case that uses kPolicy has new values here, and a build with
+// them shares no lobby with one that has the old policies.
 //
 // They change on purpose when the protocol version, the authority schema or
 // another network ABI constant behind the build fingerprint changes, and they
@@ -24,8 +27,8 @@ using namespace dkr::runtime::netplay;
 
 namespace {
 
-constexpr std::string_view kPolicy = "v77:c4deefd55aca1dc1af1391a86d5df366624dabed2827a0fab055e8ffad8cd702|"
-                                     "v80:b8a89ed014f6e6a7f1113adf72fe8c92b1f8cf8323ac4c35de00a258c28adb9b";
+constexpr std::string_view kPolicy = "v77:4fcfb6ae8bb7fe874df2e02eb2c13820ec5575bb9ec1c1e4ccb4fdbcef688164|"
+                                     "v80:91cb9e05edc8f9fcb1006dec28316e5a1e90dd2d64aada976f2289688816897f";
 constexpr const char* kEngine77 = "8a5a0d3005a50f2f12d332346c804df6bfa277fd05650e48a639a64796db09c3";
 constexpr const char* kEngine80 = "ef12b5452a0ea54b4a1562aef21fd62d11bcd19b0b85122e818d8b350857b6a0";
 
@@ -72,26 +75,26 @@ int main() {
 
     const Golden cases[] = {
         {"v77 default arm64", make("1.0.15", Revision::UsV77, kUsV77Xxh3, kPolicy, 0, "arm64", strict, kEngine77), "",
-         0x3DAC5A0935D9E9D3ULL, 0x062F7805BEEC0FBAULL, 0x53DA1871B26E44E0ULL, 0xD3BAF229D6234A6CULL, 0},
+         0x0551948AA8481723ULL, 0x08FF13E2FB9D964AULL, 0x53DA1871B26E44E0ULL, 0x07024C2C31B95A7CULL, 0},
         {"v80 default arm64", make("1.0.15", Revision::UsV80, kUsV80Xxh3, kPolicy, 0, "arm64", strict, kEngine80), "",
-         0xACA6E414949F8BDBULL, 0x1F8BFBC82BA29CB8ULL, 0x53DA1871B26E44E0ULL, 0xD3BAF229D6234A6CULL, 0},
+         0xCB8E456EC31B554BULL, 0xDE7C622670AC97A8ULL, 0x53DA1871B26E44E0ULL, 0x07024C2C31B95A7CULL, 0},
         {"v77 x86_64: same class hash, other manifest hash",
          make("1.0.15", Revision::UsV77, kUsV77Xxh3, kPolicy, 0, "x86_64", strict, kEngine77), "",
-         0x0913B79F30633A9FULL, 0x062F7805BEEC0FBAULL, 0x53DA1871B26E44E0ULL, 0xD3BAF229D6234A6CULL, 0},
+         0x6F4A70E393D0606FULL, 0x08FF13E2FB9D964AULL, 0x53DA1871B26E44E0ULL, 0x07024C2C31B95A7CULL, 0},
         {"v77 unverified architecture",
          make("1.0.15", Revision::UsV77, kUsV77Xxh3, kPolicy, 0, "riscv64", "unverified-riscv64", kEngine77), "",
-         0x0ABE0182F35A73DAULL, 0xBCD9C157EA5992C6ULL, 0x53DA1871B26E44E0ULL, 0xD3BAF229D6234A6CULL, 0},
-        {"v80 magic codes, adventure save, mods", with_save, std::string(64, 'a'), 0xBE7B6EBEB7AEF625ULL,
-         0xDD417D4FFF72240CULL, 0x447261C7975AD9D5ULL, 0xD3BAF229D6234A6CULL, 0x51438A6AF17BCAF5ULL},
+         0xCE3161A59218A62AULL, 0xA5797495C71716D6ULL, 0x53DA1871B26E44E0ULL, 0x07024C2C31B95A7CULL, 0},
+        {"v80 magic codes, adventure save, mods", with_save, std::string(64, 'a'), 0xC5190209FA7AC955ULL,
+         0x8FF7D801E94F397CULL, 0x447261C7975AD9D5ULL, 0x07024C2C31B95A7CULL, 0x51438A6AF17BCAF5ULL},
         {"v77 without the owned engine (host preset)",
-         make("1.0.15", Revision::UsV77, kUsV77Xxh3, kPolicy, 0, "arm64", strict, ""), "", 0x7927E3EE8725FCD2ULL,
-         0xA0078578313904FBULL, 0x53DA1871B26E44E0ULL, 0xD3BAF229D6234A6CULL, 0},
+         make("1.0.15", Revision::UsV77, kUsV77Xxh3, kPolicy, 0, "arm64", strict, ""), "", 0x6F0241FB32871B42ULL,
+         0xF81E87796E3573EBULL, 0x53DA1871B26E44E0ULL, 0x07024C2C31B95A7CULL, 0},
         {"release version is trimmed",
          make(" 1.0.16-rc\n", Revision::UsV77, kUsV77Xxh3, kPolicy, 0, "arm64", strict, kEngine77), "",
-         0x09152167525355CBULL, 0xBEDD2CB4C304AEF2ULL, 0x53DA1871B26E44E0ULL, 0xD3BAF229D6234A6CULL, 0},
+         0x9EC7A22DA79C340BULL, 0xAFA689A13EFED532ULL, 0x53DA1871B26E44E0ULL, 0x07024C2C31B95A7CULL, 0},
         {"empty release version is development",
-         make("", Revision::UsV77, kUsV77Xxh3, kPolicy, 0, "arm64", strict, kEngine77), "", 0x1D83A0CBECABA841ULL,
-         0xAA0DD9F93E4EBB44ULL, 0x53DA1871B26E44E0ULL, 0xD3BAF229D6234A6CULL, 0},
+         make("", Revision::UsV77, kUsV77Xxh3, kPolicy, 0, "arm64", strict, kEngine77), "", 0xBDA9F8C83FC2959DULL,
+         0xE48546AFF72E59C8ULL, 0x53DA1871B26E44E0ULL, 0x07024C2C31B95A7CULL, 0},
         {"another patch policy",
          make("1.0.15", Revision::UsV77, kUsV77Xxh3, "v77:00|v80:11", 0, "arm64", strict, kEngine77), "",
          0xA1BEA9A29B286CD6ULL, 0x854FF4EE31208FE5ULL, 0x53DA1871B26E44E0ULL, 0xBD8A0849DB74C007ULL, 0},
