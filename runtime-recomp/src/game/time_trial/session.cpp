@@ -221,7 +221,8 @@ std::vector<GhostPose> load_ghost_file(const std::filesystem::path& path, unsign
                  std::uint16_t(word_at(data, offset + 16))},
                 std::uint16_t(word_at(data, offset + 16) >> 16),
             };
-            if (std::ranges::any_of(pose.position, [](auto bits) { return !std::isfinite(std::bit_cast<float>(bits)); }))
+            if (std::ranges::any_of(pose.position,
+                                    [](auto bits) { return !std::isfinite(std::bit_cast<float>(bits)); }))
                 return {};
             poses.push_back(pose);
         }
@@ -251,8 +252,7 @@ void export_verified_ghost() {
         return;
     try {
         const auto file = encode_ghost(portable_ghost_prefix(ghost_replay_digest), ghost_poses);
-        mods::write_new_file(ghost_export,
-                            mods::View(reinterpret_cast<const std::uint8_t*>(file.data()), file.size()));
+        mods::write_new_file(ghost_export, mods::View(reinterpret_cast<const std::uint8_t*>(file.data()), file.size()));
         std::fprintf(stderr, "[ghost] exported %zu verified updates\n", ghost_poses.size());
     } catch (const std::exception& failure) {
         // The caller treats a missing export as a retryable verifier failure.
@@ -301,8 +301,8 @@ unsigned active_replay_rom() {
 }
 
 std::int64_t return_clock() {
-    return std::chrono::duration_cast<std::chrono::milliseconds>(
-               std::chrono::steady_clock::now().time_since_epoch()).count();
+    return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch())
+        .count();
 }
 
 void exit_run() {
@@ -382,18 +382,17 @@ void read_replay(const std::filesystem::path& track_package, bool prepare_ghost)
         throw error();
     const auto rules = expected.at("ruleset").get<std::string>();
     if (rules == kAdventureRules || rules == kAdventureOriginalRouteRules || rules == kAdventureMilestoneRules ||
-        rules == kAdventureColdSaveRules ||
-        rules == kAdventureVisualRngRules ||
-        rules == kAdventureSharedRngRules || rules == kLegacyAdventureRules) {
+        rules == kAdventureColdSaveRules || rules == kAdventureVisualRngRules || rules == kAdventureSharedRngRules ||
+        rules == kLegacyAdventureRules) {
         legacy_adventure = rules == kLegacyAdventureRules;
         use_completed_save_rules = rules == kAdventureRules;
         use_adventure_route_splits = use_completed_save_rules || rules == kAdventureOriginalRouteRules;
         attest_adventure_splits = use_adventure_route_splits || rules == kAdventureMilestoneRules;
         adventure_goal = adventure_for(expected.at("category").get<std::string>());
-        fresh_adventure_save = (attest_adventure_splits || rules == kAdventureColdSaveRules) &&
-                               !uses_completed_adventure_save();
-        adventure_isolates_effects = fresh_adventure_save || uses_completed_adventure_save() ||
-                                     rules == kAdventureVisualRngRules;
+        fresh_adventure_save =
+            (attest_adventure_splits || rules == kAdventureColdSaveRules) && !uses_completed_adventure_save();
+        adventure_isolates_effects =
+            fresh_adventure_save || uses_completed_adventure_save() || rules == kAdventureVisualRngRules;
         const auto count = expected.at("ticks").get<unsigned>();
         const auto clock = expected.at("clockTicks").get<unsigned>();
         const auto& checks = expected.at("checkpoints");
@@ -402,10 +401,10 @@ void read_replay(const std::filesystem::path& track_package, bool prepare_ghost)
                            !parse_adventure_attempt(expected.at("board").get<std::string>(),
                                                     expected.at("engine").get<std::string>(),
                                                     expected.at("ticket").get<std::string>(), adventure_goal))) ||
-            adventure_goal == Adventure::None || (!use_adventure_route_splits && adventure_goal > Adventure::TTAmulet) ||
-            !track_package.empty() || count == 0 || count > kAdventureMaxUpdates ||
-            clock == 0 || clock > count * LogicRate || expected.at("finishTick") != count ||
-            file.size() != HeaderBytes + size + count * 4 || !checks.is_array() ||
+            adventure_goal == Adventure::None ||
+            (!use_adventure_route_splits && adventure_goal > Adventure::TTAmulet) || !track_package.empty() ||
+            count == 0 || count > kAdventureMaxUpdates || clock == 0 || clock > count * LogicRate ||
+            expected.at("finishTick") != count || file.size() != HeaderBytes + size + count * 4 || !checks.is_array() ||
             checks.size() != (count + kAdventureInterval - 1) / kAdventureInterval)
             throw error();
         inputs.assign(file.begin() + HeaderBytes + size, file.end());
@@ -440,9 +439,9 @@ void read_replay(const std::filesystem::path& track_package, bool prepare_ghost)
             throw error();
         selected_vehicle = static_cast<Vehicle>(vehicle - kVehicleIds.begin());
         bind_custom_track(expected.at("trackId").get<std::string>(), track_package, hash);
-        if (rules == kCustomVariableLapsRules ?
-                (selected_laps == kRetailLapCount || expected.at("laps") != selected_laps) :
-                (selected_laps != kRetailLapCount || expected.contains("laps")))
+        if (rules == kCustomVariableLapsRules
+                ? (selected_laps == kRetailLapCount || expected.at("laps") != selected_laps)
+                : (selected_laps != kRetailLapCount || expected.contains("laps")))
             throw error();
     } else {
         throw error();
@@ -528,7 +527,8 @@ void finish_recording(bool request_quit = true) {
             }
         }
         finished_record = nullptr;
-        stop(true, ghost_clock && current_progress.clock < ghost_clock ? "Ghost beaten. Run recorded." : "Run recorded.",
+        stop(true,
+             ghost_clock && current_progress.clock < ghost_clock ? "Ghost beaten. Run recorded." : "Run recorded.",
              request_quit);
     } catch (const std::exception& failure) {
         finished_record = nullptr;
@@ -660,8 +660,8 @@ bool start(Mode requested, const std::filesystem::path& replay, std::string& err
                 int descriptor = -1;
                 const auto parsed = std::from_chars(value.begin(), value.end(), descriptor);
                 struct stat status {};
-                if (parsed.ec != std::errc{} || parsed.ptr != value.end() ||
-                    descriptor < 3 || fstat(descriptor, &status) != 0 || !S_ISSOCK(status.st_mode))
+                if (parsed.ec != std::errc{} || parsed.ptr != value.end() || descriptor < 3 ||
+                    fstat(descriptor, &status) != 0 || !S_ISSOCK(status.st_mode))
                     throw mods::Error("Replay video needs a private capture socket.");
                 capture_socket.store(descriptor);
             }
@@ -692,12 +692,12 @@ bool start_prepared_ghost(const GhostPreparation& load, std::vector<GhostPose> p
     const auto recorded_splits = expected.at("splits").get<std::vector<unsigned>>();
     const bool return_to_launcher = launcher_return_enabled;
     retire();
-    const auto* attempt = load.attempt &&
-                                  (track.empty() || (load.attempt->track_id == track && load.attempt->track_hash == hash))
-                              ? &*load.attempt
-                              : nullptr;
-    if (!start(load.practice_mode, load.recording, error, attempt, load.player, course, vehicle, Adventure::None,
-               track, load.track_package))
+    const auto* attempt =
+        load.attempt && (track.empty() || (load.attempt->track_id == track && load.attempt->track_hash == hash))
+            ? &*load.attempt
+            : nullptr;
+    if (!start(load.practice_mode, load.recording, error, attempt, load.player, course, vehicle, Adventure::None, track,
+               load.track_package))
         return false;
     if (custom_track_hash != hash) {
         retire();
@@ -722,8 +722,8 @@ bool start_prepared_ghost(const GhostPreparation& load, std::vector<GhostPose> p
 } // namespace
 
 bool start_ghost(const std::filesystem::path& source, const std::filesystem::path& recording, std::string& error,
-                 unsigned racer, Mode practice_mode, const std::filesystem::path& track_package,
-                 const Attempt* attempt, std::string_view credited_name) {
+                 unsigned racer, Mode practice_mode, const std::filesystem::path& track_package, const Attempt* attempt,
+                 std::string_view credited_name) {
     if ((practice_mode != Mode::Record && practice_mode != Mode::SelfTest) || racer >= kRacers.size() ||
         !recording.is_absolute()) {
         error = "Select a racer and a new practice replay file.";
@@ -733,7 +733,11 @@ bool start_ghost(const std::filesystem::path& source, const std::filesystem::pat
                track_package))
         return false;
     const auto path = recording.parent_path() / "ghost-cache" / (ghost_replay_digest + ".dkrghost");
-    GhostPreparation load{recording, track_package, path, racer, practice_mode,
+    GhostPreparation load{recording,
+                          track_package,
+                          path,
+                          racer,
+                          practice_mode,
                           attempt ? std::optional(*attempt) : std::nullopt,
                           credited_name.empty() ? nullptr : std::make_shared<const std::string>(credited_name)};
     auto poses = load_ghost_file(portable_ghost_file(source), current_progress.finish_update,
@@ -797,13 +801,13 @@ std::optional<GhostNameplate> ghost_nameplate(const std::uint8_t* snapshot) {
     const auto framebuffer = read(slots.framebuffer);
     if (!in_rdram(framebuffer, 4))
         return std::nullopt;
-    return GhostNameplate{
-        std::move(name),
-        {std::bit_cast<float>(read(object + 0x0C)), std::bit_cast<float>(read(object + 0x10)),
-         std::bit_cast<float>(read(object + 0x14))},
-        std::bit_cast<float>(read(object + 8)),
-        std::min(opacity * (outline ? 4.F : 1.F) / (2.55F * base_opacity), 1.F),
-        framebuffer & 0x00FFFFFFU, outline};
+    return GhostNameplate{std::move(name),
+                          {std::bit_cast<float>(read(object + 0x0C)), std::bit_cast<float>(read(object + 0x10)),
+                           std::bit_cast<float>(read(object + 0x14))},
+                          std::bit_cast<float>(read(object + 8)),
+                          std::min(opacity * (outline ? 4.F : 1.F) / (2.55F * base_opacity), 1.F),
+                          framebuffer & 0x00FFFFFFU,
+                          outline};
 }
 
 // Called between guest sessions. Failed verification never supplies a ghost to a race.
@@ -876,13 +880,13 @@ bool send_video_packet(unsigned code, std::span<const std::int16_t> samples = {}
         }
         return true;
     };
-    const std::array<std::uint8_t, 4> prefix{std::uint8_t(code), std::uint8_t(code >> 8),
-                                             std::uint8_t(code >> 16), std::uint8_t(code >> 24)};
+    const std::array<std::uint8_t, 4> prefix{std::uint8_t(code), std::uint8_t(code >> 8), std::uint8_t(code >> 16),
+                                             std::uint8_t(code >> 24)};
     pollfd readable{socket, POLLIN, 0};
     char ack = 0;
     return (code != 5 || send_all("DKR3", 4)) && send_all(prefix.data(), prefix.size()) &&
-           (samples.empty() || send_all(samples.data(), samples.size_bytes())) &&
-           poll(&readable, 1, 15000) == 1 && recv(socket, &ack, 1, MSG_DONTWAIT) == 1 && ack == 'K';
+           (samples.empty() || send_all(samples.data(), samples.size_bytes())) && poll(&readable, 1, 15000) == 1 &&
+           recv(socket, &ack, 1, MSG_DONTWAIT) == 1 && ack == 'K';
 }
 } // namespace
 #endif
@@ -910,8 +914,8 @@ bool export_video_audio(unsigned frame, std::span<const std::int16_t> audio) {
             const auto b = std::min(a + 1, source_frames - 1);
             const float fraction = static_cast<float>(position % samples_per_update) / samples_per_update;
             for (unsigned channel = 0; channel < 2; ++channel)
-                pcm[2 * i + channel] = static_cast<std::int16_t>(
-                    std::lerp(audio[2 * a + channel], audio[2 * b + channel], fraction));
+                pcm[2 * i + channel] =
+                    static_cast<std::int16_t>(std::lerp(audio[2 * a + channel], audio[2 * b + channel], fraction));
         }
     }
     if (!send_video_packet(frame * 4, pcm))
@@ -1005,7 +1009,8 @@ void theatre_step(int delta) {
 
 void theatre_speed(unsigned percent) {
     std::scoped_lock lock(progress_mutex);
-    if (watching() && std::ranges::find(speedrunning::playback_speeds, percent) != speedrunning::playback_speeds.end()) {
+    if (watching() &&
+        std::ranges::find(speedrunning::playback_speeds, percent) != speedrunning::playback_speeds.end()) {
         transport.speed = percent;
         replay_audio_reset = true;
         present_audio.clear();
@@ -1024,7 +1029,7 @@ void theatre_graphics_submitted(std::uint8_t* rdram, std::uint32_t display_list,
         return;
     std::scoped_lock lock(progress_mutex);
     graphics_stamps.emplace_back(display_list & 0x007fffffU,
-                                FrameStamp{current_progress, framebuffer, std::move(presentation)});
+                                 FrameStamp{current_progress, framebuffer, std::move(presentation)});
 }
 
 std::optional<FrameStamp> theatre_graphics_stamp(std::uint32_t display_list) {
@@ -1189,7 +1194,8 @@ Progress progress() {
 std::vector<AdventureSplit> adventure_splits() {
     std::scoped_lock lock(progress_mutex);
     if (watching()) {
-        const auto end = std::ranges::upper_bound(reached_splits.entries, visible_progress.clock, {}, &AdventureSplit::clock);
+        const auto end =
+            std::ranges::upper_bound(reached_splits.entries, visible_progress.clock, {}, &AdventureSplit::clock);
         return {reached_splits.entries.begin(), end};
     }
     return reached_splits.entries;
@@ -1390,10 +1396,8 @@ extern "C" int dkr_practice_ghost_mount(std::uint8_t* rdram, unsigned revision) 
     const auto& slots = symbols::for_revision(revision);
     const auto seed = guest(addresses::current().CurrentRngSeed);
     ghost_object_state = GhostObjectState{
-        std::uint32_t(MEM_W(0, seed)),
-        MEM_HU(0, guest(slots.ghost_map)),
-        MEM_HU(0, guest(slots.ghost_vehicle)),
-        MEM_HU(0, guest(slots.ghost_character)),
+        std::uint32_t(MEM_W(0, seed)),         MEM_HU(0, guest(slots.ghost_map)),
+        MEM_HU(0, guest(slots.ghost_vehicle)), MEM_HU(0, guest(slots.ghost_character)),
         MEM_HU(0, guest(slots.ghost_time)),
     };
     MEM_H(0, guest(slots.ghost_map)) = selected_level;
@@ -1464,8 +1468,8 @@ extern "C" int dkr_practice_ghost_pose(std::uint8_t* rdram, recomp_context* cont
         MEM_B(0x1F7, guest(racer)) = std::clamp(int(alpha + .5F), 0, 255);
     }
     if (update == 90 || update == 600 || update == ghost_poses.size())
-        std::fprintf(stderr, "[ghost] update=%u sample=%zu object=%08x player=%08x\n", update, index + 1,
-                     object, player_address(rdram));
+        std::fprintf(stderr, "[ghost] update=%u sample=%zu object=%08x player=%08x\n", update, index + 1, object,
+                     player_address(rdram));
     context->r2 = update == index ? 1 : 0;
     return 1;
 }
@@ -1536,8 +1540,8 @@ extern "C" int dkr_time_trial_frame_begin(std::uint8_t* rdram, unsigned revision
             failed = archive_error;
             // An export can only advance once the encoder consumes frames.
             // Keep the full-session picture and audio buffers bounded.
-            waiting = update > mixer_update + 2 ||
-                      (exporting_full_game_video() && update > visible_progress.updates + 6);
+            waiting =
+                update > mixer_update + 2 || (exporting_full_game_video() && update > visible_progress.updates + 6);
         }
         if (failed) {
             stop(false, "Replay Theatre could not write its temporary frame index.");
@@ -1648,9 +1652,8 @@ extern "C" void dkr_time_trial_resume(std::uint8_t* rdram, unsigned revision) {
     if (!supported_replay_rom(revision) || !recording_pause_available() || adventure_goal != Adventure::None)
         return;
     const auto& menu = symbols::for_revision(revision);
-    if (MEM_W(0, guest(menu.menu_count)) != 2 || !pause_resume_text ||
-        MEM_W(0, guest(menu.menu_suboption)) || MEM_W(0, guest(menu.menu_delay)) ||
-        MEM_W(0, guest(menu.menu_ignore_input)))
+    if (MEM_W(0, guest(menu.menu_count)) != 2 || !pause_resume_text || MEM_W(0, guest(menu.menu_suboption)) ||
+        MEM_W(0, guest(menu.menu_delay)) || MEM_W(0, guest(menu.menu_ignore_input)))
         return;
     constexpr unsigned start_or_back = 0x5000;
     if (MEM_HU(0, guest(menu.pressed)) & start_or_back) {
@@ -1726,8 +1729,8 @@ extern "C" void dkr_time_trial_input(std::uint8_t* rdram, unsigned revision) {
                         const auto object = player_address(rdram);
                         const auto pitch = object ? MEM_H(2, guest(object)) : 0;
                         const double dy = target.y - car.position.y;
-                        const auto target_pitch = int(std::lround(
-                            std::atan2(dy, std::max(180.F, std::hypot(dx, dz))) * (32768.0 / std::numbers::pi)));
+                        const auto target_pitch = int(std::lround(std::atan2(dy, std::max(180.F, std::hypot(dx, dz))) *
+                                                                  (32768.0 / std::numbers::pi)));
                         input.stick_y = std::int8_t(std::clamp((pitch - target_pitch) / 80, -57, 57));
                     } else if (std::abs(angle) > 7600 && std::hypot(dx, dz) < 280.F && update % 8 < 4) {
                         input.buttons |= 0x4000; // Brake before tight bends.
@@ -1773,11 +1776,11 @@ extern "C" void dkr_time_trial_input(std::uint8_t* rdram, unsigned revision) {
 namespace {
 void adventure_frame(std::uint8_t* rdram, unsigned revision) {
     const auto& settings = addresses::current();
-    const unsigned earned = use_completed_save_rules
-                                ? earned_character_flags(MEM_W(4, guest(symbols::for_revision(revision).eeprom_settings)))
-                                : 0U;
-    const unsigned enabled = MEM_W(0, guest(settings.ActiveMagicCodes)) |
-                             MEM_W(0, guest(settings.UnlockedMagicCodes));
+    const unsigned earned =
+        use_completed_save_rules
+            ? earned_character_flags(MEM_W(4, guest(symbols::for_revision(revision).eeprom_settings)))
+            : 0U;
+    const unsigned enabled = MEM_W(0, guest(settings.ActiveMagicCodes)) | MEM_W(0, guest(settings.UnlockedMagicCodes));
     if (enabled & ~earned) {
         stop(false, "Adventure verification requires the original rules with Magic Codes disabled.");
         return;
@@ -1799,7 +1802,8 @@ void adventure_frame(std::uint8_t* rdram, unsigned revision) {
     const bool minigames = use_completed_save_rules && adventure_goal == Adventure::AllMinigames;
     const bool bosses = use_completed_save_rules && adventure_goal == Adventure::AllBosses;
     const bool minigame_race = sample.race_type >= 64 && sample.race_type <= 66;
-    if (!adventure_start && tracks && sample.valid && object && !sample.tracks && sample.race_type == hub_world_race_type) {
+    if (!adventure_start && tracks && sample.valid && object && !sample.tracks &&
+        sample.race_type == hub_world_race_type) {
         stop(false, "Choose Tracks on the game's main menu for this category.");
         return;
     }
@@ -1821,8 +1825,7 @@ void adventure_frame(std::uint8_t* rdram, unsigned revision) {
         }
         const bool empty_save = !progress.balloons && !progress.keys && !progress.bosses && !progress.trophies &&
                                 !progress.tt_amulet && !progress.wizpig_amulet;
-        const bool completed_save = sample.slot == 0 &&
-                                    adventure_complete(Adventure::HundredPercent, progress) &&
+        const bool completed_save = sample.slot == 0 && adventure_complete(Adventure::HundredPercent, progress) &&
                                     adventure_complete(Adventure::AllTrophyRaces, progress, true);
         if (bosses ? !completed_save : !empty_save) {
             stop(false, bosses ? "Select the completed Adventure slot for All Bosses."
@@ -1865,10 +1868,13 @@ void adventure_frame(std::uint8_t* rdram, unsigned revision) {
                 const auto player = std::ranges::find(sample.racers, 0, &achievements::Racer::player);
                 if (object && player != sample.racers.end() && player->finished && player->position > 0) {
                     if (sample.race_type == 0 && player->lap == sample.laps) {
-                        reached_splits.observe_race(adventure_goal, {unsigned(sample.level), unsigned(player->vehicle),
-                            unsigned(sample.trophy_world), unsigned(sample.trophy_round), player->position == 1}, clock);
-                    } else if (player->position == 1 && ((minigames && minigame_race) ||
-                                                        (bosses && sample.race_type == boss_race_type))) {
+                        reached_splits.observe_race(adventure_goal,
+                                                    {unsigned(sample.level), unsigned(player->vehicle),
+                                                     unsigned(sample.trophy_world), unsigned(sample.trophy_round),
+                                                     player->position == 1},
+                                                    clock);
+                    } else if (player->position == 1 &&
+                               ((minigames && minigame_race) || (bosses && sample.race_type == boss_race_type))) {
                         reached_splits.observe_event_win(adventure_goal, unsigned(sample.level), clock);
                     }
                 }
@@ -1877,8 +1883,8 @@ void adventure_frame(std::uint8_t* rdram, unsigned revision) {
                 finished = reached_splits.route_complete(adventure_goal, progress, use_completed_save_rules);
             }
             if (!tracks && !bosses)
-                reached_splits.observe(previous_adventure_progress, progress, object ? sample.race_type : -1,
-                                       world, previous_taj_flags, taj_flags, clock,
+                reached_splits.observe(previous_adventure_progress, progress, object ? sample.race_type : -1, world,
+                                       previous_taj_flags, taj_flags, clock,
                                        use_adventure_route_splits ? adventure_goal : Adventure::None);
             if (finished)
                 reached_splits.mark("Finish", clock);
@@ -1950,12 +1956,11 @@ void adventure_frame(std::uint8_t* rdram, unsigned revision) {
                       {"startSeed", BootSeed},       {"category", adventure_id(adventure_goal)},
                       {"practice", !ranked_attempt}, {"ticks", update},
                       {"finishTick", update},        {"clockTicks", clock},
-                      {"checkpoints", checkpoints}, {"splits", automatic_splits}};
+                      {"checkpoints", checkpoints},  {"splits", automatic_splits}};
         add_ranked_fields(manifest);
         write_replay(manifest);
-        const unsigned place = ranked_attempt && ranked_attempt->finish_targets
-                                   ? ranked_attempt->finish_targets->place(clock)
-                                   : 0;
+        const unsigned place =
+            ranked_attempt && ranked_attempt->finish_targets ? ranked_attempt->finish_targets->place(clock) : 0;
         const bool personal_best = !prior_finish_personal_best || clock < prior_finish_personal_best;
         const bool celebration = dkr::runtime::speedrunning::celebrates(place, personal_best);
         const int finish_seconds = celebration ? 5 : options.get(Option::FinishSummary) ? 3 : 0;
@@ -2020,8 +2025,8 @@ extern "C" void dkr_time_trial_frame_end(std::uint8_t* rdram, unsigned revision)
     // The retail track temporarily changes vehicleID in a loop. vehicleIDPrev
     // retains the selected vehicle and is restored when the racer exits it.
     const bool retail_loop = vehicle == loop_vehicle && MEM_BU(0x1D7, guest(racer)) == expected_vehicle &&
-                             selected_course && (selected_course->id == "walrus-cove" ||
-                                                 selected_course->id == "darkmoon-caverns");
+                             selected_course &&
+                             (selected_course->id == "walrus-cove" || selected_course->id == "darkmoon-caverns");
     if (vehicle != expected_vehicle && !retail_loop) {
         stop(false, "The simulation left the permitted solo Time Trial.");
         return;

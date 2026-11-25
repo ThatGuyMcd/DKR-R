@@ -924,14 +924,15 @@ int DkrMain(int argc, char** argv) {
     if (!launch.ghost_replay.empty() &&
         ((launch.time_trial != time_trial::Mode::Record && launch.time_trial != time_trial::Mode::SelfTest) ||
          launch.adventure != time_trial::Adventure::None || !launch.time_trial_track.empty())) {
-        std::fprintf(stderr, "[ghost] Select a practice recording. The ghost replay supplies the course and vehicle.\n");
+        std::fprintf(stderr,
+                     "[ghost] Select a practice recording. The ghost replay supplies the course and vehicle.\n");
         return 2;
     }
     if (launch.time_trial != time_trial::Mode::None) {
         const auto start_trial = [&] {
             if (!launch.ghost_replay.empty())
                 return time_trial::start_ghost(launch.ghost_replay, launch.replay_path, rom_error,
-                                              launch.time_trial_racer, launch.time_trial, launch.time_trial_map);
+                                               launch.time_trial_racer, launch.time_trial, launch.time_trial_map);
             return time_trial::start(launch.time_trial, launch.replay_path, rom_error, nullptr, launch.time_trial_racer,
                                      *launch.time_trial_course, launch.time_trial_vehicle, launch.adventure,
                                      launch.time_trial_track, launch.time_trial_map, launch.ghost_export);
@@ -1372,13 +1373,14 @@ int DkrMain(int argc, char** argv) {
         .poll_input = dkr::runtime::platform::poll_input,
         .frame_boundary = dkr::runtime::netplay::on_frame_boundary,
         .physical_poll_allowed = []() { return dkr::runtime::netplay::physical_input_poll_allowed(); },
-        .get_input = +[](int port, std::uint16_t* buttons, float* x, float* y) {
-            if (!time_trial::replaying())
-                return dkr::runtime::platform::get_input(port, buttons, x, y);
-            *buttons = 0;
-            *x = *y = 0.0F;
-            return port == 0;
-        },
+        .get_input =
+            +[](int port, std::uint16_t* buttons, float* x, float* y) {
+                if (!time_trial::replaying())
+                    return dkr::runtime::platform::get_input(port, buttons, x, y);
+                *buttons = 0;
+                *x = *y = 0.0F;
+                return port == 0;
+            },
         .set_rumble = dkr::runtime::platform::set_rumble,
         .get_connected_device_info = dkr::runtime::platform::get_connected_device_info,
     };
@@ -1560,7 +1562,7 @@ int DkrMain(int argc, char** argv) {
                 using dkr::runtime::saves::ReplaySave;
                 const auto seed = time_trial::uses_completed_adventure_save()       ? ReplaySave::CompletedAdventure
                                   : time_trial::uses_uninitialised_adventure_save() ? ReplaySave::MissingAdventure
-                                                                                   : ReplaySave::Blank;
+                                                                                    : ReplaySave::Blank;
                 if (!dkr::runtime::saves::prepare_time_trial_save_context(rom_error, seed))
                     throw dkr::mods::Error(rom_error);
                 ultramodern::set_save_storage_callbacks({dkr::runtime::saves::runtime_save_path,
@@ -2016,8 +2018,7 @@ int DkrMain(int argc, char** argv) {
         if (return_from_time_trial)
             time_trial::finish_interrupted_recording();
         if (launch.time_trial == time_trial::Mode::Verify || launch.time_trial == time_trial::Mode::SelfTest ||
-            time_trial::exporting_video() ||
-            launch.adventure != time_trial::Adventure::None) {
+            time_trial::exporting_video() || launch.adventure != time_trial::Adventure::None) {
             const int status = time_trial::status();
             time_trial::retire();
             dkr::runtime::platform::shutdown();

@@ -2105,9 +2105,7 @@ void dkr::runtime::platform::queue_theatre_audio(std::span<const std::int16_t> s
         rate = g_audio_frequency;
     }
     const auto frames = samples.size() / 2;
-    const auto sample_at = [rate, speed](unsigned update) {
-        return std::uint64_t(rate) * update * 100 / (30 * speed);
-    };
+    const auto sample_at = [rate, speed](unsigned update) { return std::uint64_t(rate) * update * 100 / (30 * speed); };
     const auto output_frames = static_cast<std::size_t>(sample_at(frame) - sample_at(previous));
     if (!frames || !output_frames)
         return;

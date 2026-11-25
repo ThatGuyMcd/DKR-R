@@ -43,7 +43,7 @@ void DrawPlaySaveSummary(float width, bool live, bool launching) {
     }
     const char* heading = scope == SaveScope::Online   ? "ONLINE ADVENTURE"
                           : scope == SaveScope::Modded ? "MODDED ADVENTURE"
-                                                      : "VANILLA ADVENTURE";
+                                                       : "VANILLA ADVENTURE";
     const auto heading_type = PaddockReading(16.F, true, 1.45F);
     const auto heading_text = dkr::localisation::source(heading);
     const float heading_width = std::ceil(PaddockMeasure(heading_type, heading_text)) + 8.F;
@@ -54,8 +54,8 @@ void DrawPlaySaveSummary(float width, bool live, bool launching) {
         ImGui::BeginGroup();
         auto position = ImGui::GetCursorScreenPos();
         position.y += (kPlayCloudControlHeight - heading_type.line) * 0.5F;
-        PaddockDrawRun(ImGui::GetWindowDrawList(), heading_type, position, PaddockCol(0xFFF6DA),
-                       heading_text.data(), heading_text.data() + heading_text.size());
+        PaddockDrawRun(ImGui::GetWindowDrawList(), heading_type, position, PaddockCol(0xFFF6DA), heading_text.data(),
+                       heading_text.data() + heading_text.size());
         ImGui::Dummy({heading_width, kPlayCloudControlHeight});
         ImGui::SameLine(0.F, 0.F);
         DrawPlayCloudSaves(std::min(cloud_width, width - heading_width), cloud_locked);
@@ -123,11 +123,9 @@ void DrawPlaySaveSummary(float width, bool live, bool launching) {
                       : std::string(dkr::localisation::source("Reading this session's saved progress..."));
     }
     PaddockText(PaddockReading(14.F, false, 1.5F), PaddockRgb(0xB0C9CC), preview, width);
-    PaddockText(
-        PaddockReading(13.F, false, 1.5F), PaddockRgb(0xB0C9CC),
-        dkr::localisation::source(
-            live ? "Preview shows saved progress for this session."
-                 : "Session Mods selects which Adventure save you use offline."),
-        width);
+    PaddockText(PaddockReading(13.F, false, 1.5F), PaddockRgb(0xB0C9CC),
+                dkr::localisation::source(live ? "Preview shows saved progress for this session."
+                                               : "Session Mods selects which Adventure save you use offline."),
+                width);
     PaddockGap(12.F);
 }

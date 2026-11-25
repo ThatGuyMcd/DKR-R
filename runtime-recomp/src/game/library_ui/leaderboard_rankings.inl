@@ -57,7 +57,8 @@ void DrawTrackRecordHistory(float width, const dkr::store::Json& history, const 
     OlHeading("World record history", 21.F, kOlCream, width);
     if (changes->empty()) {
         OlParagraph(complete ? "Record history appears after the first published run."
-                             : "Publication dates are unavailable for these results.", 15.F, kOlSoft, width);
+                             : "Publication dates are unavailable for these results.",
+                    15.F, kOlSoft, width);
         return;
     }
     static std::string selected_board;
@@ -164,8 +165,8 @@ void DrawTrackRecordHistory(float width, const dkr::store::Json& history, const 
         }
     }
     if (!complete || LeaderboardNumber(history, "earlierChanges"))
-        OlParagraph(complete ? "Showing the latest record changes." : "Some publication dates are unavailable.",
-                    14.F, kOlSoft, width);
+        OlParagraph(complete ? "Showing the latest record changes." : "Some publication dates are unavailable.", 14.F,
+                    kOlSoft, width);
 }
 
 enum class OverallPlayerTab { Score, Runs };
@@ -214,94 +215,104 @@ void RefreshOverallPlayer(const std::string& id, unsigned offset = 0) {
 
 std::string OverallPersonalBests(const dkr::store::Json& player) {
     const auto count = player.find("personalBests");
-    return count != player.end() && count->is_number_integer() ? std::to_string(LeaderboardNumber(player, "personalBests"))
-                                                               : "—";
+    return count != player.end() && count->is_number_integer()
+               ? std::to_string(LeaderboardNumber(player, "personalBests"))
+               : "—";
 }
 
 void DrawOverallStandings(float width, const dkr::store::Json& players) {
-    DrawOlCard(width, OlPanelLook{}, [&](float inner) {
-        OlHeading("Top Players", 24.F, kOlCream, inner);
-        PaddockGap(4.F);
-        const bool compact = inner < 300.F;
-        constexpr auto flags = ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_NoSavedSettings |
-                               ImGuiTableFlags_NoPadOuterX;
-        ImGui::PushStyleVar(ImGuiStyleVar_CellPadding, {compact ? 3.F : 5.F, 4.F});
-        if (ImGui::BeginTable("top-player-standings", 5, flags, {inner, 0.F})) {
-            ImGui::TableSetupColumn("Rank", ImGuiTableColumnFlags_WidthFixed, compact ? 34.F : 46.F);
-            ImGui::TableSetupColumn("Player", ImGuiTableColumnFlags_WidthStretch);
-            ImGui::TableSetupColumn("PBs", ImGuiTableColumnFlags_WidthFixed, compact ? 29.F : 34.F);
-            ImGui::TableSetupColumn("WRs", ImGuiTableColumnFlags_WidthFixed, compact ? 29.F : 38.F);
-            ImGui::TableSetupColumn("Points", ImGuiTableColumnFlags_WidthFixed, compact ? 58.F : 67.F);
+    DrawOlCard(
+        width, OlPanelLook{},
+        [&](float inner) {
+            OlHeading("Top Players", 24.F, kOlCream, inner);
+            PaddockGap(4.F);
+            const bool compact = inner < 300.F;
+            constexpr auto flags =
+                ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_NoSavedSettings | ImGuiTableFlags_NoPadOuterX;
+            ImGui::PushStyleVar(ImGuiStyleVar_CellPadding, {compact ? 3.F : 5.F, 4.F});
+            if (ImGui::BeginTable("top-player-standings", 5, flags, {inner, 0.F})) {
+                ImGui::TableSetupColumn("Rank", ImGuiTableColumnFlags_WidthFixed, compact ? 34.F : 46.F);
+                ImGui::TableSetupColumn("Player", ImGuiTableColumnFlags_WidthStretch);
+                ImGui::TableSetupColumn("PBs", ImGuiTableColumnFlags_WidthFixed, compact ? 29.F : 34.F);
+                ImGui::TableSetupColumn("WRs", ImGuiTableColumnFlags_WidthFixed, compact ? 29.F : 38.F);
+                ImGui::TableSetupColumn("Points", ImGuiTableColumnFlags_WidthFixed, compact ? 58.F : 67.F);
 
-            const auto cell = [](std::string_view text, float height, unsigned colour, bool right = false) {
-                const float width = ImGui::GetContentRegionAvail().x;
-                const auto type = OlRead(14.F, true, 1.2F);
-                const std::string label = PaddockEllipsize(type, text, width);
-                auto at = ImGui::GetCursorScreenPos();
-                if (right)
-                    at.x += std::max(0.F, width - PaddockMeasure(type, label));
-                at.y += (height - type.line) * .5F;
-                PaddockDrawRun(ImGui::GetWindowDrawList(), type, at, PaddockCol(colour), label.data(), label.data() + label.size());
-                ImGui::Dummy({width, height});
-            };
+                const auto cell = [](std::string_view text, float height, unsigned colour, bool right = false) {
+                    const float width = ImGui::GetContentRegionAvail().x;
+                    const auto type = OlRead(14.F, true, 1.2F);
+                    const std::string label = PaddockEllipsize(type, text, width);
+                    auto at = ImGui::GetCursorScreenPos();
+                    if (right)
+                        at.x += std::max(0.F, width - PaddockMeasure(type, label));
+                    at.y += (height - type.line) * .5F;
+                    PaddockDrawRun(ImGui::GetWindowDrawList(), type, at, PaddockCol(colour), label.data(),
+                                   label.data() + label.size());
+                    ImGui::Dummy({width, height});
+                };
 
-            ImGui::TableNextRow();
-            int column = 0;
-            for (const auto* header : {compact ? "#" : "Rank", "Player", "PBs", "WRs", "Points"}) {
-                ImGui::TableNextColumn();
-                cell(dkr::localisation::source(header), 22.F, kOlSoft, column >= 2);
-                ++column;
-            }
-            constexpr float row_height = 34.F;
-            for (const auto& player : players) {
-                const auto id = StoreText(player, "id", 96);
-                if (id.empty())
-                    continue;
-                const auto name = StoreText(player, "name", 96);
-                const auto place = LeaderboardNumber(player, "place");
-                const bool selected = g_overall_player == id;
-                ImGui::PushID(id.c_str());
                 ImGui::TableNextRow();
-                ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0, PaddockCol(selected ? 0x194650U : 0x123345U));
-                ImGui::TableNextColumn();
-                const auto at = ImGui::GetCursorScreenPos();
-                const unsigned badge = place == 1 ? 0x644C26U : place == 2 ? 0x40576BU :
-                                       place == 3 ? 0x67482FU : 0x23495CU;
-                PaddockFill(ImGui::GetWindowDrawList(), {at.x + 2.F, at.y + 4.F}, {at.x + 30.F, at.y + 30.F},
-                            PaddockRound(5.F), PaddockCol(badge));
-                const auto rank = std::to_string(place);
-                const auto digit = OlRead(14.F, true, 1.2F);
-                PaddockDrawRun(ImGui::GetWindowDrawList(), digit,
-                               {at.x + 16.F - PaddockMeasure(digit, rank) * .5F, at.y + (row_height - digit.line) * .5F},
-                               PaddockCol(place == 1 ? kOlCream : kOlInk), rank.data(), rank.data() + rank.size());
-                ImGui::Dummy({32.F, row_height});
-
-                ImGui::TableNextColumn();
-                const float name_width = ImGui::GetContentRegionAvail().x;
-                const auto caption = PaddockEllipsize(OlRead(14.F, true, 1.2F), name, std::max(1.F, name_width - 14.F));
-                if (g_overall_focus == id) {
-                    ImGui::SetKeyboardFocusHere();
-                    g_overall_focus.clear();
+                int column = 0;
+                for (const auto* header : {compact ? "#" : "Rank", "Player", "PBs", "WRs", "Points"}) {
+                    ImGui::TableNextColumn();
+                    cell(dkr::localisation::source(header), 22.F, kOlSoft, column >= 2);
+                    ++column;
                 }
-                if (OlButton((caption + "###player").c_str(), OlTone::Plain, name_width,
-                             caption != name ? name.c_str() : nullptr, row_height) && !selected)
-                    SelectOverallPlayer(id);
-                StoreControlFocus();
+                constexpr float row_height = 34.F;
+                for (const auto& player : players) {
+                    const auto id = StoreText(player, "id", 96);
+                    if (id.empty())
+                        continue;
+                    const auto name = StoreText(player, "name", 96);
+                    const auto place = LeaderboardNumber(player, "place");
+                    const bool selected = g_overall_player == id;
+                    ImGui::PushID(id.c_str());
+                    ImGui::TableNextRow();
+                    ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0, PaddockCol(selected ? 0x194650U : 0x123345U));
+                    ImGui::TableNextColumn();
+                    const auto at = ImGui::GetCursorScreenPos();
+                    const unsigned badge = place == 1   ? 0x644C26U
+                                           : place == 2 ? 0x40576BU
+                                           : place == 3 ? 0x67482FU
+                                                        : 0x23495CU;
+                    PaddockFill(ImGui::GetWindowDrawList(), {at.x + 2.F, at.y + 4.F}, {at.x + 30.F, at.y + 30.F},
+                                PaddockRound(5.F), PaddockCol(badge));
+                    const auto rank = std::to_string(place);
+                    const auto digit = OlRead(14.F, true, 1.2F);
+                    PaddockDrawRun(
+                        ImGui::GetWindowDrawList(), digit,
+                        {at.x + 16.F - PaddockMeasure(digit, rank) * .5F, at.y + (row_height - digit.line) * .5F},
+                        PaddockCol(place == 1 ? kOlCream : kOlInk), rank.data(), rank.data() + rank.size());
+                    ImGui::Dummy({32.F, row_height});
 
-                ImGui::TableNextColumn();
-                cell(OverallPersonalBests(player), row_height, kOlInk, true);
-                ImGui::TableNextColumn();
-                cell(std::to_string(LeaderboardNumber(player, "records")), row_height, kOlInk, true);
-                ImGui::TableNextColumn();
-                cell(LeaderboardPoints(LeaderboardNumber(player, "total")), row_height, kOlCream, true);
-                ImGui::PopID();
+                    ImGui::TableNextColumn();
+                    const float name_width = ImGui::GetContentRegionAvail().x;
+                    const auto caption =
+                        PaddockEllipsize(OlRead(14.F, true, 1.2F), name, std::max(1.F, name_width - 14.F));
+                    if (g_overall_focus == id) {
+                        ImGui::SetKeyboardFocusHere();
+                        g_overall_focus.clear();
+                    }
+                    if (OlButton((caption + "###player").c_str(), OlTone::Plain, name_width,
+                                 caption != name ? name.c_str() : nullptr, row_height) &&
+                        !selected)
+                        SelectOverallPlayer(id);
+                    StoreControlFocus();
+
+                    ImGui::TableNextColumn();
+                    cell(OverallPersonalBests(player), row_height, kOlInk, true);
+                    ImGui::TableNextColumn();
+                    cell(std::to_string(LeaderboardNumber(player, "records")), row_height, kOlInk, true);
+                    ImGui::TableNextColumn();
+                    cell(LeaderboardPoints(LeaderboardNumber(player, "total")), row_height, kOlCream, true);
+                    ImGui::PopID();
+                }
+                ImGui::EndTable();
             }
-            ImGui::EndTable();
-        }
-        ImGui::PopStyleVar();
-        if (g_overall_standings.value("tiedCutoff", false))
-            OlParagraph("More players share the final rank shown.", 14.F, kOlSoft, inner);
-    }, 13.F);
+            ImGui::PopStyleVar();
+            if (g_overall_standings.value("tiedCutoff", false))
+                OlParagraph("More players share the final rank shown.", 14.F, kOlSoft, inner);
+        },
+        13.F);
 }
 
 void DrawOverallScoreBreakdown(float width, const dkr::store::Json& player) {
@@ -337,7 +348,8 @@ std::optional<TrackQuery> DrawOverallPlayerRuns(float width) {
     if (!g_overall_profile.is_object()) {
         if (!g_overall_runs_requested && !DialogJobRunning())
             RefreshOverallPlayer(g_overall_player);
-        OlParagraph(DialogJobRunning() ? "Loading ranked runs..." : "Ranked runs are unavailable.", 15.F, kOlSoft, width);
+        OlParagraph(DialogJobRunning() ? "Loading ranked runs..." : "Ranked runs are unavailable.", 15.F, kOlSoft,
+                    width);
         if (!DialogJobRunning() && OlButton("Try again"))
             RefreshOverallPlayer(g_overall_player);
         return {};
@@ -419,52 +431,58 @@ std::optional<TrackQuery> DrawOverallPlayerRuns(float width) {
 
 std::optional<TrackQuery> DrawOverallPlayerPanel(float width, const dkr::store::Json& player) {
     std::optional<TrackQuery> next;
-    DrawOlCard(width, OlPanelLook{}, [&](float inner) {
-        const auto total = LeaderboardPoints(LeaderboardNumber(player, "total")) + " pts";
-        const float total_width = std::ceil(PaddockMeasure(OlSignType(23.F, 1.3F), total)) + 4.F;
-        const bool inline_total = inner >= total_width + 148.F;
-        ImGui::BeginGroup();
-        const float name_width = inline_total ? inner - total_width - 10.F : inner;
-        OlParagraph("#" + std::to_string(LeaderboardNumber(player, "place")) + " overall", 14.F, kOlSoft,
-                    name_width, false, 1.2F);
-        OlHeading(StoreText(player, "name", 96), 23.F, kOlCream, name_width, 1.3F);
-        ImGui::EndGroup();
-        if (inline_total)
-            ImGui::SameLine(0.F, 10.F);
-        OlHeading(total, 23.F, kOlAmber, inline_total ? total_width : inner, 1.3F);
+    DrawOlCard(
+        width, OlPanelLook{},
+        [&](float inner) {
+            const auto total = LeaderboardPoints(LeaderboardNumber(player, "total")) + " pts";
+            const float total_width = std::ceil(PaddockMeasure(OlSignType(23.F, 1.3F), total)) + 4.F;
+            const bool inline_total = inner >= total_width + 148.F;
+            ImGui::BeginGroup();
+            const float name_width = inline_total ? inner - total_width - 10.F : inner;
+            OlParagraph("#" + std::to_string(LeaderboardNumber(player, "place")) + " overall", 14.F, kOlSoft,
+                        name_width, false, 1.2F);
+            OlHeading(StoreText(player, "name", 96), 23.F, kOlCream, name_width, 1.3F);
+            ImGui::EndGroup();
+            if (inline_total)
+                ImGui::SameLine(0.F, 10.F);
+            OlHeading(total, 23.F, kOlAmber, inline_total ? total_width : inner, 1.3F);
 
-        const auto tab = [&](const char* label, OverallPlayerTab target) {
-            if (OlButton(label, target == g_overall_tab ? OlTone::PlateStrong : OlTone::Plain,
-                         std::min(inner, OlButtonWidth(label)), nullptr, 34.F))
-                g_overall_tab = target;
-            StoreControlFocus();
-        };
-        tab("Score breakdown", OverallPlayerTab::Score);
-        if (OlButtonWidth("Score breakdown") + OlButtonWidth("Ranked runs") + 6.F <= inner)
-            ImGui::SameLine(0.F, 6.F);
-        tab("Ranked runs", OverallPlayerTab::Runs);
+            const auto tab = [&](const char* label, OverallPlayerTab target) {
+                if (OlButton(label, target == g_overall_tab ? OlTone::PlateStrong : OlTone::Plain,
+                             std::min(inner, OlButtonWidth(label)), nullptr, 34.F))
+                    g_overall_tab = target;
+                StoreControlFocus();
+            };
+            tab("Score breakdown", OverallPlayerTab::Score);
+            if (OlButtonWidth("Score breakdown") + OlButtonWidth("Ranked runs") + 6.F <= inner)
+                ImGui::SameLine(0.F, 6.F);
+            tab("Ranked runs", OverallPlayerTab::Runs);
 
-        OlPanelLook count_look;
-        count_look.fill = 0x123648;
-        const auto stat = [&](float available, const char* label, const std::string& value) {
-            DrawOlCard(available, count_look, [&](float inside) {
-                OlParagraph(label, 14.F, kOlSoft, inside, false, 1.2F);
-                OlHeading(value, 24.F, kOlCream, inside, 1.2F);
-            }, 8.F);
-        };
-        const bool pair_stats = inner >= 230.F;
-        const float stat_width = pair_stats ? (inner - 8.F) * .5F : inner;
-        stat(stat_width, "Posted PBs", OverallPersonalBests(player));
-        if (pair_stats)
-            ImGui::SameLine(0.F, 8.F);
-        stat(stat_width, "World Records", std::to_string(LeaderboardNumber(player, "records")));
-        PaddockGap(3.F);
+            OlPanelLook count_look;
+            count_look.fill = 0x123648;
+            const auto stat = [&](float available, const char* label, const std::string& value) {
+                DrawOlCard(
+                    available, count_look,
+                    [&](float inside) {
+                        OlParagraph(label, 14.F, kOlSoft, inside, false, 1.2F);
+                        OlHeading(value, 24.F, kOlCream, inside, 1.2F);
+                    },
+                    8.F);
+            };
+            const bool pair_stats = inner >= 230.F;
+            const float stat_width = pair_stats ? (inner - 8.F) * .5F : inner;
+            stat(stat_width, "Posted PBs", OverallPersonalBests(player));
+            if (pair_stats)
+                ImGui::SameLine(0.F, 8.F);
+            stat(stat_width, "World Records", std::to_string(LeaderboardNumber(player, "records")));
+            PaddockGap(3.F);
 
-        if (g_overall_tab == OverallPlayerTab::Score)
-            DrawOverallScoreBreakdown(inner, player);
-        else
-            next = DrawOverallPlayerRuns(inner);
-    }, 13.F);
+            if (g_overall_tab == OverallPlayerTab::Score)
+                DrawOverallScoreBreakdown(inner, player);
+            else
+                next = DrawOverallPlayerRuns(inner);
+        },
+        13.F);
     return next;
 }
 
@@ -486,16 +504,16 @@ std::optional<TrackQuery> DrawOverallRankings(float width) {
     }
     const auto players = g_overall_standings.find("players");
     if (players == g_overall_standings.end() || !players->is_array() || players->empty()) {
-        OlParagraph(DialogJobRunning() ? "Loading top players..." : players == g_overall_standings.end()
-                        ? "Refresh to load the overall rankings." : "Top players appear after the first published run.",
+        OlParagraph(DialogJobRunning()                     ? "Loading top players..."
+                    : players == g_overall_standings.end() ? "Refresh to load the overall rankings."
+                                                           : "Top players appear after the first published run.",
                     15.F, kOlSoft, width);
         return {};
     }
 
     const auto selected = [&] {
-        return std::ranges::find_if(*players, [](const auto& player) {
-            return StoreText(player, "id", 96) == g_overall_player;
-        });
+        return std::ranges::find_if(*players,
+                                    [](const auto& player) { return StoreText(player, "id", 96) == g_overall_player; });
     };
     if (selected() == players->end())
         SelectOverallPlayer(StoreText(players->front(), "id", 96));

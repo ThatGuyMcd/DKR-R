@@ -76,8 +76,7 @@ inline bool writable_path(const std::filesystem::path& path, std::string& error)
                   key(canonical_target).lexically_relative(key(protected_canonical_root)).generic_string()}) {
                 if (relative == "saves/dkr.us.v77.bin" || relative.starts_with("saves/dkr.us.v77.bin.") ||
                     relative.starts_with(kModdedAdventureDirectory) || relative.starts_with("controller-pak-") ||
-                    relative.starts_with("save-backups/") ||
-                    relative.starts_with("save-history/")) {
+                    relative.starts_with("save-backups/") || relative.starts_with("save-history/")) {
                     error = "Offline saves are protected while an online session is active.";
                     return false;
                 }
@@ -277,8 +276,8 @@ inline bool durable_replace(const std::filesystem::path& path, std::span<const s
     }
     return good;
 }
-inline bool write_atomic(const std::filesystem::path& path, const Bytes& bytes, Validator validator,
-                         std::string& error, const Bytes* expected = nullptr, bool progress = false) {
+inline bool write_atomic(const std::filesystem::path& path, const Bytes& bytes, Validator validator, std::string& error,
+                         const Bytes* expected = nullptr, bool progress = false) {
     auto lease = acquire(path, error);
     if (!lease)
         return false;

@@ -12,7 +12,7 @@ struct SavesPageState {
     ImGuiContext* context = nullptr;
     int last_frame = -100;
     SaveEditorSection section = SaveEditorSection::Progress;
-    int scope = 0;   // Vanilla, Online, Modded, Recovery
+    int scope = 0; // Vanilla, Online, Modded, Recovery
     bool personal_modded = false;
     bool import_modded = false;
     int selected_slot = 0;
@@ -235,9 +235,10 @@ void DrawSavesSlotEditor(SavesPageState& state, float outer, int slot_index) {
             total += " + " + std::to_string(bonus) + " bonus";
         const PaddockType type = PaddockReading(16.0F, true, 1.0F);
         const float text_width = PaddockMeasure(type, total);
-        PaddockDrawRun(draw, type,
-                       {std::round(at.x + (total_width - text_width) * 0.5F), std::round(at.y + (32.0F - type.line) * 0.5F)},
-                       PaddockCol(kSetText), total.data(), total.data() + total.size());
+        PaddockDrawRun(
+            draw, type,
+            {std::round(at.x + (total_width - text_width) * 0.5F), std::round(at.y + (32.0F - type.line) * 0.5F)},
+            PaddockCol(kSetText), total.data(), total.data() + total.size());
         ImGui::Dummy({total_width, 32.0F});
         const float total_bottom = ImGui::GetItemRectMax().y;
         ImGui::SetCursorScreenPos({summary.x, std::max(letters_bottom, total_bottom)});
@@ -289,8 +290,8 @@ void DrawSavesSlotEditor(SavesPageState& state, float outer, int slot_index) {
     PaddockGap(9.0F);
     PaddockBox trophy_box(outer, {10.0F, 10.0F});
     title("Trophy races", width);
-    constexpr std::array<const char*, 5> kTrophies{
-        "Dino Domain", "Sherbet Island", "Snowflake Mountain", "Dragon Forest", "Future Fun Land"};
+    constexpr std::array<const char*, 5> kTrophies{"Dino Domain", "Sherbet Island", "Snowflake Mountain",
+                                                   "Dragon Forest", "Future Fun Land"};
     SavesGrid trophies(width, width);
     for (std::size_t world = 0; world < kTrophies.size(); ++world) {
         trophies.Begin();
@@ -299,8 +300,8 @@ void DrawSavesSlotEditor(SavesPageState& state, float outer, int slot_index) {
         int place = (slot.trophies >> shift) & 3;
         if (SettingsDropdown("##trophy", kTrophies[world], &place, {"None", "Bronze", "Silver", "Gold"},
                              trophies.column))
-            slot.trophies = static_cast<std::uint16_t>((slot.trophies & ~(3U << shift)) |
-                                                       (static_cast<unsigned>(place) << shift));
+            slot.trophies =
+                static_cast<std::uint16_t>((slot.trophies & ~(3U << shift)) | (static_cast<unsigned>(place) << shift));
         ImGui::PopID();
         trophies.End();
     }
@@ -346,9 +347,8 @@ void DrawSavesSlotEditor(SavesPageState& state, float outer, int slot_index) {
     PaddockGap(9.0F);
     PaddockBox courses_box(outer, {10.0F, 10.0F});
     title("Course progress", width);
-    constexpr std::array<int, kCourseCount> kCourses{
-        3, 1, 20, 5, 6, 8, 2, 21, 10, 4, 7, 19, 14, 13, 15, 22, 12, 23, 11, 24,
-        9, 17, 18, 16, 26, 29, 27, 31, 0, 30, 28, 32, 25, 33};
+    constexpr std::array<int, kCourseCount> kCourses{3,  1,  20, 5, 6,  8,  2,  21, 10, 4,  7,  19, 14, 13, 15, 22, 12,
+                                                     23, 11, 24, 9, 17, 18, 16, 26, 29, 27, 31, 0,  30, 28, 32, 25, 33};
     const auto& names = course_names();
     for (std::size_t group = 0; group <= kTrophies.size(); ++group) {
         const char* title = group < kTrophies.size() ? kTrophies[group] : "Challenges and bosses";
@@ -443,8 +443,8 @@ SavesFooterLayout MeasureSavesFooter(float width) {
     return {discard_width, apply_width, stacked, stacked ? 106.0F : 66.0F};
 }
 
-void DrawSavesDraftBar(const SavesPageState& state, float width, float top, const SavesFooterLayout& layout,
-                       bool dirty, bool locked, SavesPageState::Ask& ask) {
+void DrawSavesDraftBar(const SavesPageState& state, float width, float top, const SavesFooterLayout& layout, bool dirty,
+                       bool locked, SavesPageState::Ask& ask) {
     ImGuiWindow* window = ImGui::GetCurrentWindow();
     const auto panel = PanelFooterBounds(window);
     const float left = ImGui::GetCursorScreenPos().x;
@@ -460,8 +460,9 @@ void DrawSavesDraftBar(const SavesPageState& state, float width, float top, cons
     }
     ImGui::SetCursorScreenPos({left, top + (layout.stacked ? 10.0F : 17.0F)});
     const float text_width = layout.stacked ? width : width - layout.discard_width - layout.apply_width - 24.0F;
-    const std::string_view status = state.personal_modded ? (dirty ? "Modded Adventure · Unsaved changes" : "Modded Adventure")
-                                                         : (dirty ? "Vanilla Adventure · Unsaved changes" : "Vanilla Adventure");
+    const std::string_view status = state.personal_modded
+                                        ? (dirty ? "Modded Adventure · Unsaved changes" : "Modded Adventure")
+                                        : (dirty ? "Vanilla Adventure · Unsaved changes" : "Vanilla Adventure");
     PaddockText(PaddockReading(16.0F, true, 1.25F), PaddockRgb(kSetText), status, text_width);
 
     const float buttons_y = top + (layout.stacked ? 48.0F : 11.0F);
@@ -552,7 +553,8 @@ void DrawSavesFiles(SavesPageState& state, float width, const AdventureView& adv
     const float column = side_by_side ? std::floor((width - gap) * 0.5F) : width;
     const ImVec2 top = ImGui::GetCursorScreenPos();
     constexpr std::string_view adventure_help = "Back up, export or replace this Adventure.";
-    constexpr std::string_view bundle_help = "Transfer this Adventure with shared custom-course records and Controller Paks.";
+    constexpr std::string_view bundle_help =
+        "Transfer this Adventure with shared custom-course records and Controller Paks.";
     const auto note_type = PaddockReading(16.0F, false, 1.45F);
     const float note_height = std::max(PaddockTextHeight(note_type, adventure_help, column),
                                        PaddockTextHeight(note_type, bundle_help, column));
@@ -583,8 +585,7 @@ void DrawSavesFiles(SavesPageState& state, float width, const AdventureView& adv
         state.ask = SavesPageState::Ask::Repair;
     ImGui::EndGroup();
     const float first_bottom = ImGui::GetItemRectMax().y;
-    ImGui::SetCursorScreenPos(side_by_side ? ImVec2{top.x + column + gap, top.y}
-                                         : ImVec2{top.x, first_bottom + 16.0F});
+    ImGui::SetCursorScreenPos(side_by_side ? ImVec2{top.x + column + gap, top.y} : ImVec2{top.x, first_bottom + 16.0F});
     ImGui::BeginGroup();
     heading("Save bundle", column);
     transfer_note(bundle_help);
@@ -603,7 +604,9 @@ void DrawSavesFiles(SavesPageState& state, float width, const AdventureView& adv
         ImGui::PushID(port);
         const auto& pak = view.controller_paks[port];
         const std::string label = "Controller " + std::to_string(port + 1) + ": " +
-                                  (!pak.exists ? "not created" : pak.valid ? "ready" : "needs recovery");
+                                  (!pak.exists ? "not created"
+                                   : pak.valid ? "ready"
+                                               : "needs recovery");
         const float actions_width = SettingsButtonWidth("Back up Pak") + SettingsButtonWidth("Export Pak") +
                                     SettingsButtonWidth("Import Pak") + 16.0F;
         constexpr float label_width = 192.0F;
@@ -660,7 +663,8 @@ void DrawSavesConfirmations(SavesPageState& state) {
         ImGui::OpenPopup("##saves-confirm");
     }
     std::string heading = "Confirm save change", detail, confirm = "CONFIRM";
-    const bool modded = state.ask == Ask::Import || state.ask == Ask::Bundle ? state.import_modded : state.personal_modded;
+    const bool modded =
+        state.ask == Ask::Import || state.ask == Ask::Bundle ? state.import_modded : state.personal_modded;
     auto& draft = g_adventure_drafts[modded];
     const std::string adventure = modded ? "Modded Adventure" : "Vanilla Adventure";
     bool replace = true;
@@ -679,7 +683,8 @@ void DrawSavesConfirmations(SavesPageState& state) {
         break;
     case Ask::Reset:
         heading = "Reset " + adventure + "?";
-        detail = "Reset all three slots, unlocks and built-in records in this Adventure. The current Adventure is backed up first.";
+        detail =
+            "Reset all three slots, unlocks and built-in records in this Adventure. The current Adventure is backed up first.";
         confirm = "BACK UP & RESET";
         break;
     case Ask::Restore:
@@ -719,7 +724,8 @@ void DrawSavesConfirmations(SavesPageState& state) {
     case Ask::Bundle:
         heading = "Import bundle into " + adventure + "?";
         detail =
-            "Import the Adventure into " + adventure + " and replace any shared records and Controller Paks included in the bundle. Originals are kept in Recovery.";
+            "Import the Adventure into " + adventure +
+            " and replace any shared records and Controller Paks included in the bundle. Originals are kept in Recovery.";
         confirm = "BACK UP & IMPORT BUNDLE";
         break;
     case Ask::Pak:
@@ -803,11 +809,9 @@ void DrawSavesConfirmations(SavesPageState& state) {
                     shared::complete(image, state.slot);
                 if (state.ask == Ask::UnlockAll)
                     shared::unlock(image);
-                BeginSharedSaveJob(
-                    [image = std::move(image), expected, modded](std::string& error) {
-                        return shared::apply(image, expected, error, modded);
-                    },
-                    adventure + " saved and verified.", modded);
+                BeginSharedSaveJob([image = std::move(image), expected, modded](
+                                       std::string& error) { return shared::apply(image, expected, error, modded); },
+                                   adventure + " saved and verified.", modded);
             } else
                 g_save_manager_status = error;
         } else if (state.ask == Ask::Reset)
@@ -901,7 +905,8 @@ void DrawStoredSaves(SavesPageState& state, float width, bool locked) {
         SavesNote("The host can continue the same Online Adventure with different mods.", width);
     } else {
         SavesNote("Choose which Adventure should receive the backup.", width);
-        const int target = SettingsSectionSigns({"RESTORE TO VANILLA", "RESTORE TO MODDED"}, state.personal_modded, width);
+        const int target =
+            SettingsSectionSigns({"RESTORE TO VANILLA", "RESTORE TO MODDED"}, state.personal_modded, width);
         if (target >= 0)
             state.personal_modded = target == 1;
     }
@@ -929,10 +934,9 @@ void DrawStoredSaves(SavesPageState& state, float width, bool locked) {
         if (development)
             SavesNote("Development image - contains tool-session progress, not ordinary play.", inner, 14, kSetWarm);
         if (adventure && !locked) {
-            if (SavesRaceButton(record.info.valid ? (state.scope == 1 ? "USE FOR HOSTING" : "RESTORE BACKUP")
-                                                  : "REPAIR & USE COPY",
-                                0, SavesTone::Primary,
-                                SharedSaveBusy() || (!record.info.valid && record.info.size != 512))) {
+            if (SavesRaceButton(
+                    record.info.valid ? (state.scope == 1 ? "USE FOR HOSTING" : "RESTORE BACKUP") : "REPAIR & USE COPY",
+                    0, SavesTone::Primary, SharedSaveBusy() || (!record.info.valid && record.info.size != 512))) {
                 state.restore = record.info.path;
                 state.ask = !record.info.valid ? SavesPageState::Ask::RepairUse
                             : state.scope == 1 ? SavesPageState::Ask::Host
@@ -983,8 +987,8 @@ float DrawSavesSlotList(SavesPageState& state, float width, float height, bool s
     const float item_width = stacked ? (box.Inner() - gap * (count - 1)) / count : box.Inner();
     const auto row = ImGui::GetCursorScreenPos();
     const float heading_height = row.y - box.Origin().y;
-    const float row_height = stacked ? 68.0F
-        : std::clamp((height - heading_height - pad - gap * (count - 1)) / count, 60.0F, 72.0F);
+    const float row_height =
+        stacked ? 68.0F : std::clamp((height - heading_height - pad - gap * (count - 1)) / count, 60.0F, 72.0F);
     for (int index = 0; index < count; ++index) {
         if (stacked)
             ImGui::SetCursorScreenPos({row.x + static_cast<float>(index) * (item_width + gap), row.y});
@@ -992,17 +996,19 @@ float DrawSavesSlotList(SavesPageState& state, float width, float height, bool s
         const auto press = PaddockBeginPress("##adventure-slot", {item_width, row_height});
         const bool active = index == state.selected_slot;
         PaddockPanel(ImGui::GetWindowDrawList(), press.min, press.max,
-                      {PaddockRound(9), PaddockRgb(active ? 0xA33620 : press.hovered ? 0x1C4F65 : 0x12394B),
-                       PaddockRgb(active ? kSetWarm : kSetBorder), 1.0F});
+                     {PaddockRound(9),
+                      PaddockRgb(active          ? 0xA33620
+                                 : press.hovered ? 0x1C4F65
+                                                 : 0x12394B),
+                      PaddockRgb(active ? kSetWarm : kSetBorder), 1.0F});
         const auto* slot = image ? &image->slots[static_cast<std::size_t>(index)] : nullptr;
         const bool named = slot && slot->name.find_first_not_of(' ') != std::string::npos;
         const bool occupied = slot && (named || slot->balloons[0] || slot->trophies);
-        const std::string name = named ? slot->name
-            : std::string(dkr::localisation::source(occupied ? "Unnamed" : "Empty"));
-        const std::string progress = occupied
-                                         ? std::to_string(slot->balloons[0]) + " " +
-                                               std::string(dkr::localisation::source("balloons"))
-                                         : std::string{};
+        const std::string name =
+            named ? slot->name : std::string(dkr::localisation::source(occupied ? "Unnamed" : "Empty"));
+        const std::string progress =
+            occupied ? std::to_string(slot->balloons[0]) + " " + std::string(dkr::localisation::source("balloons"))
+                     : std::string{};
         const auto slot_label = std::string(dkr::localisation::source("Slot")) + " " + std::to_string(index + 1);
         const auto small_text = PaddockReading(13.0F, false, 1.2F);
         const auto large = PaddockReading(16.0F, true, 1.15F);
@@ -1113,8 +1119,8 @@ void DrawSavesWorkspace(SavesPageState& state, float width, const SaveManagerVie
         if (state.section == SaveEditorSection::Files) {
             DrawSavesFiles(state, content_width, adventure, view);
         } else if (!valid || !loaded) {
-            SavesNote(adventure.info.exists ? "This Adventure needs recovery." : "No Adventure save yet.", content_width,
-                      17.0F, kSetWarm);
+            SavesNote(adventure.info.exists ? "This Adventure needs recovery." : "No Adventure save yet.",
+                      content_width, 17.0F, kSetWarm);
             if (SavesRaceButton("OPEN FILES"))
                 state.section = SaveEditorSection::Files;
         } else if (state.section == SaveEditorSection::Progress) {
@@ -1164,9 +1170,8 @@ void DrawSaveManagerPage(float available_width, bool live) {
     const bool locked = live || lobby || SharedSaveBusy();
     constexpr std::array scopes{0, 2, 1, 3, 4};
     const int current = static_cast<int>(std::ranges::find(scopes, state.scope) - scopes.begin());
-    const int picked =
-        SettingsSectionSigns({"VANILLA SAVE", "MODDED SAVE", "ONLINE SAVES", "BACKUPS & RECOVERY", "CLOUD SAVES"},
-                        current, width, true);
+    const int picked = SettingsSectionSigns(
+        {"VANILLA SAVE", "MODDED SAVE", "ONLINE SAVES", "BACKUPS & RECOVERY", "CLOUD SAVES"}, current, width, true);
     if (picked >= 0 && picked != current) {
         state.scope = scopes[static_cast<std::size_t>(picked)];
         state.ask = SavesPageState::Ask::None;

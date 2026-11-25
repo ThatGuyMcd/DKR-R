@@ -392,9 +392,8 @@ namespace {
 const Entry* replay_header(const Track& track) {
     if (!track.level_links.empty())
         return nullptr;
-    const auto header = std::find_if(track.entries.begin(), track.entries.end(), [](const auto& entry) {
-        return entry.section == Section::LevelHeaders;
-    });
+    const auto header = std::find_if(track.entries.begin(), track.entries.end(),
+                                     [](const auto& entry) { return entry.section == Section::LevelHeaders; });
     if (header == track.entries.end() || header->bytes.size() < 0xC8 || header->bytes[0] != kCustomTrackWorld ||
         header->bytes[0x4B] < 1 || header->bytes[0x4B] > 5 || header->bytes[0x4C] != 0)
         return nullptr;
@@ -423,8 +422,8 @@ std::vector<ReplayTrack> installed_replay_tracks() {
 
 std::filesystem::path installed_replay_source(const std::string& id) {
     std::scoped_lock lock(g_mutex);
-    const auto track = std::find_if(g_tracks.begin(), g_tracks.end(),
-                                    [&](const Track& candidate) { return candidate.id == id; });
+    const auto track =
+        std::find_if(g_tracks.begin(), g_tracks.end(), [&](const Track& candidate) { return candidate.id == id; });
     return track == g_tracks.end() ? std::filesystem::path{} : track->source;
 }
 
@@ -1265,8 +1264,7 @@ std::vector<std::int32_t> build_extended_table(Section section, const std::int32
         const std::vector<Track> vanilla;
         return assemble_table(section, retail_table, vanilla, g_sections, g_resolved_level_ids, table_words);
     }
-    return assemble_table(section, retail_table, active_tracks_locked(), g_sections, g_resolved_level_ids,
-                          table_words);
+    return assemble_table(section, retail_table, active_tracks_locked(), g_sections, g_resolved_level_ids, table_words);
 }
 
 PreparedTracks prepare_tracks(std::vector<Track> tracks, const std::array<std::vector<std::int32_t>, 7>& tables) {

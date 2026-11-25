@@ -693,7 +693,7 @@ FULL_SCENE_NATIVE_HASH = {
     # two addresses); the callee uses no odd float registers or doubles.
     # Nov 17: reads the selected revision through revision_addresses::current(); same addresses, no new store, call or hook.
     # Offline replays retain the selected aspect through finish presentation.
-    "runtime-recomp/src/game/runtime_stubs.cpp": "25478faeeccf80ec5adcfb026481301b510af50f0ef6548c2a97b95745d872d7",
+    "runtime-recomp/src/game/runtime_stubs.cpp": "3f8d1949c0d27450b88a989916f33b8d609e01abae3489b78a4f567f12d45852",
     "runtime-recomp/src/game/track_select_draw_guest.h": "053e11b284c433b88b19470534003519ad3d16bc3e625ce4bcc2b5f4f172041e",
     "runtime-recomp/src/game/audio_event_queue.h": "7899cd55f01c95221a71eac64857611a929bc19ff2d1603ca4c3e56a1a4ebf18",
     "runtime-recomp/src/game/audio_event_queue_state.h": "7e479c5c99dc4ab0d43c9ddfc1a082437d631adc688b14e86c7d5a3edf0f7ecf",

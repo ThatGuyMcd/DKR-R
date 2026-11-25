@@ -60,7 +60,7 @@ std::vector<std::uint8_t> read_bytes(const std::filesystem::path& path) {
 }
 
 std::optional<dkr::cloud_saves::ProgressBatch> take_progress(dkr::cloud_saves::ProgressWrites& writes,
-                                                          std::chrono::milliseconds timeout) {
+                                                             std::chrono::milliseconds timeout) {
     std::stop_source stop;
     std::jthread watchdog([&](std::stop_token done) {
         std::mutex mutex;

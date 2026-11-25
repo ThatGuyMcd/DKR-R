@@ -28,20 +28,21 @@ bool BeginSharedSaveJob(std::function<bool(std::string&)> action, std::string su
     if (SharedSaveBusy())
         return false;
     g_save_manager_status = "Saving...";
-    g_shared_save_job = std::async(std::launch::async, [action = std::move(action), success = std::move(success), edited_adventure] {
-        SharedSaveResult result;
-        result.edited_adventure = edited_adventure;
-        try {
-            std::string error;
-            result.ok = action(error);
-            result.message = result.ok ? success : error;
-        } catch (const std::exception& e) {
-            result.message = e.what();
-        } catch (...) {
-            result.message = "The save operation stopped. Original recovery images were retained.";
-        }
-        return result;
-    });
+    g_shared_save_job =
+        std::async(std::launch::async, [action = std::move(action), success = std::move(success), edited_adventure] {
+            SharedSaveResult result;
+            result.edited_adventure = edited_adventure;
+            try {
+                std::string error;
+                result.ok = action(error);
+                result.message = result.ok ? success : error;
+            } catch (const std::exception& e) {
+                result.message = e.what();
+            } catch (...) {
+                result.message = "The save operation stopped. Original recovery images were retained.";
+            }
+            return result;
+        });
     return true;
 }
 void PumpSharedSaveJob() {

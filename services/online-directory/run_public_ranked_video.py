@@ -158,9 +158,21 @@ def main():
             replay_rom = replay_rom_for(replay_metadata(replay.read_bytes()), rom, rom_v10)
             output = job / "movie"
             render = Path(__file__).with_name("render_ranked_video.py")
-            command = [sys.executable, str(render), "--runtime", str(runtime), "--rom", str(replay_rom), "--replay",
-                       str(replay), "--output", str(output), "--timeout", str(timeout),
-                       "--racer-credit=" + item["racerCredit"]]
+            command = [
+                sys.executable,
+                str(render),
+                "--runtime",
+                str(runtime),
+                "--rom",
+                str(replay_rom),
+                "--replay",
+                str(replay),
+                "--output",
+                str(output),
+                "--timeout",
+                str(timeout),
+                "--racer-credit=" + item["racerCredit"],
+            ]
             if item.get("track"):
                 package = retrieve_track(item["track"], job, opener, origin(SITE))
                 command += ["--track-package", str(package)]
@@ -176,8 +188,12 @@ def main():
             proof = json.loads((output / "proof.json").read_text(encoding="utf-8"))
             movie = output / "verified.mp4"
             size = movie.stat().st_size
-            if (not 0 < size <= MAX_MOVIE_BYTES or proof["videoSha256"] != file_digest(movie)
-                    or proof["replaySha256"] != digest or proof.get("videoRacerCredit") != item["racerCredit"]):
+            if (
+                not 0 < size <= MAX_MOVIE_BYTES
+                or proof["videoSha256"] != file_digest(movie)
+                or proof["replaySha256"] != digest
+                or proof.get("videoRacerCredit") != item["racerCredit"]
+            ):
                 raise ValueError("The movie did not match the completed capture proof.")
             archive = job / archive_name(run_id, proof["videoSha256"])
             seal(movie, archive, key, run_id, digest, proof["videoSha256"])

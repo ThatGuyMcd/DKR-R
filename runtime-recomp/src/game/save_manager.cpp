@@ -233,7 +233,8 @@ bool BackupUnlocked(std::filesystem::path& created, std::string& error, bool mod
         return false;
     }
     std::error_code filesystem_error;
-    const auto directory = g_config_directory / "save-backups" / dkr::runtime::saves::personal_adventure_subfolder(modded);
+    const auto directory =
+        g_config_directory / "save-backups" / dkr::runtime::saves::personal_adventure_subfolder(modded);
     std::filesystem::create_directories(directory, filesystem_error);
     if (filesystem_error) {
         error = "Could not create the backup garage: " + filesystem_error.message();
@@ -254,7 +255,8 @@ bool BackupRawAdventureUnlocked(std::filesystem::path& created, std::string& err
         return false;
     }
     std::error_code filesystem_error;
-    const auto directory = g_config_directory / "save-backups" / dkr::runtime::saves::personal_adventure_subfolder(modded);
+    const auto directory =
+        g_config_directory / "save-backups" / dkr::runtime::saves::personal_adventure_subfolder(modded);
     std::filesystem::create_directories(directory, filesystem_error);
     if (filesystem_error) {
         error = "Could not create the backup garage: " + filesystem_error.message();
@@ -697,7 +699,8 @@ bool dkr::runtime::saves::repair_adventure_checksums(bool& changed, std::filesys
         return false;
 
     std::vector<std::uint8_t> original;
-    if (!ReadFileBounded(AdventurePath(modded), kAdventureSaveSize, original) || original.size() != kAdventureSaveSize) {
+    if (!ReadFileBounded(AdventurePath(modded), kAdventureSaveSize, original) ||
+        original.size() != kAdventureSaveSize) {
         error = "No 512-byte Adventure EEPROM is available to repair.";
         return false;
     }
@@ -1197,7 +1200,7 @@ bool dkr::runtime::saves::read_cloud_save(std::string_view key, std::vector<std:
     return false;
 }
 bool dkr::runtime::saves::replace_cloud_save(std::string_view key, const std::vector<std::uint8_t>& expected,
-                                            const std::vector<std::uint8_t>& replacement, std::string& error) {
+                                             const std::vector<std::uint8_t>& replacement, std::string& error) {
     std::scoped_lock lock(g_save_manager_mutex);
     const auto target = CloudTarget(key);
     if (!target.validate || replacement.empty()) {

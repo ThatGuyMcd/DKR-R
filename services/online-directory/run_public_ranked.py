@@ -67,11 +67,16 @@ def main():
     parser.add_argument("--once", action="store_true")
     parser.add_argument("--queue", choices=("race", "adventure"), default="race")
     parser.add_argument("--probe", action="store_true")
-    parser.add_argument("--backfill-run", help="Prepare a ghost for one verified Time Trial without changing its status.")
+    parser.add_argument(
+        "--backfill-run",
+        help="Prepare a ghost for one verified Time Trial without changing its status.",
+    )
     parser.add_argument("--local-test", action="store_true")
     parser.add_argument("--rom-v1-0", type=Path)
     args = parser.parse_args()
-    if args.backfill_run and (args.queue != "race" or args.probe or not re.fullmatch(r"[A-Za-z0-9_-]{24}", args.backfill_run)):
+    if args.backfill_run and (
+        args.queue != "race" or args.probe or not re.fullmatch(r"[A-Za-z0-9_-]{24}", args.backfill_run)
+    ):
         parser.error("--backfill-run requires a verified Time Trial ID.")
     address = urlsplit(args.api)
     loopback = args.local_test and address.hostname == "127.0.0.1"
@@ -178,7 +183,9 @@ def main():
                                 emit_ghost=args.queue == "race",
                             )
                             ghost = temp / "result" / "verified.dkrghost"
-                            attachment = {"ghost": b64encode(ghost.read_bytes()).decode("ascii")} if ghost.is_file() else {}
+                            attachment = (
+                                {"ghost": b64encode(ghost.read_bytes()).decode("ascii")} if ghost.is_file() else {}
+                            )
                             if track:
                                 proof["releaseSha256"] = track["sha256"]
                     except InvalidReplay:
@@ -188,8 +195,12 @@ def main():
                         print("Rejected replay", job["id"], flush=True)
                     else:
                         request("finish", 2048, **claim, proof=proof, **attachment)
-                        print("Backfilled ghost" if args.backfill_run else "Verified replay",
-                              job["id"], proof["clockTicks"], flush=True)
+                        print(
+                            "Backfilled ghost" if args.backfill_run else "Verified replay",
+                            job["id"],
+                            proof["clockTicks"],
+                            flush=True,
+                        )
             if args.once or args.backfill_run:
                 break
             if job is None:

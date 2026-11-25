@@ -36,8 +36,8 @@ bool DrawStartingContent(const dkr::mods::ModLaunchView& state, bool mods, bool 
     const auto size = ImGui::GetWindowSize();
     auto layout = dkr::library_ui::startup_layout(size.x, size.y, 0);
     const float scale = layout.scale, padding = 26.F * scale, inner = std::max(1.F, layout.panel - 2.F * padding);
-    const auto title = returning ? dkr::localisation::source("Returning to Launcher...") :
-                                   dkr::localisation::text(syncing ? "play.syncing_game" : "play.starting_game");
+    const auto title = returning ? dkr::localisation::source("Returning to Launcher...")
+                                 : dkr::localisation::text(syncing ? "play.syncing_game" : "play.starting_game");
     const auto loading = dkr::localisation::text(syncing ? "play.syncing_status" : "play.loading_mods");
     const auto button = dkr::localisation::text("play.open_launcher");
     const auto stage =

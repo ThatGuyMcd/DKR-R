@@ -9,7 +9,9 @@ void DrawCloudSaves(float width, bool locked) {
         return;
     }
     const bool enabled = view->cloud_saves_account == account;
-    SavesNote("Existing cloud saves take priority. Progress made from a synced save is uploaded when its cloud copy is current.", width);
+    SavesNote(
+        "Existing cloud saves take priority. Progress made from a synced save is uploaded when its cloud copy is current.",
+        width);
     PaddockGap(12);
     if (SavesRaceButton(enabled ? "PAUSE CLOUD SAVES" : "ENABLE CLOUD SAVES", 0,
                         enabled ? SavesTone::Plain : SavesTone::Primary, locked)) {

@@ -104,8 +104,8 @@ std::chrono::steady_clock::time_point g_ranked_runs_received;
 bool LaunchTimeTrial(TimeTrialRequest& request) {
     const auto start = [&] {
         if (!request.ghost.empty())
-            return trial::start_ghost(request.ghost, request.replay, g_time_trial_message, request.racer,
-                                     request.mode, {}, request.attempt ? &*request.attempt : nullptr, request.ghost_name);
+            return trial::start_ghost(request.ghost, request.replay, g_time_trial_message, request.racer, request.mode,
+                                      {}, request.attempt ? &*request.attempt : nullptr, request.ghost_name);
         return trial::start(request.mode, request.replay, g_time_trial_message,
                             request.attempt ? &*request.attempt : nullptr, request.racer, *request.course,
                             request.vehicle, request.adventure, request.track);
@@ -177,7 +177,8 @@ void ApplyReplayRetention(const trial::Result& result) {
         const auto replays = ReadLocalReplayLibrary(library);
         const auto saved = std::ranges::find(replays, result.file, &LocalReplay::file);
         if (saved != replays.end() && saved->local_capture && !saved->personal_best && !saved->beat_ghost &&
-            saved->posted_owner.empty() && !dkr::library_ui::can_post_replay_attempt(saved->has_attempt, saved->practice, false))
+            saved->posted_owner.empty() &&
+            !dkr::library_ui::can_post_replay_attempt(saved->has_attempt, saved->practice, false))
             RemoveLocalReplay(saved->file);
     } catch (const std::exception&) {
         // Keep the recording when the library cannot classify it.
@@ -185,7 +186,7 @@ void ApplyReplayRetention(const trial::Result& result) {
 }
 
 std::filesystem::path TimeTrialRom(const TimeTrialRequest& request, const std::filesystem::path& selected,
-                                  const std::vector<RomCatalogEntry>& catalogue) {
+                                   const std::vector<RomCatalogEntry>& catalogue) {
     namespace rom = dkr::runtime::rom;
     const auto& evidence = request.ghost.empty() ? request.replay : request.ghost;
     if (request.mode == trial::Mode::Record && request.ghost.empty())
@@ -195,9 +196,8 @@ std::filesystem::path TimeTrialRom(const TimeTrialRequest& request, const std::f
         const auto required = revision == 77 ? rom::Revision::UsV77 : rom::Revision::UsV80;
         if (rom::inspect(selected).revision == required)
             return selected;
-        const auto found = std::ranges::find_if(catalogue, [&](const auto& entry) {
-            return rom::inspect(entry.path).revision == required;
-        });
+        const auto found = std::ranges::find_if(
+            catalogue, [&](const auto& entry) { return rom::inspect(entry.path).revision == required; });
         if (found != catalogue.end())
             return found->path;
         g_time_trial_message = revision == 77 ? "Add your US v1.0 ROM in Play to watch this replay."
@@ -233,12 +233,15 @@ void DrawRankedPodium() {
 
     const auto* view = ImGui::GetMainViewport();
     const bool record = state.podium_place == 1;
-    const std::string heading = !celebration ? "FINISH" : record ? "WORLD RECORD RUN!" :
-        state.podium_place ? "PODIUM FINISH  #" + std::to_string(state.podium_place) : "PERSONAL BEST!";
+    const std::string heading = !celebration         ? "FINISH"
+                                : record             ? "WORLD RECORD RUN!"
+                                : state.podium_place ? "PODIUM FINISH  #" + std::to_string(state.podium_place)
+                                                     : "PERSONAL BEST!";
     const auto art = record || !state.podium_place ? 0xFFCE6C : state.podium_place == 2 ? 0xCED9E9 : 0xF0A477;
     const auto ink = PaddockCol(art);
     const std::string time = RunClock(state.clock);
-    const std::string detail = attempt && attempt->finish_targets ? attempt->finish_targets->title + "  |  " + time : time;
+    const std::string detail =
+        attempt && attempt->finish_targets ? attempt->finish_targets->title + "  |  " + time : time;
     constexpr const char* basis = "Compared with the leaderboard at the start of this run";
     const auto flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoInputs |
                        ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoFocusOnAppearing;
@@ -266,8 +269,8 @@ void DrawRankedPodium() {
     const auto size = ImGui::GetWindowSize();
     const auto offset = ImGui::GetWindowPos();
     auto* draw = ImGui::GetWindowDrawList();
-    const bool motion = !RunPreference(RunOption::ReducedMotion) &&
-                        !dkr::runtime::achievements::view()->preferences.reduced_motion;
+    const bool motion =
+        !RunPreference(RunOption::ReducedMotion) && !dkr::runtime::achievements::view()->preferences.reduced_motion;
     for (unsigned i = 0; i < (record ? 65U : 32U); ++i) {
         const auto x = float((i * 37U) % 97U) / 97.F;
         const auto phase = float((i * 23U) % 113U) / 113.F;
@@ -276,8 +279,8 @@ void DrawRankedPodium() {
     }
     const auto title = PaddockSign(std::min(62.F, size.x * .074F));
     const auto ext = title.font->CalcTextSizeA(title.size, FLT_MAX, 0.F, heading.c_str());
-    draw->AddText(title.font, title.size, {offset.x + (size.x - ext.x) * .5F, offset.y + size.y * .28F},
-                  ink, heading.c_str());
+    draw->AddText(title.font, title.size, {offset.x + (size.x - ext.x) * .5F, offset.y + size.y * .28F}, ink,
+                  heading.c_str());
     ImGui::SetCursorPos({std::max(14.F, (size.x - ImGui::CalcTextSize(detail.c_str()).x) * .5F), size.y * .46F});
     ImGui::TextUnformatted(detail.c_str());
     if (state.podium_place) {
@@ -325,7 +328,7 @@ std::string TrackAttemptBoard(const dkr::store::Json* catalogue, std::string_vie
 }
 
 std::optional<trial::Attempt> RequestTrackAttempt(const std::string& board, std::string_view id,
-                                                 const trial::Course* course, trial::Vehicle vehicle, unsigned racer) {
+                                                  const trial::Course* course, trial::Vehicle vehicle, unsigned racer) {
     if (board.empty())
         return {};
     try {
@@ -335,11 +338,11 @@ std::optional<trial::Attempt> RequestTrackAttempt(const std::string& board, std:
         const auto ticket = StoreText(reply, "ticket", 160);
         if (board_id != board)
             return {};
-        auto attempt = course ? trial::parse_attempt(board_id, engine, ticket, *course, vehicle, racer)
-                              : trial::parse_custom_attempt(board_id, engine, ticket, StoreText(reply, "releaseId", 96),
-                                                           StoreText(reply, "releaseHash", 64),
-                                                           StoreText(reply, "trackId", 96),
-                                                           StoreText(reply, "trackHash", 64), vehicle, racer);
+        auto attempt =
+            course ? trial::parse_attempt(board_id, engine, ticket, *course, vehicle, racer)
+                   : trial::parse_custom_attempt(board_id, engine, ticket, StoreText(reply, "releaseId", 96),
+                                                 StoreText(reply, "releaseHash", 64), StoreText(reply, "trackId", 96),
+                                                 StoreText(reply, "trackHash", 64), vehicle, racer);
         if (!attempt || (!course && attempt->track_id != id))
             return {};
         attempt->finish_targets = ReadFinishTargets(reply);
@@ -351,8 +354,8 @@ std::optional<trial::Attempt> RequestTrackAttempt(const std::string& board, std:
 }
 
 std::pair<LapReference, unsigned> ReadRunReference(const std::filesystem::path& directory, const std::string& id,
-                                                 const trial::Course* course, trial::Vehicle vehicle, unsigned racer,
-                                                 std::string_view track_hash);
+                                                   const trial::Course* course, trial::Vehicle vehicle, unsigned racer,
+                                                   std::string_view track_hash);
 
 TimeTrialRequest PrepareGhostRun(const std::filesystem::path& file, const std::filesystem::path& config,
                                  std::optional<unsigned> local_racer, bool signed_in) {
@@ -366,8 +369,9 @@ TimeTrialRequest PrepareGhostRun(const std::filesystem::path& file, const std::f
     const auto rules = StoreText(manifest, "ruleset", 48);
     const bool custom = rules == trial::kCustomRules || rules == trial::kCustomVariableLapsRules;
     const auto id = StoreText(manifest, custom ? "trackId" : "course", 96);
-    const auto* course = custom ? nullptr : rules == trial::kLegacyRules ? &trial::kCourses.front()
-                                                                        : trial::course_for(id);
+    const auto* course = custom                         ? nullptr
+                         : rules == trial::kLegacyRules ? &trial::kCourses.front()
+                                                        : trial::course_for(id);
     if (!custom && !course)
         return request;
     const auto vehicle_id = rules == trial::kLegacyRules ? "car" : StoreText(manifest, "vehicle", 16);
@@ -376,8 +380,8 @@ TimeTrialRequest PrepareGhostRun(const std::filesystem::path& file, const std::f
         return request;
     const auto chosen = static_cast<trial::Vehicle>(vehicle - trial::kVehicleIds.begin());
     const auto snapshot = dkr::store::service().view();
-    const auto board = signed_in ? TrackAttemptBoard(snapshot->speedrun_catalogue.get(), id, course, chosen, racer)
-                                 : std::string{};
+    const auto board =
+        signed_in ? TrackAttemptBoard(snapshot->speedrun_catalogue.get(), id, course, chosen, racer) : std::string{};
     request.attempt = RequestTrackAttempt(board, id, course, chosen, racer);
     if (custom && request.attempt && request.attempt->track_hash != StoreText(manifest, "trackHash", 64))
         request.attempt.reset();
@@ -436,7 +440,7 @@ void RefreshPublishedReplayTimes(const std::string& owner) {
 }
 
 std::function<void()> SubmitRankedReplay(const std::filesystem::path& file, const std::filesystem::path& profile,
-                                        bool personal_best, bool link_local = false, std::string expected_owner = {}) {
+                                         bool personal_best, bool link_local = false, std::string expected_owner = {}) {
     const auto owner = RankedRunsOwner();
     if (link_local && owner != expected_owner)
         throw std::runtime_error("Your signed-in account changed. Confirm the Discord account again.");
@@ -448,9 +452,9 @@ std::function<void()> SubmitRankedReplay(const std::filesystem::path& file, cons
         throw std::runtime_error("Sign in and select one of your eligible recordings to post it.");
     if (personal_best && !link_local) {
         auto scores = dkr::store::service().published_replay_times();
-        if (std::ranges::binary_search(scores, dkr::store::PublishedReplayTime{
-                                                  StoreText(manifest, "board", 96),
-                                                  LeaderboardNumber(manifest, "clockTicks")})) {
+        if (std::ranges::binary_search(scores,
+                                       dkr::store::PublishedReplayTime{StoreText(manifest, "board", 96),
+                                                                       LeaderboardNumber(manifest, "clockTicks")})) {
             return [profile, owner, scores = std::move(scores)]() mutable {
                 SavePublishedReplayTimes(profile, owner, std::move(scores));
             };
@@ -507,7 +511,7 @@ void DrawLocalReplayPosting(const LocalReplay& replay, float width, const dkr::s
     const auto owner = RankedRunsOwner();
     if (!replay.posted_owner.empty()) {
         OlParagraph(owner == replay.posted_owner ? "Submitted · View status in My Submitted Runs"
-                                                : "This run has already been linked to a Discord account.",
+                                                 : "This run has already been linked to a Discord account.",
                     14.F, kOlSoft, width);
         return;
     }
@@ -571,8 +575,7 @@ void DrawReplayPosting(const LocalReplay& replay, float width, bool explain = fa
     }
     if (!dkr::library_ui::can_post_replay_attempt(replay.has_attempt, replay.practice, merit)) {
         if (!replay.has_attempt && (merit || explain))
-            OlParagraph("Linking this local run is unavailable.", 14.F, kOlSoft,
-                        width);
+            OlParagraph("Linking this local run is unavailable.", 14.F, kOlSoft, width);
         else if (explain)
             OlParagraph("You can post this run if it's your personal best.", 14.F, kOlSoft, width);
         return;
@@ -593,7 +596,8 @@ void DrawReplayPosting(const LocalReplay& replay, float width, bool explain = fa
                                 14.F, kOlSoft, width);
                 return;
             }
-            if (std::ranges::binary_search(*status.scores, dkr::store::PublishedReplayTime{replay.board, replay.time})) {
+            if (std::ranges::binary_search(*status.scores,
+                                           dkr::store::PublishedReplayTime{replay.board, replay.time})) {
                 OlParagraph("Already on the leaderboard", 14.F, kOlSoft, width);
                 return;
             }
@@ -654,7 +658,8 @@ std::pair<LapReference, unsigned> ReadRunReference(const std::filesystem::path& 
     if (catalogue) {
         const auto rows = catalogue->find(course ? "vanillaTracks" : "customTracks");
         if (rows != catalogue->end() && rows->is_array()) {
-            const auto row = std::ranges::find_if(*rows, [&](const auto& item) { return StoreText(item, "id", 96) == id; });
+            const auto row =
+                std::ranges::find_if(*rows, [&](const auto& item) { return StoreText(item, "id", 96) == id; });
             if (row != rows->end()) {
                 const auto leaders = row->find("leaders");
                 if (leaders != row->end() && leaders->is_object()) {
@@ -695,8 +700,15 @@ void DrawRunDelta(const char* label, std::int64_t actual, std::int64_t reference
     const auto colour = delta < 0 ? kOlGoText : delta > 0 ? kOlAmber : kOlSoft;
     const bool words = RunPreference(RunOption::DeltaWords);
     ImGui::TextColored(ImGui::ColorConvertU32ToFloat4(PaddockCol(colour)), "%s %s%s%s", label,
-                       words ? "" : delta < 0 ? "-" : delta > 0 ? "+" : "", RunClock(std::abs(delta)).c_str(),
-                       words ? delta < 0 ? " ahead" : delta > 0 ? " behind" : " even" : "");
+                       words       ? ""
+                       : delta < 0 ? "-"
+                       : delta > 0 ? "+"
+                                   : "",
+                       RunClock(std::abs(delta)).c_str(),
+                       words ? delta < 0   ? " ahead"
+                               : delta > 0 ? " behind"
+                                           : " even"
+                             : "");
 }
 
 void DrawAdventureDelta(std::span<const trial::AdventureSplit> splits) {
@@ -728,16 +740,15 @@ void DrawTimeTrialHud(bool video = false) {
     const bool preparing = trial::preparing_ghost();
     if (!state.lap && !preparing && state.adventure == trial::Adventure::None)
         return;
-    const bool splits = video || (RunPreference(RunOption::Splits) &&
-                                 (!state.replay || RunPreference(RunOption::ReplaySplits)));
+    const bool splits =
+        video || (RunPreference(RunOption::Splits) && (!state.replay || RunPreference(RunOption::ReplaySplits)));
     const bool gap = !video && state.ghost && RunPreference(RunOption::GhostGap) && state.ghost_gap.has_value();
     if (!preparing && !splits && !gap)
         return;
     const auto* viewport = ImGui::GetMainViewport();
     if (preparing) {
         auto* draw = ImGui::GetBackgroundDrawList();
-        draw->AddRectFilled(viewport->Pos,
-                            {viewport->Pos.x + viewport->Size.x, viewport->Pos.y + viewport->Size.y},
+        draw->AddRectFilled(viewport->Pos, {viewport->Pos.x + viewport->Size.x, viewport->Pos.y + viewport->Size.y},
                             IM_COL32(6, 18, 28, 240));
     }
     const auto corner = RunOverlayCorner(*viewport, RunPreference(RunOption::SplitPosition));
@@ -768,8 +779,16 @@ void DrawTimeTrialHud(bool video = false) {
         if (gap) {
             const auto delta = *state.ghost_gap;
             const bool words = RunPreference(RunOption::DeltaWords);
-            ImGui::Text("Ghost  %s%s%s", words ? "" : delta < 0 ? "-" : delta > 0 ? "+" : "",
-                        RunClock(std::abs(delta)).c_str(), words ? delta < 0 ? " ahead" : delta > 0 ? " behind" : " even" : "");
+            ImGui::Text("Ghost  %s%s%s",
+                        words       ? ""
+                        : delta < 0 ? "-"
+                        : delta > 0 ? "+"
+                                    : "",
+                        RunClock(std::abs(delta)).c_str(),
+                        words ? delta < 0   ? " ahead"
+                                : delta > 0 ? " behind"
+                                            : " even"
+                              : "");
         }
         if (splits) {
             const int detail = video ? 0 : RunPreference(RunOption::SplitDetail);
@@ -780,12 +799,13 @@ void DrawTimeTrialHud(bool video = false) {
                                            category.title.data());
             } else {
                 ImGui::TextColored(ImGui::ColorConvertU32ToFloat4(PaddockCol(kOlAmber)), "%s | Lap %u / %u",
-                                   state.replay   ? "Replay"
-                                   : state.ghost  ? "Ghost Race"
-                                                  : "Time Trial",
+                                   state.replay  ? "Replay"
+                                   : state.ghost ? "Ghost Race"
+                                                 : "Time Trial",
                                    state.lap, state.lap_count);
             }
-            const auto elapsed = state.started ? (video ? LeaderboardTime(state.clock) : RunClock(state.clock)) : std::string("Ready");
+            const auto elapsed =
+                state.started ? (video ? LeaderboardTime(state.clock) : RunClock(state.clock)) : std::string("Ready");
             ImGui::TextUnformatted(elapsed.c_str());
             if (detail != 2 && state.adventure != trial::Adventure::None) {
                 const auto splits = trial::adventure_splits();
@@ -798,8 +818,8 @@ void DrawTimeTrialHud(bool video = false) {
                     }
                 } else {
                     const auto upcoming = trial::AdventureSplits::upcoming(state.adventure, splits);
-                    const auto capacity = static_cast<std::size_t>(
-                        std::clamp((viewport->WorkSize.y * .40F - 74.F) / ImGui::GetTextLineHeightWithSpacing(), 3.F, 30.F));
+                    const auto capacity = static_cast<std::size_t>(std::clamp(
+                        (viewport->WorkSize.y * .40F - 74.F) / ImGui::GetTextLineHeightWithSpacing(), 3.F, 30.F));
                     const auto reserve = std::min({upcoming.size(), capacity - std::min(splits.size(), std::size_t{2}),
                                                    std::size_t(RunPreference(RunOption::Upcoming))});
                     const auto recent = std::min(splits.size(), detail == 1 ? std::size_t{1} : capacity - reserve);
@@ -823,13 +843,20 @@ void DrawTimeTrialHud(bool video = false) {
                 }
             }
             if (detail != 2 && state.recent_split && (video || RunPreference(RunOption::LapDelta))) {
-                ImGui::Text("Last lap  %s", (video ? LeaderboardTime(state.recent_split) : RunClock(state.recent_split)).c_str());
+                ImGui::Text("Last lap  %s",
+                            (video ? LeaderboardTime(state.recent_split) : RunClock(state.recent_split)).c_str());
                 if (!state.replay && state.completed_laps) {
                     const auto lap = state.completed_laps - 1;
                     switch (RunPreference(RunOption::Comparison)) {
-                    case 0: DrawRunDelta("PB", state.recent_split, g_run_lap_reference.personal[lap]); break;
-                    case 1: DrawRunDelta("WR lap", state.recent_split, g_run_lap_reference.world_best_lap); break;
-                    case 2: DrawRunDelta("Best lap", state.recent_split, g_run_lap_reference.best_segments[lap]); break;
+                    case 0:
+                        DrawRunDelta("PB", state.recent_split, g_run_lap_reference.personal[lap]);
+                        break;
+                    case 1:
+                        DrawRunDelta("WR lap", state.recent_split, g_run_lap_reference.world_best_lap);
+                        break;
+                    case 2:
+                        DrawRunDelta("Best lap", state.recent_split, g_run_lap_reference.best_segments[lap]);
+                        break;
                     }
                 }
             }
@@ -838,9 +865,9 @@ void DrawTimeTrialHud(bool video = false) {
                 const auto next = std::max(1U, state.lap);
                 const auto rows = std::min(unsigned(RunPreference(RunOption::Upcoming)), state.lap_count + 1 - next);
                 for (unsigned step = 0; step < rows; ++step)
-                    ImGui::TextDisabled("%s  %s", step ? "Then" : "Next",
-                                        next + step == state.lap_count ? "Finish" :
-                                        ("Lap " + std::to_string(next + step + 1)).c_str());
+                    ImGui::TextDisabled(
+                        "%s  %s", step ? "Then" : "Next",
+                        next + step == state.lap_count ? "Finish" : ("Lap " + std::to_string(next + step + 1)).c_str());
             }
             if (state.finish_update && !state.replay && state.adventure == trial::Adventure::None)
                 ImGui::TextUnformatted("Recording the finish");
@@ -934,10 +961,14 @@ void PaintReplayController(ImDrawList* draw, ImVec2 base, const trial::Progress&
     draw->AddRectFilled(point(32, 53), point(63, 63), dpad);
     draw->AddRectFilled(point(42, 43), point(53, 74), dpad);
     const auto active = PaddockCol(0xFFF0B0);
-    if (state.buttons & 0x0800) draw->AddRectFilled(point(42, 43), point(53, 53), active);
-    if (state.buttons & 0x0400) draw->AddRectFilled(point(42, 63), point(53, 74), active);
-    if (state.buttons & 0x0200) draw->AddRectFilled(point(32, 53), point(42, 63), active);
-    if (state.buttons & 0x0100) draw->AddRectFilled(point(53, 53), point(63, 63), active);
+    if (state.buttons & 0x0800)
+        draw->AddRectFilled(point(42, 43), point(53, 53), active);
+    if (state.buttons & 0x0400)
+        draw->AddRectFilled(point(42, 63), point(53, 74), active);
+    if (state.buttons & 0x0200)
+        draw->AddRectFilled(point(32, 53), point(42, 63), active);
+    if (state.buttons & 0x0100)
+        draw->AddRectFilled(point(53, 53), point(63, 63), active);
     draw->AddCircleFilled(point(115, 68), 20.F * scale, PaddockCol(0x64758E), 8);
     const float x = 115.F + 12.F * std::clamp(float(state.stick_x) / 80.F, -1.F, 1.F);
     const float y = 68.F - 12.F * std::clamp(float(state.stick_y) / 80.F, -1.F, 1.F);
@@ -959,9 +990,9 @@ void DrawReplayInputViewer(const trial::Progress& state, bool video = false) {
         if (state.adventure != trial::Adventure::None) {
             // Full Game splits own the upper-left of the picture. Anchor the
             // controls in the opposite corner with a bounded footprint.
-            ImGui::SetNextWindowPos({view->WorkPos.x + view->WorkSize.x - 16.F,
-                                     view->WorkPos.y + view->WorkSize.y - 16.F},
-                                    ImGuiCond_Always, {1.F, 1.F});
+            ImGui::SetNextWindowPos(
+                {view->WorkPos.x + view->WorkSize.x - 16.F, view->WorkPos.y + view->WorkSize.y - 16.F},
+                ImGuiCond_Always, {1.F, 1.F});
             ImGui::SetNextWindowSizeConstraints({0.F, 0.F}, {view->WorkSize.x * .47F, view->WorkSize.y * .43F});
         } else {
             ImGui::SetNextWindowPos({view->WorkPos.x + 16.F, view->WorkPos.y + view->WorkSize.y * .43F},
@@ -979,8 +1010,8 @@ void DrawReplayInputViewer(const trial::Progress& state, bool video = false) {
                    point.y < g_split_bounds->w && point.y + size.y > g_split_bounds->y;
         };
         const auto space = ImVec2{232.F * scale + 28.F, height};
-        const auto proposed = ImVec2{anchor.position.x - anchor.pivot.x * space.x,
-                                    anchor.position.y - anchor.pivot.y * space.y};
+        const auto proposed =
+            ImVec2{anchor.position.x - anchor.pivot.x * space.x, anchor.position.y - anchor.pivot.y * space.y};
         const bool conflict = intersects(proposed, space);
         if (conflict) {
             anchor.position.y = anchor.pivot.y == 0.F ? g_split_bounds->w + 8.F : g_split_bounds->y - 8.F;
@@ -988,8 +1019,8 @@ void DrawReplayInputViewer(const trial::Progress& state, bool video = false) {
                 anchor.position.y + (1.F - anchor.pivot.y) * height > view->WorkPos.y + view->WorkSize.y)
                 anchor = RunOverlayCorner(*view, corner ^ 1);
         }
-        const bool reposition = corner != g_theatre_controller_corner ||
-                                (existing && intersects(existing->Pos, existing->Size));
+        const bool reposition =
+            corner != g_theatre_controller_corner || (existing && intersects(existing->Pos, existing->Size));
         ImGui::SetNextWindowPos(anchor.position, reposition ? ImGuiCond_Always : ImGuiCond_FirstUseEver, anchor.pivot);
         g_theatre_controller_corner = corner;
     }
@@ -1212,7 +1243,8 @@ void DrawSpeedrunningRestartConfirmation() {
 enum class LeaderboardReplayAction { Watch, RaceGhost };
 
 void WatchLeaderboardReplay(const std::string& id, bool own_run,
-                            LeaderboardReplayAction action = LeaderboardReplayAction::Watch, std::string ghost_name = {}) {
+                            LeaderboardReplayAction action = LeaderboardReplayAction::Watch,
+                            std::string ghost_name = {}) {
     RankedJob([id, own_run, action, ghost_name = std::move(ghost_name), config = g_config_directory,
                signed_in = !RankedRunsOwner().empty()] {
         const auto directory = config / "speedrun-playback";
@@ -1286,11 +1318,13 @@ void DrawLocalReplays(float width, const dkr::store::Json* catalogue) {
             ImGui::Checkbox("Include personal bests", &purge_bests);
             ImGui::Checkbox("Include runs I haven't posted", &purge_unsubmitted);
             const auto count = std::ranges::count_if(g_local_replays, [&](const auto& replay) {
-                return dkr::library_ui::can_purge_replay(replay.personal_best, !replay.posted_owner.empty(), purge_bests,
-                                                       purge_unsubmitted);
+                return dkr::library_ui::can_purge_replay(replay.personal_best, !replay.posted_owner.empty(),
+                                                         purge_bests, purge_unsubmitted);
             });
-            OlParagraph(count ? std::to_string(count) + (count == 1 ? " replay will be removed." : " replays will be removed.")
-                              : "No replays match these choices.", 15.F, kOlSoft, 340.F);
+            OlParagraph(count ? std::to_string(count) +
+                                    (count == 1 ? " replay will be removed." : " replays will be removed.")
+                              : "No replays match these choices.",
+                        15.F, kOlSoft, 340.F);
             if (OlButton("Cancel"))
                 ImGui::CloseCurrentPopup();
             ImGui::SetItemDefaultFocus();
@@ -1301,15 +1335,17 @@ void DrawLocalReplays(float width, const dkr::store::Json* catalogue) {
                     RankedJob([profile = g_config_directory,
                                chosen = SelectReplayPurge(g_local_replays, purge_bests, purge_unsubmitted),
                                bests = purge_bests, unsubmitted = purge_unsubmitted] {
-                        const auto [removed, skipped] = PurgeLocalReplays(profile / "speedruns", chosen, bests, unsubmitted);
+                        const auto [removed, skipped] =
+                            PurgeLocalReplays(profile / "speedruns", chosen, bests, unsubmitted);
                         return [profile, removed, skipped] {
                             if (profile != g_config_directory)
                                 return;
                             g_refresh_replay_library = true;
-                            g_time_trial_message = "Removed " + std::to_string(removed) +
-                                                   (removed == 1 ? " replay." : " replays.");
+                            g_time_trial_message =
+                                "Removed " + std::to_string(removed) + (removed == 1 ? " replay." : " replays.");
                             if (skipped)
-                                g_time_trial_message += " Skipped " + std::to_string(skipped) + " changed or unavailable.";
+                                g_time_trial_message +=
+                                    " Skipped " + std::to_string(skipped) + " changed or unavailable.";
                         };
                     });
                     ImGui::CloseCurrentPopup();
@@ -1324,11 +1360,11 @@ void DrawLocalReplays(float width, const dkr::store::Json* catalogue) {
         OlInputOptions options;
         options.hint = "Track, racer or title";
         options.height = kSettingsDropdownHeight;
-        if (OlInput("##find-replay", nullptr, search, sizeof(search), search_width, options) == OlInputResult::Gamepad) {
-            RequestCustomTextKeyboard("Search replays", search, sizeof(search),
-                                      [](const std::string& text) {
-                                          std::snprintf(search, sizeof(search), "%s", text.c_str());
-                                      }, true);
+        if (OlInput("##find-replay", nullptr, search, sizeof(search), search_width, options) ==
+            OlInputResult::Gamepad) {
+            RequestCustomTextKeyboard(
+                "Search replays", search, sizeof(search),
+                [](const std::string& text) { std::snprintf(search, sizeof(search), "%s", text.c_str()); }, true);
         }
         ImGui::EndGroup();
         if (inner >= 540.F)
@@ -1358,16 +1394,16 @@ void DrawLocalReplays(float width, const dkr::store::Json* catalogue) {
             const std::string kind = replay.has_attempt ? "Leaderboard run" : "Local run";
             if ((filter == 1 && replay.has_attempt) || (filter == 2 && !replay.has_attempt))
                 continue;
-            const auto haystack = replay.title + " " + replay.course + " " + replay.racer + " " + replay.vehicle +
-                                  " " + PathUtf8(replay.file.filename());
+            const auto haystack = replay.title + " " + replay.course + " " + replay.racer + " " + replay.vehicle + " " +
+                                  PathUtf8(replay.file.filename());
             if (dkr::runtime::texture_browser::lower_ascii(haystack).find(needle) == std::string::npos)
                 continue;
             ++matches;
             const auto id = PathUtf8(replay.file.filename());
             ImGui::PushID(id.c_str());
             const ImVec2 divider = ImGui::GetCursorScreenPos();
-            ImGui::GetWindowDrawList()->AddRectFilled(
-                divider, {divider.x + inner, divider.y + 1.F}, ImGui::GetColorU32(ImGuiCol_Separator));
+            ImGui::GetWindowDrawList()->AddRectFilled(divider, {divider.x + inner, divider.y + 1.F},
+                                                      ImGui::GetColorU32(ImGuiCol_Separator));
             ImGui::Dummy({inner, 1.F});
             const bool side_by_side = inner >= 755.F;
             ImGui::BeginGroup();
@@ -1438,12 +1474,10 @@ void DrawLocalReplays(float width, const dkr::store::Json* catalogue) {
         if (remove)
             ImGui::OpenPopup("Remove local copy?");
         if (ImGui::BeginPopupModal("Rename replay", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
-            if (OlInput("##replay-name", "Display title", title, sizeof(title), 310.F, {}) ==
-                OlInputResult::Gamepad)
-                RequestCustomTextKeyboard("Display title", title, sizeof(title),
-                                          [](const std::string& text) {
-                                              std::snprintf(title, sizeof(title), "%s", text.c_str());
-                                          }, true);
+            if (OlInput("##replay-name", "Display title", title, sizeof(title), 310.F, {}) == OlInputResult::Gamepad)
+                RequestCustomTextKeyboard(
+                    "Display title", title, sizeof(title),
+                    [](const std::string& text) { std::snprintf(title, sizeof(title), "%s", text.c_str()); }, true);
             const std::string name = title;
             {
                 const OlDisabled disabled(name.find_first_not_of(" \t\r\n") == std::string::npos);
@@ -1510,23 +1544,23 @@ void DrawLatestRecording(float width) {
 
 void StartTrackRun(std::string id, const trial::Course* course, trial::Vehicle vehicle, unsigned racer,
                    std::string board, bool signed_in) {
-    RankedJob([id = std::move(id), course, vehicle, racer, board = std::move(board), signed_in,
-               config = g_config_directory] {
-        auto request = TimeTrialRequest{trial::Mode::Record, NewTimeTrialFile(config, id + "-Practice")};
-        request.attempt = RequestTrackAttempt(board, id, course, vehicle, racer);
-        request.racer = racer;
-        request.vehicle = vehicle;
-        if (course)
-            request.course = course;
-        else
-            request.track = id;
-        std::tie(request.lap_reference, request.prior_best) =
-            ReadRunReference(config / "speedruns", id, course, vehicle, racer,
-                             request.attempt ? std::string_view(request.attempt->track_hash) : std::string_view{});
-        return [request = std::move(request), signed_in]() mutable {
-            QueueTimeTrialRequest(std::move(request), signed_in);
-        };
-    });
+    RankedJob(
+        [id = std::move(id), course, vehicle, racer, board = std::move(board), signed_in, config = g_config_directory] {
+            auto request = TimeTrialRequest{trial::Mode::Record, NewTimeTrialFile(config, id + "-Practice")};
+            request.attempt = RequestTrackAttempt(board, id, course, vehicle, racer);
+            request.racer = racer;
+            request.vehicle = vehicle;
+            if (course)
+                request.course = course;
+            else
+                request.track = id;
+            std::tie(request.lap_reference, request.prior_best) =
+                ReadRunReference(config / "speedruns", id, course, vehicle, racer,
+                                 request.attempt ? std::string_view(request.attempt->track_hash) : std::string_view{});
+            return [request = std::move(request), signed_in]() mutable {
+                QueueTimeTrialRequest(std::move(request), signed_in);
+            };
+        });
 }
 
 struct SpeedrunningSetup {
@@ -1550,10 +1584,12 @@ void LoadSpeedrunningSetup() {
         const auto saved = dkr::store::Json::parse(dkr::updates::read_text(file, 4096));
         for (unsigned i = 0; i < 2; ++i) {
             g_run_setup.courses[i] = StoreText(saved, i ? "custom" : "vanilla", 128);
-            g_run_setup.vehicles[i] = std::min(2U, unsigned(LeaderboardNumber(saved, i ? "customVehicle" : "vanillaVehicle")));
+            g_run_setup.vehicles[i] =
+                std::min(2U, unsigned(LeaderboardNumber(saved, i ? "customVehicle" : "vanillaVehicle")));
         }
         if (saved.contains("racer"))
-            g_run_setup.racer = std::min(unsigned(trial::kRacers.size() - 1), unsigned(LeaderboardNumber(saved, "racer")));
+            g_run_setup.racer =
+                std::min(unsigned(trial::kRacers.size() - 1), unsigned(LeaderboardNumber(saved, "racer")));
         g_run_setup.challenge = int(LeaderboardNumber(saved, "challenge"));
     } catch (const std::exception&) {
         // Older profiles start with the existing default selections.
@@ -1563,10 +1599,12 @@ void LoadSpeedrunningSetup() {
 void SaveSpeedrunningSetup() {
     if (!RunPreference(RunOption::RememberSetup))
         return;
-    const dkr::store::Json setup{
-        {"vanilla", g_run_setup.courses[0]}, {"custom", g_run_setup.courses[1]},
-        {"vanillaVehicle", g_run_setup.vehicles[0]}, {"customVehicle", g_run_setup.vehicles[1]},
-        {"racer", g_run_setup.racer}, {"challenge", g_run_setup.challenge}};
+    const dkr::store::Json setup{{"vanilla", g_run_setup.courses[0]},
+                                 {"custom", g_run_setup.courses[1]},
+                                 {"vanillaVehicle", g_run_setup.vehicles[0]},
+                                 {"customVehicle", g_run_setup.vehicles[1]},
+                                 {"racer", g_run_setup.racer},
+                                 {"challenge", g_run_setup.challenge}};
     try {
         dkr::updates::durable_write(g_config_directory / "speedrunning-setup.json", setup.dump());
     } catch (const std::exception&) {
@@ -1650,18 +1688,21 @@ void DrawLeaderboardPractice(float width, const dkr::store::Json* catalogue) {
     const float card = row ? std::floor((width - 2.F * gap) / 3.F) : width;
     const auto draw_card = [&](int section) {
         ImGui::PushID(section);
-        DrawOlCard(card, OlPanelLook{}, [&](float inner) {
-            const auto start = section == 2 ? DrawPracticeAdventure(inner, catalogue, signed_in)
-                                            : DrawPracticeTracks(inner, catalogue, section == 1, signed_in);
-            if (start) {
-                PaddockGap(6.F);
-                const OlDisabled busy(!can_launch || DialogJobRunning());
-                if (OlButton("Start Run", OlTone::Go)) {
-                    SaveSpeedrunningSetup();
-                    start();
+        DrawOlCard(
+            card, OlPanelLook{},
+            [&](float inner) {
+                const auto start = section == 2 ? DrawPracticeAdventure(inner, catalogue, signed_in)
+                                                : DrawPracticeTracks(inner, catalogue, section == 1, signed_in);
+                if (start) {
+                    PaddockGap(6.F);
+                    const OlDisabled busy(!can_launch || DialogJobRunning());
+                    if (OlButton("Start Run", OlTone::Go)) {
+                        SaveSpeedrunningSetup();
+                        start();
+                    }
                 }
-            }
-        }, 14.F);
+            },
+            14.F);
         ImGui::PopID();
     };
     if (row) {
@@ -1737,50 +1778,52 @@ void DrawLeaderboardRankRow(float width, const dkr::store::Json& entry, bool ful
     look.radii = PaddockRound(9.F);
 
     ImGui::PushID(id.c_str());
-    DrawOlCard(width, look, [&](float inner) {
-        const bool inline_actions = !id.empty() && inner >= rank_width + time_width + actions_width + 168.F;
-        const float time_right = inline_actions ? inner - actions_width - 20.F : inner;
-        const float time_left = time_right - time_width;
-        const ImVec2 start = ImGui::GetCursorScreenPos();
-        const float badge_width = rank_width - gap;
-        PaddockFill(ImGui::GetWindowDrawList(), {start.x, start.y + 5.F},
-                    {start.x + badge_width, start.y + 33.F}, PaddockRound(6.F),
-                    PaddockCol(place == 1 ? 0x45371D : 0x1A4054));
-        ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 7.F);
-        OlParagraph("#" + std::to_string(place), 15.F, place == 1 ? kOlAmber : kOlInk, badge_width, true, 1.4F,
-                    true);
+    DrawOlCard(
+        width, look,
+        [&](float inner) {
+            const bool inline_actions = !id.empty() && inner >= rank_width + time_width + actions_width + 168.F;
+            const float time_right = inline_actions ? inner - actions_width - 20.F : inner;
+            const float time_left = time_right - time_width;
+            const ImVec2 start = ImGui::GetCursorScreenPos();
+            const float badge_width = rank_width - gap;
+            PaddockFill(ImGui::GetWindowDrawList(), {start.x, start.y + 5.F}, {start.x + badge_width, start.y + 33.F},
+                        PaddockRound(6.F), PaddockCol(place == 1 ? 0x45371D : 0x1A4054));
+            ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 7.F);
+            OlParagraph("#" + std::to_string(place), 15.F, place == 1 ? kOlAmber : kOlInk, badge_width, true, 1.4F,
+                        true);
 
-        ImGui::SameLine(0.F, gap);
-        ImGui::SetCursorScreenPos({start.x + rank_width, start.y});
-        ImGui::BeginGroup();
-        const float name_width = std::max(1.F, time_left - rank_width - gap);
-        OlParagraph(name, 16.F, kOlInk, name_width, true, 1.3F);
-        if (!racer.empty())
-            OlParagraph(racer, 14.F, kOlSoft, name_width, false, 1.25F);
-        ImGui::EndGroup();
+            ImGui::SameLine(0.F, gap);
+            ImGui::SetCursorScreenPos({start.x + rank_width, start.y});
+            ImGui::BeginGroup();
+            const float name_width = std::max(1.F, time_left - rank_width - gap);
+            OlParagraph(name, 16.F, kOlInk, name_width, true, 1.3F);
+            if (!racer.empty())
+                OlParagraph(racer, 14.F, kOlSoft, name_width, false, 1.25F);
+            ImGui::EndGroup();
 
-        ImGui::SameLine();
-        ImGui::SetCursorScreenPos({start.x + time_left, start.y + 7.F});
-        OlParagraph(time, 18.F, kOlCream, time_width, true, 1.3F);
-        if (id.empty())
-            return;
-
-        if (inline_actions) {
             ImGui::SameLine();
-            ImGui::SetCursorScreenPos({start.x + inner - actions_width, start.y + 7.F});
-        } else {
-            PaddockGap(3.F);
-        }
-        const OlDisabled launch(DialogJobRunning() || !CanLaunchLeaderboardReplay());
-        if (!full_game) {
-            if (OlButton("Race Ghost", OlTone::Go))
-                WatchLeaderboardReplay(id, false, LeaderboardReplayAction::RaceGhost, name);
-            if (inner >= actions_width)
-                ImGui::SameLine(0.F, gap);
-        }
-        if (OlButton("Watch"))
-            WatchLeaderboardReplay(id, false);
-    }, 11.F);
+            ImGui::SetCursorScreenPos({start.x + time_left, start.y + 7.F});
+            OlParagraph(time, 18.F, kOlCream, time_width, true, 1.3F);
+            if (id.empty())
+                return;
+
+            if (inline_actions) {
+                ImGui::SameLine();
+                ImGui::SetCursorScreenPos({start.x + inner - actions_width, start.y + 7.F});
+            } else {
+                PaddockGap(3.F);
+            }
+            const OlDisabled launch(DialogJobRunning() || !CanLaunchLeaderboardReplay());
+            if (!full_game) {
+                if (OlButton("Race Ghost", OlTone::Go))
+                    WatchLeaderboardReplay(id, false, LeaderboardReplayAction::RaceGhost, name);
+                if (inner >= actions_width)
+                    ImGui::SameLine(0.F, gap);
+            }
+            if (OlButton("Watch"))
+                WatchLeaderboardReplay(id, false);
+        },
+        11.F);
     ImGui::PopID();
 }
 
@@ -1853,8 +1896,8 @@ void DrawLeaderboardRanking(float width, const dkr::store::Json& ranking, TrackQ
         }
         if (const auto history = ranking.find("history"); history != ranking.end() && history->is_object()) {
             PaddockGap(10.F);
-            DrawTrackRecordHistory(inner, *history, query.id + "/" + next.vehicle + "/" + next.racer +
-                                   (next.best_lap ? "/lap" : "/race"));
+            DrawTrackRecordHistory(
+                inner, *history, query.id + "/" + next.vehicle + "/" + next.racer + (next.best_lap ? "/lap" : "/race"));
         }
     });
     PaddockGap(12.F);
@@ -1893,8 +1936,7 @@ void DrawLeaderboardRuns(float width, bool review) {
                 dkr::store::service().login();
             return;
         }
-        const bool loaded = g_ranked_runs_owner == owner && g_ranked_runs_review &&
-                            g_ranked_runs.contains("runs");
+        const bool loaded = g_ranked_runs_owner == owner && g_ranked_runs_review && g_ranked_runs.contains("runs");
         if (!loaded) {
             OlParagraph("Use Refresh to check for runs.", 15.F, kOlSoft, inner);
             return;
@@ -2029,8 +2071,13 @@ void DrawCatalogueLeaders(const dkr::store::Json& track, float width, bool full_
         const float y = start.y + type.line * static_cast<float>(lines.size() - 1);
         const float top = y + (type.line - 11.F) * .5F;
         const std::array<ImVec2, 7> crown{{
-            {x, top + 2.F}, {x + 4.F, top + 5.F}, {x + 7.F, top}, {x + 10.F, top + 5.F},
-            {x + icon_width, top + 2.F}, {x + 12.F, top + 10.F}, {x + 2.F, top + 10.F},
+            {x, top + 2.F},
+            {x + 4.F, top + 5.F},
+            {x + 7.F, top},
+            {x + 10.F, top + 5.F},
+            {x + icon_width, top + 2.F},
+            {x + 12.F, top + 10.F},
+            {x + 2.F, top + 10.F},
         }};
         const auto gold = PaddockCol(kOlAmber);
         draw->AddPolyline(crown.data(), static_cast<int>(crown.size()), gold, ImDrawFlags_Closed, 1.4F);
@@ -2045,8 +2092,8 @@ void DrawCatalogueLeaders(const dkr::store::Json& track, float width, bool full_
     const auto vehicles = track.value("vehicles", dkr::store::Json::array());
     if (vehicles.empty())
         return;
-    const auto columns = std::min<unsigned>(static_cast<unsigned>(vehicles.size()),
-                                           std::max(1U, static_cast<unsigned>(width / 185.F)));
+    const auto columns =
+        std::min<unsigned>(static_cast<unsigned>(vehicles.size()), std::max(1U, static_cast<unsigned>(width / 185.F)));
     if (!ImGui::BeginTable("TrackRecords", columns, ImGuiTableFlags_SizingStretchSame, {width, 0.F}))
         return;
     for (const auto& vehicle : vehicles) {
@@ -2062,9 +2109,8 @@ void DrawCatalogueLeaders(const dkr::store::Json& track, float width, bool full_
 }
 
 template <typename DrawActions>
-void DrawLeaderboardTrackRow(float width, const std::string& title, const std::string& detail,
-                             DrawActions draw_actions, const dkr::store::Json* records = nullptr,
-                             bool full_game = false) {
+void DrawLeaderboardTrackRow(float width, const std::string& title, const std::string& detail, DrawActions draw_actions,
+                             const dkr::store::Json* records = nullptr, bool full_game = false) {
     DrawOlCard(width, OlPanelLook{}, [&](float inner) {
         const auto draw_details = [&](float available) {
             OlParagraph(title, 18.F, kOlInk, available, true);
@@ -2166,22 +2212,30 @@ struct AdventureBoardRow {
 };
 constexpr std::array kAdventureBoardRows{
     AdventureBoardRow{trial::Adventure::AnyPercent, "any-percent", "Any%", "Beat Wizpig in Future Fun Land."},
-    AdventureBoardRow{trial::Adventure::HundredPercent, "100-percent", "100%", "Complete the Adventure checklist and beat Wizpig."},
-    AdventureBoardRow{trial::Adventure::AnyPercentGlitchless, "any-percent-glitchless", "Any% Glitchless", "Defeat each boss without banned glitches."},
+    AdventureBoardRow{trial::Adventure::HundredPercent, "100-percent", "100%",
+                      "Complete the Adventure checklist and beat Wizpig."},
+    AdventureBoardRow{trial::Adventure::AnyPercentGlitchless, "any-percent-glitchless", "Any% Glitchless",
+                      "Defeat each boss without banned glitches."},
     AdventureBoardRow{trial::Adventure::AllTrophyRaces, "all-trophy-races", "All Trophy Races",
-          "Finish all five Trophy sets in Tracks Mode."},
+                      "Finish all five Trophy sets in Tracks Mode."},
     AdventureBoardRow{trial::Adventure::AllBosses, "all-bosses", "All Bosses",
-          "Win all six boss rematches from the completed Adventure slot."},
-    AdventureBoardRow{trial::Adventure::AllMinigames, "all-minigames", "All Minigames", "Win all four minigames in Tracks Mode."},
-    AdventureBoardRow{trial::Adventure::TrophyDinoFirst, "all-trophy-races-dino-first", "All Trophy Races - Dino Domain First",
-          "In Tracks Mode, race all five Trophy sets beginning in Dino Domain."},
-    AdventureBoardRow{trial::Adventure::TrophyFutureFirst, "all-trophy-races-ffl-first", "All Trophy Races - Future Fun Land First",
-          "In Tracks Mode, race all five Trophy sets beginning in Future Fun Land."},
-    AdventureBoardRow{trial::Adventure::CarPercent, "car-percent", "Car%", "Win each available car course in Tracks Mode."},
-    AdventureBoardRow{trial::Adventure::HoverPercent, "hover-percent", "Hover%", "Win each available hovercraft course in Tracks Mode."},
-    AdventureBoardRow{trial::Adventure::PlanePercent, "plane-percent", "Plane%", "Win each available plane course in Tracks Mode."},
+                      "Win all six boss rematches from the completed Adventure slot."},
+    AdventureBoardRow{trial::Adventure::AllMinigames, "all-minigames", "All Minigames",
+                      "Win all four minigames in Tracks Mode."},
+    AdventureBoardRow{trial::Adventure::TrophyDinoFirst, "all-trophy-races-dino-first",
+                      "All Trophy Races - Dino Domain First",
+                      "In Tracks Mode, race all five Trophy sets beginning in Dino Domain."},
+    AdventureBoardRow{trial::Adventure::TrophyFutureFirst, "all-trophy-races-ffl-first",
+                      "All Trophy Races - Future Fun Land First",
+                      "In Tracks Mode, race all five Trophy sets beginning in Future Fun Land."},
+    AdventureBoardRow{trial::Adventure::CarPercent, "car-percent", "Car%",
+                      "Win each available car course in Tracks Mode."},
+    AdventureBoardRow{trial::Adventure::HoverPercent, "hover-percent", "Hover%",
+                      "Win each available hovercraft course in Tracks Mode."},
+    AdventureBoardRow{trial::Adventure::PlanePercent, "plane-percent", "Plane%",
+                      "Win each available plane course in Tracks Mode."},
     AdventureBoardRow{trial::Adventure::TTAmulet, "tt-amulet-no-wrong-warp", "T.T. Amulet - No Wrong Warp",
-          "Earn the four T.T. Amulet pieces through normal progression."},
+                      "Earn the four T.T. Amulet pieces through normal progression."},
 };
 
 bool QualifiedAdventureBoard(const dkr::store::Json* catalogue, const std::string& board) {
@@ -2208,9 +2262,8 @@ std::function<void()> DrawPracticeAdventure(float width, const dkr::store::Json*
     OlParagraph(category.description, 15.F, kOlSoft, width);
     const auto board = "adventure-" + std::string(category.id);
     const bool qualified = QualifiedAdventureBoard(catalogue, board);
-    return [goal = category.goal, board, signed_in, qualified] {
-        StartAdventureRun(goal, board, signed_in, qualified);
-    };
+    return
+        [goal = category.goal, board, signed_in, qualified] { StartAdventureRun(goal, board, signed_in, qualified); };
 }
 
 void DrawAdventureBoards(float width, const dkr::store::Json* catalogue, TrackQuery& query) {
@@ -2220,30 +2273,32 @@ void DrawAdventureBoards(float width, const dkr::store::Json* catalogue, TrackQu
         const std::string board = "adventure-" + std::string(category.id);
         const dkr::store::Json* records = nullptr;
         if (catalogue_categories) {
-            const auto entry = std::ranges::find_if(*catalogue_categories, [&](const auto& row) {
-                return StoreText(row, "id", 96) == category.id;
-            });
+            const auto entry = std::ranges::find_if(
+                *catalogue_categories, [&](const auto& row) { return StoreText(row, "id", 96) == category.id; });
             if (entry != catalogue_categories->end())
                 records = &*entry;
         }
         const bool qualified = QualifiedAdventureBoard(catalogue, board);
         ImGui::PushID(category.id.data());
-        DrawLeaderboardTrackRow(width, std::string(category.title), std::string(category.description), [&](float inner) {
-            if (!qualified) {
-                OlParagraph("Awaiting qualification", 14.F, kOlAmber, inner);
-                return;
-            }
-            if (g_track_return_focus == category.id) {
-                ImGui::SetKeyboardFocusHere();
-                g_track_return_focus.clear();
-            }
-            if (OlButton("View Times")) {
-                query = {};
-                query.id = category.id;
-                query.full_game = true;
-                dkr::store::service().load_leaderboards({}, query);
-            }
-        }, records, true);
+        DrawLeaderboardTrackRow(
+            width, std::string(category.title), std::string(category.description),
+            [&](float inner) {
+                if (!qualified) {
+                    OlParagraph("Awaiting qualification", 14.F, kOlAmber, inner);
+                    return;
+                }
+                if (g_track_return_focus == category.id) {
+                    ImGui::SetKeyboardFocusHere();
+                    g_track_return_focus.clear();
+                }
+                if (OlButton("View Times")) {
+                    query = {};
+                    query.id = category.id;
+                    query.full_game = true;
+                    dkr::store::service().load_leaderboards({}, query);
+                }
+            },
+            records, true);
         ImGui::PopID();
     }
 }
@@ -2270,7 +2325,7 @@ void DrawLeaderboardsPage(float width, bool entered, bool live) {
         category = g_launcher_layout_step == 3   ? Custom
                    : g_launcher_layout_step == 4 ? FullGame
                    : g_launcher_layout_step == 2 ? Vanilla
-                                                  : Runs;
+                                                 : Runs;
         query = {g_launcher_layout_step == 2 ? "ancient-lake" : ""};
         run_tab = NewRun;
     } else if (entered) {
@@ -2301,33 +2356,34 @@ void DrawLeaderboardsPage(float width, bool entered, bool live) {
     const float refresh = PaddockImportButtonWidth("Refreshing...");
     const float website = PaddockImportButtonWidth("Website");
     const float actions = refresh + website + 12.F;
-    DrawSharedPageHeader(width, live ? "LEADERBOARDS" : "SPEEDRUNNING",
-                         "Race for a personal best and watch how other players set theirs.", actions, [&] {
-        {
-            const OlDisabled loading(snapshot->speedrun_loading || DialogJobRunning() ||
-                                     (showing_submissions && owner.empty()));
-            if (PaddockImportButton(snapshot->speedrun_loading ? "Refreshing...###speedrun-refresh"
-                                                              : "Refresh###speedrun-refresh",
-                                    std::min(width, refresh), true)) {
-                if (showing_submissions) {
-                    RefreshLeaderboardRuns(run_tab == ReviewRuns);
-                } else if (category == TopPlayers) {
-                    RefreshOverallRankings();
-                } else if (category == Runs && run_tab == Replays) {
-                    g_refresh_replay_library = true;
-                    service.load_leaderboards();
-                } else {
-                    service.load_leaderboards({}, query.id.empty() ? std::nullopt : std::optional(query));
+    DrawSharedPageHeader(
+        width, live ? "LEADERBOARDS" : "SPEEDRUNNING",
+        "Race for a personal best and watch how other players set theirs.", actions, [&] {
+            {
+                const OlDisabled loading(snapshot->speedrun_loading || DialogJobRunning() ||
+                                         (showing_submissions && owner.empty()));
+                if (PaddockImportButton(snapshot->speedrun_loading ? "Refreshing...###speedrun-refresh"
+                                                                   : "Refresh###speedrun-refresh",
+                                        std::min(width, refresh), true)) {
+                    if (showing_submissions) {
+                        RefreshLeaderboardRuns(run_tab == ReviewRuns);
+                    } else if (category == TopPlayers) {
+                        RefreshOverallRankings();
+                    } else if (category == Runs && run_tab == Replays) {
+                        g_refresh_replay_library = true;
+                        service.load_leaderboards();
+                    } else {
+                        service.load_leaderboards({}, query.id.empty() ? std::nullopt : std::optional(query));
+                    }
                 }
             }
-        }
-        if (width >= actions)
-            ImGui::SameLine(0.F, 12.F);
-        else
-            PaddockGap(12.F);
-        if (PaddockImportButton("Website###speedrun-website", std::min(width, website), false, true))
-            SDL_OpenURL(kLeaderboardWebsite);
-    });
+            if (width >= actions)
+                ImGui::SameLine(0.F, 12.F);
+            else
+                PaddockGap(12.F);
+            if (PaddockImportButton("Website###speedrun-website", std::min(width, website), false, true))
+                SDL_OpenURL(kLeaderboardWebsite);
+        });
     DrawLocalRunConfirmation();
     if (!live && !g_leaderboard_layout_check)
         DrawSpeedrunningWelcome(entered, !owner.empty(), staff, snapshot->speedrun_catalogue.get());
@@ -2365,8 +2421,8 @@ void DrawLeaderboardsPage(float width, bool entered, bool live) {
             run_tabs.emplace_back("Review Runs");
         const int options_index = static_cast<int>(run_tabs.size());
         run_tabs.emplace_back("Options");
-        const int selected = StoreTabLine(run_tabs, run_tab == Options ? options_index : run_tab, width,
-                                          "speedrun-runs", true);
+        const int selected =
+            StoreTabLine(run_tabs, run_tab == Options ? options_index : run_tab, width, "speedrun-runs", true);
         const auto next_tab = selected == options_index ? Options : static_cast<RunTab>(selected);
         if (next_tab == Replays && run_tab != Replays)
             g_refresh_replay_library = true;
@@ -2391,7 +2447,9 @@ void DrawLeaderboardsPage(float width, bool entered, bool live) {
         return;
     }
     if (!query.id.empty()) {
-        if (OlButton(back_to_profile ? "Back to player stats" : category == FullGame ? "All categories" : "All tracks") ||
+        if (OlButton(back_to_profile        ? "Back to player stats"
+                     : category == FullGame ? "All categories"
+                                            : "All tracks") ||
             ImGui::IsKeyPressed(ImGuiKey_GamepadFaceRight, false)) {
             if (!back_to_profile)
                 g_track_return_focus = query.id;
@@ -2419,12 +2477,13 @@ void DrawLeaderboardsPage(float width, bool entered, bool live) {
         return;
     }
     const auto& catalogue = *snapshot->speedrun_catalogue;
-    const auto tracks = catalogue.value(category == Vanilla ? "vanillaTracks" : "customTracks", dkr::store::Json::array());
+    const auto tracks =
+        catalogue.value(category == Vanilla ? "vanillaTracks" : "customTracks", dkr::store::Json::array());
     constexpr float world_width = 224.F, vehicle_width = 160.F;
     const float gap = ImGui::GetStyle().ItemSpacing.x;
     const float filters_width = category == Vanilla ? world_width + vehicle_width + 2.F * gap : 0.F;
-    const float search_width = std::min(category == Vanilla ? 300.F : 360.F,
-                                       width >= filters_width + 176.F ? width - filters_width : width);
+    const float search_width =
+        std::min(category == Vanilla ? 300.F : 360.F, width >= filters_width + 176.F ? width - filters_width : width);
     OlInputOptions options;
     options.hint = "Track name";
     options.height = kSettingsDropdownHeight;
@@ -2437,7 +2496,8 @@ void DrawLeaderboardsPage(float width, bool entered, bool live) {
     }
     ImGui::EndGroup();
     float row_width = search_width;
-    const auto draw_filter = [&](const char* label, const LeaderboardChoices& choices, std::string& value, float preferred) {
+    const auto draw_filter = [&](const char* label, const LeaderboardChoices& choices, std::string& value,
+                                 float preferred) {
         const float field_width = std::min(preferred, width);
         if (row_width > 0.F && row_width + gap + field_width <= width + 0.1F) {
             ImGui::SameLine();
@@ -2477,11 +2537,11 @@ void DrawLeaderboardsPage(float width, bool entered, bool live) {
         const auto& boards = catalogue["boards"];
         const bool qualified =
             category == Custom ? track.value("qualified", false)
-                          : std::any_of(boards.begin(), boards.end(), [&](const auto& board) {
-                                return StoreText(board, "kind", 20) == "vanilla" &&
-                                       StoreText(board, "title", 120) == title && board.value("ranked", false) &&
-                                       (vehicle.empty() || StoreText(board, "vehicle", 24) == vehicle);
-                            });
+                               : std::any_of(boards.begin(), boards.end(), [&](const auto& board) {
+                                     return StoreText(board, "kind", 20) == "vanilla" &&
+                                            StoreText(board, "title", 120) == title && board.value("ranked", false) &&
+                                            (vehicle.empty() || StoreText(board, "vehicle", 24) == vehicle);
+                                 });
         matching.emplace_back(&track, qualified);
     }
     OlParagraph(matching.empty() ? "No tracks match these filters."
@@ -2495,21 +2555,24 @@ void DrawLeaderboardsPage(float width, bool entered, bool live) {
         for (const auto& choice : track->value("vehicles", dkr::store::Json::array()))
             detail += " | " + LeaderboardVehicle(choice.get<std::string>());
         ImGui::PushID(id.c_str());
-        DrawLeaderboardTrackRow(width, title, detail, [&](float inner) {
-            if (!qualified) {
-                OlParagraph("Awaiting qualification", 14.F, kOlAmber, inner);
-                return;
-            }
-            const OlDisabled loading(snapshot->speedrun_loading);
-            if (g_track_return_focus == id) {
-                ImGui::SetKeyboardFocusHere();
-                g_track_return_focus.clear();
-            }
-            if (OlButton("View Times")) {
-                query = {id, category == Vanilla ? vehicle : std::string{}, {}, category == Custom};
-                service.load_leaderboards({}, query);
-            }
-        }, track->contains("leaders") ? track : nullptr);
+        DrawLeaderboardTrackRow(
+            width, title, detail,
+            [&](float inner) {
+                if (!qualified) {
+                    OlParagraph("Awaiting qualification", 14.F, kOlAmber, inner);
+                    return;
+                }
+                const OlDisabled loading(snapshot->speedrun_loading);
+                if (g_track_return_focus == id) {
+                    ImGui::SetKeyboardFocusHere();
+                    g_track_return_focus.clear();
+                }
+                if (OlButton("View Times")) {
+                    query = {id, category == Vanilla ? vehicle : std::string{}, {}, category == Custom};
+                    service.load_leaderboards({}, query);
+                }
+            },
+            track->contains("leaders") ? track : nullptr);
         ImGui::PopID();
     }
     if (category == Custom) {

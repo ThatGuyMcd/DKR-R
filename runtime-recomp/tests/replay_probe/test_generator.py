@@ -607,7 +607,7 @@ class InstrumentationTests(unittest.TestCase):
             # no new store.
             # Nov 17: reads the selected revision through revision_addresses::current(); same addresses, no new store, call or hook.
             # Offline replay frames carry their own matrix, HUD and shadow presentation metadata.
-            "runtime-recomp/src/game/presentation_identity.cpp": "4b0368cf2d5ef29d3c844c1ac659f85aeb9421dbd37ec16722f0243bd5696b7e",
+            "runtime-recomp/src/game/presentation_identity.cpp": "822b37db388312fd505548e11f9b1e02b5a980cfa82f157b35672befd90029c1",
             "runtime-recomp/src/game/widescreen_policy.hpp":"3c3ff51000c969d6c7a9628364345fe1293e1c26de057197120728e79f975f36",
             "extern/dkr-decomp/src/save_data.c":"898df1a185c17e1d6ba11302fc5c140a1d7bd10ff3d8b86ff937c834bb13a607",
             "extern/dkr-decomp/src/thread3_main.c":"437434837706ee88e91578ce9e1aa2cd960e65e1e3a6f1aa47ae3b6289892d8e",

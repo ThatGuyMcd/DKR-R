@@ -7,8 +7,7 @@ enum class SyncScope { All, PublishHostedOnline, PublishProgress };
 enum class SyncStatus { Idle, Syncing, Synced, Error, Unreachable };
 
 constexpr SyncStatus sync_failure(bool transport_failed, unsigned http_status) {
-    const bool unavailable = (http_status >= 502 && http_status <= 504) ||
-                             (http_status >= 521 && http_status <= 524);
+    const bool unavailable = (http_status >= 502 && http_status <= 504) || (http_status >= 521 && http_status <= 524);
     return transport_failed || unavailable ? SyncStatus::Unreachable : SyncStatus::Error;
 }
 

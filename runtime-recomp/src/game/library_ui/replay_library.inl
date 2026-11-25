@@ -25,8 +25,8 @@ dkr::store::Json ReadReplaySummary(const std::filesystem::path& file) {
     if (bytes > kReplayLibraryBytes || !input.read(reinterpret_cast<char*>(header.data()), header.size()) ||
         std::string_view(reinterpret_cast<const char*>(header.data()), 8) != "DKRREPL2")
         throw std::runtime_error("This file is not a supported DKR-R replay.");
-    const auto length = std::uint32_t(header[8]) | (std::uint32_t(header[9]) << 8) |
-                        (std::uint32_t(header[10]) << 16) | (std::uint32_t(header[11]) << 24);
+    const auto length = std::uint32_t(header[8]) | (std::uint32_t(header[9]) << 8) | (std::uint32_t(header[10]) << 16) |
+                        (std::uint32_t(header[11]) << 24);
     if (!length || length > 65536 || length > bytes - header.size())
         throw std::runtime_error("The replay metadata is incomplete.");
     std::string metadata(length, '\0');
@@ -35,15 +35,13 @@ dkr::store::Json ReadReplaySummary(const std::filesystem::path& file) {
     auto manifest = dkr::store::Json::parse(metadata);
     const auto rules = StoreText(manifest, "ruleset", 48);
     const bool adventure = rules == trial::kAdventureRules || rules == trial::kAdventureOriginalRouteRules ||
-                           rules == trial::kAdventureMilestoneRules ||
-                           rules == trial::kAdventureColdSaveRules ||
-                           rules == trial::kAdventureVisualRngRules ||
-                           rules == trial::kAdventureSharedRngRules ||
+                           rules == trial::kAdventureMilestoneRules || rules == trial::kAdventureColdSaveRules ||
+                           rules == trial::kAdventureVisualRngRules || rules == trial::kAdventureSharedRngRules ||
                            rules == trial::kLegacyAdventureRules;
     const auto ticks = LeaderboardNumber(manifest, "ticks");
     const auto clock = LeaderboardNumber(manifest, "clockTicks");
-    if ((!adventure && rules != trial::kLegacyRules && rules != trial::kVanillaRules &&
-         rules != trial::kCustomRules && rules != trial::kCustomVariableLapsRules) ||
+    if ((!adventure && rules != trial::kLegacyRules && rules != trial::kVanillaRules && rules != trial::kCustomRules &&
+         rules != trial::kCustomVariableLapsRules) ||
         !ticks || !clock || clock > ticks * 2 || bytes != header.size() + length + ticks * 4 ||
         !trial::supported_replay_rom(manifest.value("rom", 0U)))
         throw std::runtime_error("The replay format or recording length is unsupported.");
@@ -99,8 +97,7 @@ bool ReplayHasRankedAttempt(const dkr::store::Json& manifest) {
 
 bool IsLocalReplayCapture(const dkr::store::Json& manifest) {
     return manifest.value("practice", false) && !manifest.contains("ticket") && !manifest.contains("board") &&
-           !manifest.contains("engine") && !manifest.contains("releaseHash") &&
-           !manifest.at("checkpoints").empty();
+           !manifest.contains("engine") && !manifest.contains("releaseHash") && !manifest.at("checkpoints").empty();
 }
 
 std::vector<LocalReplay> ReadLocalReplayLibrary(const std::filesystem::path& directory) {
@@ -167,7 +164,8 @@ std::vector<LocalReplay> ReadLocalReplayLibrary(const std::filesystem::path& dir
                     item.track_hash = StoreText(manifest, "trackHash", 64);
                     item.course = item.track_id;
                     record = "custom:" + item.track_id + ":" + item.track_hash;
-                    const auto found = std::ranges::find(installed, item.course, &dkr::runtime::custom_tracks::ReplayTrack::id);
+                    const auto found =
+                        std::ranges::find(installed, item.course, &dkr::runtime::custom_tracks::ReplayTrack::id);
                     if (found != installed.end())
                         item.course = found->name;
                     else
@@ -175,8 +173,8 @@ std::vector<LocalReplay> ReadLocalReplayLibrary(const std::filesystem::path& dir
                 }
                 record += ":" + vehicle + ":" + std::to_string(racer);
                 const auto splits = manifest.value("splits", dkr::store::Json::array());
-                const auto laps = rules == trial::kCustomVariableLapsRules ? manifest.value("laps", 0U)
-                                                                        : trial::kRetailLapCount;
+                const auto laps =
+                    rules == trial::kCustomVariableLapsRules ? manifest.value("laps", 0U) : trial::kRetailLapCount;
                 if (laps > 0 && laps <= trial::kMaximumLapCount && splits.is_array() && splits.size() == laps) {
                     std::int64_t previous = 0;
                     for (const auto& value : splits) {
@@ -196,8 +194,8 @@ std::vector<LocalReplay> ReadLocalReplayLibrary(const std::filesystem::path& dir
             item.has_attempt = ReplayHasRankedAttempt(manifest);
             if (item.has_attempt)
                 item.board = StoreText(manifest, "board", 96);
-            item.practice = manifest.value("practice", true) ||
-                            PathUtf8(file.filename()).find("-Practice-") != std::string::npos;
+            item.practice =
+                manifest.value("practice", true) || PathUtf8(file.filename()).find("-Practice-") != std::string::npos;
             item.valid = !item.course.empty();
             item.local_capture = item.valid && IsLocalReplayCapture(manifest) &&
                                  (!rules.starts_with("adventure-") || rules == trial::kAdventureRules);
@@ -222,9 +220,8 @@ std::vector<LocalReplay> ReadLocalReplayLibrary(const std::filesystem::path& dir
         }
         replays.push_back(std::move(item));
     }
-    std::ranges::sort(replays, [](const auto& a, const auto& b) {
-        return a.saved != b.saved ? a.saved > b.saved : a.file > b.file;
-    });
+    std::ranges::sort(
+        replays, [](const auto& a, const auto& b) { return a.saved != b.saved ? a.saved > b.saved : a.file > b.file; });
     return replays;
 }
 
@@ -284,19 +281,19 @@ void RemoveLocalReplay(const std::filesystem::path& file) {
 using ReplayPurgeSelection = std::map<std::filesystem::path, std::filesystem::file_time_type>;
 
 ReplayPurgeSelection SelectReplayPurge(const std::vector<LocalReplay>& replays, bool include_bests,
-                                     bool include_unsubmitted) {
+                                       bool include_unsubmitted) {
     ReplayPurgeSelection selected;
     for (const auto& replay : replays) {
         if (dkr::library_ui::can_purge_replay(replay.personal_best, !replay.posted_owner.empty(), include_bests,
-                                            include_unsubmitted))
+                                              include_unsubmitted))
             selected.emplace(replay.file, replay.saved);
     }
     return selected;
 }
 
 std::pair<std::size_t, std::size_t> PurgeLocalReplays(const std::filesystem::path& directory,
-                                                    const ReplayPurgeSelection& confirmed, bool include_bests,
-                                                    bool include_unsubmitted) {
+                                                      const ReplayPurgeSelection& confirmed, bool include_bests,
+                                                      bool include_unsubmitted) {
     const auto current = SelectReplayPurge(ReadLocalReplayLibrary(directory), include_bests, include_unsubmitted);
     std::size_t removed = 0;
     for (const auto& [file, saved] : confirmed) {

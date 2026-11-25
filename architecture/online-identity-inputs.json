@@ -400,16 +400,16 @@
       "reason": "online identity changed to cfc1d8e0d92c"
     },
     "runtime-recomp/src/game/save_manager.cpp": {
-      "sha256": "f0b6978a8656cc610a783fb2cbce1a4aa20701d92e4d438529af5bf9fcc6549e",
-      "reason": "online identity changed to cfc1d8e0d92c"
+      "sha256": "60d25e04c6448653efb0d5c902106988d32ef14de7a022063afc80f43288d3b3",
+      "reason": "online identity changed to cfc1d8e0d92c The release formatting pass preserved the source tokens."
     },
     "runtime-recomp/src/game/save_manager.hpp": {
-      "sha256": "c500856477ae48fc35b4894469a7d6b55c0785a416a3ba6b0401701ed6315037",
-      "reason": "online identity changed to cfc1d8e0d92c"
+      "sha256": "937f75bd9c991a6bd1c3e0eb3c14bf05e4f79e9f0df1f496d9463d5b93a12e11",
+      "reason": "online identity changed to cfc1d8e0d92c The release formatting pass preserved the source tokens."
     },
     "runtime-recomp/src/game/save_storage.hpp": {
-      "sha256": "15051bb636fdc60535c3b2a3e9daa93d47496b1b27a063b483ceb1969140ff1a",
-      "reason": "online identity changed to cfc1d8e0d92c"
+      "sha256": "927931ba173914c442f62ef4e0bb414538f4b1923e122ea4e2789d91bf2f8702",
+      "reason": "online identity changed to cfc1d8e0d92c The release formatting pass preserved the source tokens."
     },
     "runtime-recomp/src/game/track_select_draw_guest.h": {
       "sha256": "053e11b284c433b88b19470534003519ad3d16bc3e625ce4bcc2b5f4f172041e",
@@ -704,8 +704,8 @@
       "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
     },
     "scripts/generate_replay_probe.py": {
-      "sha256": "b488496606e3a318a46ad3b1e1bf7fd80f7be05cdee148742eb6bd845d31ce19",
-      "reason": "The reviewed native input digest entries admit the existing local Pak save notification and offline replay presentation. The checked ROM-derived payload hashes and inherited checkpoint contract are unchanged by this pin update."
+      "sha256": "c3187ba130104c8046625c72dfe3ed360c0241900579f35d5fdcf4c656be3d26",
+      "reason": "The reviewed native input digest entries admit the existing local Pak save notification and offline replay presentation. The checked ROM-derived payload hashes and inherited checkpoint contract are unchanged by this pin update. Updated the native audit to follow token-identical source formatting."
     },
     "scripts/generate_revision_policy.py": {
       "sha256": "bafbefad41542e00b6c5ec13b02acde69dda7f48e34025f46d92d028da6427b9",

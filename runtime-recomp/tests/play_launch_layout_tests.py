@@ -63,8 +63,11 @@ def main():
     env.update(
         DKR_LAUNCHER_UI_CHECK_TOKEN=token,
         DKR_OWNED_CHECK_LAYOUT_UI=args.size,
-        DKR_OWNED_CHECK_PLAY_LAUNCH=("save-modded" if args.modded_save else "save") if args.save
-        else "0" if args.leaderboards else "1",
+        DKR_OWNED_CHECK_PLAY_LAUNCH=("save-modded" if args.modded_save else "save")
+        if args.save
+        else "0"
+        if args.leaderboards
+        else "1",
         DKR_OWNED_CHECK_LEADERBOARD_LAYOUT="1" if args.leaderboards else "0",
         DKR_OWNED_CHECK_LAYOUT_SURFACE=args.surface,
         SDL_AUDIODRIVER="dummy",
@@ -137,15 +140,20 @@ def main():
         assert [int(row["slot"]) for row in rows] == [0, 0, 1, 1, 2, 2], result
         assert all(row["modded"] == args.modded_save for row in rows), result
         assert rows[0]["dirty"] == 0, result
-        assert all(row["editor-right"] <= row["panel-right"] and row["editor-bottom"] <= row["bar-top"]
-                   for row in rows), result
-        assert all(row["slots-right"] <= row["editor-left"] or row["slots-bottom"] <= row["editor-top"]
-                   for row in rows), result
-        assert all(row["editor-left"] < row["editor-body-left"] < row["editor-body-right"] < row["editor-right"]
-                   for row in rows), result
+        assert all(
+            row["editor-right"] <= row["panel-right"] and row["editor-bottom"] <= row["bar-top"] for row in rows
+        ), result
+        assert all(
+            row["slots-right"] <= row["editor-left"] or row["slots-bottom"] <= row["editor-top"] for row in rows
+        ), result
+        assert all(
+            row["editor-left"] < row["editor-body-left"] < row["editor-body-right"] < row["editor-right"]
+            for row in rows
+        ), result
         if args.size in {"deck", "desktop", "wide"}:
-            assert all(row["slots-right"] < row["editor-left"] and row["slots-left"] >= row["panel-left"]
-                       for row in rows), result
+            assert all(
+                row["slots-right"] < row["editor-left"] and row["slots-left"] >= row["panel-left"] for row in rows
+            ), result
     else:
         assert all(row["visible"] == 1 and row["height"] == 48 and row["parent-scroll"] == 0 for row in rows), result
         assert all(row["top"] == rows[0]["top"] and row["bottom"] == rows[0]["bottom"] for row in rows), result

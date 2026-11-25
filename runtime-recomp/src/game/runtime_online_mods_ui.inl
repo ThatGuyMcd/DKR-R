@@ -175,9 +175,9 @@ void PumpOnlineMods() {
         ReportOnlinePreparationFailure(view.error);
     if (g_online_mod_host_request) {
         auto& pending = *g_online_mod_host_request;
-        if (session().active() ||
-            pending.manifest.canonical_rom_hash != g_online_mod_identity.canonical_xxh3 ||
-            (pending.content_enabled && pending.manifest.magic_codes_hash != dkr::runtime::magic_codes::selected_mask())) {
+        if (session().active() || pending.manifest.canonical_rom_hash != g_online_mod_identity.canonical_xxh3 ||
+            (pending.content_enabled &&
+             pending.manifest.magic_codes_hash != dkr::runtime::magic_codes::selected_mask())) {
             g_online_mod_sync->cancel();
             g_online_mod_host_request.reset();
             g_online_action_status = "Preparation cancelled because the lobby, ROM or Magic Codes changed.";

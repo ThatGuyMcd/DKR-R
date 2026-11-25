@@ -120,8 +120,8 @@ float ExpandedCoverScale(bool use_replay_aspect = false) {
     if (width <= 0 || height <= 0) {
         return 1.0F;
     }
-    const float aspect = replay ? dkr::display::view_aspect(width, height)
-                                : static_cast<float>(width) / static_cast<float>(height);
+    const float aspect =
+        replay ? dkr::display::view_aspect(width, height) : static_cast<float>(width) / static_cast<float>(height);
     return std::max(1.0F, aspect / kOriginalAspect);
 }
 
@@ -409,8 +409,8 @@ extern "C" void dkr_split_screen_viewport_fill(std::uint8_t* rdram, recomp_conte
         PresentationMarkerKind::CameraWorldBegin);
     const float cover = ExpandedCoverScale(true);
     const bool postrace = PostraceFullViewScope(rdram, cover);
-    g_postrace_world_framed = postrace && g_postrace_frame_gate.contracted_frame_submitted &&
-                              !dkr::runtime::time_trial::watching();
+    g_postrace_world_framed =
+        postrace && g_postrace_frame_gate.contracted_frame_submitted && !dkr::runtime::time_trial::watching();
     if (postrace && !g_postrace_world_framed) {
         // Presentation-only viewport/scissor correction: leave the authored
         // viewport, camera, menu animation and shared simulation RAM intact.

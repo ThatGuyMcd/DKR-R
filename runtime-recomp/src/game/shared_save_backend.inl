@@ -379,8 +379,7 @@ bool apply(const codec::SaveImage& image, std::string_view expected, std::string
     if (!codec::validate(proposed, &error))
         return false;
     std::filesystem::path backup;
-    if (!backup_adventure(backup, error, modded) ||
-        !storage::write_atomic(path, proposed, ReadAdventure, error))
+    if (!backup_adventure(backup, error, modded) || !storage::write_atomic(path, proposed, ReadAdventure, error))
         return false;
     std::vector<std::uint8_t> check;
     if (!ReadAdventure(path, check) || check != proposed) {

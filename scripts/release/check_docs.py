@@ -81,8 +81,10 @@ def main(argv: list[str] | None = None) -> int:
             # Match the repository link check for pinned dependencies that
             # live in a separate checkout reached through extern/.
             dependency = target.is_relative_to(ROOT / "extern")
-            if not target.is_relative_to(ROOT) or not target.exists() or (
-                not dependency and not target.resolve().is_relative_to(ROOT)
+            if (
+                not target.is_relative_to(ROOT)
+                or not target.exists()
+                or (not dependency and not target.resolve().is_relative_to(ROOT))
             ):
                 broken.append({"path": name, "link": link})
     counts: dict[str, int] = {}

@@ -86,7 +86,7 @@ void DrawSdk2Tools() {
     ImGui::SetNextWindowSize({std::max(320.F, display.x - 48.F), std::max(240.F, display.y - 48.F)},
                              ImGuiCond_Appearing);
     if (!dkr::runtime::ui::begin_dialog_window("CUSTOM MAGIC CODE TOOLS", &open,
-                                              ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoScrollbar)) {
+                                               ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoScrollbar)) {
         ImGui::End();
         ImGui::PopStyleVar();
         if (!open) {

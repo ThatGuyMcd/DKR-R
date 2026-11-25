@@ -30,9 +30,9 @@ class AdventureSplits {
     static constexpr std::array<unsigned, 4> minigame_maps{11, 25, 26, 27};
     static constexpr std::array<unsigned, 6> boss_maps{37, 46, 52, 53, 54, 55};
     static constexpr std::array<std::string_view, 4> minigame_names{"Fire Mountain", "Smokey Castle", "Darkwater Beach",
-                                                                 "Icicle Pyramid"};
-    static constexpr std::array<std::string_view, 6> boss_names{"Wizpig 1", "Tricky", "Bluey", "Bubbler",
-                                                               "Smokey", "Wizpig 2"};
+                                                                    "Icicle Pyramid"};
+    static constexpr std::array<std::string_view, 6> boss_names{"Wizpig 1", "Tricky", "Bluey",
+                                                                "Bubbler",  "Smokey", "Wizpig 2"};
     static constexpr unsigned trophy_courses[5][4] = {
         {5, 3, 29, 7}, {8, 4, 10, 30}, {13, 6, 9, 28}, {19, 18, 20, 31}, {17, 32, 33, 15},
     };
@@ -48,14 +48,13 @@ class AdventureSplits {
 
     static std::vector<std::string_view> upcoming(Adventure goal, std::span<const AdventureSplit> completed) {
         std::vector<std::string_view> route{tracks_route(goal) ? "Start" : "Overworld"};
-        const auto append = [&](std::initializer_list<std::string_view> stages) {
-            route.insert(route.end(), stages);
-        };
+        const auto append = [&](std::initializer_list<std::string_view> stages) { route.insert(route.end(), stages); };
         if (trophy_route(goal)) {
             for (unsigned set = 0; set < 5; ++set) {
                 const unsigned world = goal == Adventure::TrophyFutureFirst ? 4 - set : set;
                 for (unsigned level : trophy_courses[world])
-                    if (const auto course = std::ranges::find(kCourses, level, &Course::level); course != kCourses.end())
+                    if (const auto course = std::ranges::find(kCourses, level, &Course::level);
+                        course != kCourses.end())
                         route.push_back(course->name);
             }
         } else if (goal >= Adventure::CarPercent) {
@@ -72,11 +71,14 @@ class AdventureSplits {
         } else if (goal == Adventure::AnyPercent) {
             append({"Enter Wizpig 1", "Wizpig 1", "Dino 2", "Enter FFL", "Enter Wizpig 2", "Wizpig 2"});
         } else {
-            append({"Dino 1", "Fire Mountain", "Dino 2", "Dino Trophy", "Car Challenge", "Snowflake 1",
-                    "Icicle Pyramid", "Snowflake 2", "Snow Trophy", "Hover Challenge", "Sherbet 1",
-                    "Darkwater Beach", "Sherbet 2", "Sherbet Trophy", "Plane Challenge", "Dragon 1",
-                    "Smokey Castle", "Dragon 2", "Dragon Trophy", "Enter Wizpig 1", "Wizpig 1", "Enter FFL",
-                    "Future Fun Land 1", "Future Fun Land 2"});
+            append({"Dino 1",          "Fire Mountain",     "Dino 2",
+                    "Dino Trophy",     "Car Challenge",     "Snowflake 1",
+                    "Icicle Pyramid",  "Snowflake 2",       "Snow Trophy",
+                    "Hover Challenge", "Sherbet 1",         "Darkwater Beach",
+                    "Sherbet 2",       "Sherbet Trophy",    "Plane Challenge",
+                    "Dragon 1",        "Smokey Castle",     "Dragon 2",
+                    "Dragon Trophy",   "Enter Wizpig 1",    "Wizpig 1",
+                    "Enter FFL",       "Future Fun Land 1", "Future Fun Land 2"});
             if (goal == Adventure::HundredPercent)
                 route.push_back("Future Fun Land Trophy");
             append({"Enter Wizpig 2", "Wizpig 2"});

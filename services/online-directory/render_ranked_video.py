@@ -45,9 +45,20 @@ def encoding(count, adventure):
     audio_rate = 80_000 if total_rate >= 500_000 else 48_000
     video_rate = min(3_000_000, total_rate - audio_rate)
     height = 720 if video_rate >= 1_000_000 else 540 if video_rate >= 450_000 else 360
-    return [
-        "-preset", "veryfast", "-b:v", str(video_rate), "-maxrate", str(video_rate), "-bufsize", str(video_rate * 2),
-    ], audio_rate, height
+    return (
+        [
+            "-preset",
+            "veryfast",
+            "-b:v",
+            str(video_rate),
+            "-maxrate",
+            str(video_rate),
+            "-bufsize",
+            str(video_rate * 2),
+        ],
+        audio_rate,
+        height,
+    )
 
 
 def picture_filter(height, gameplay_frames, credit):
@@ -55,12 +66,14 @@ def picture_filter(height, gameplay_frames, credit):
     if height != HEIGHT:
         filters.append(f"scale={height * 16 // 9}:{height}:flags=lanczos")
     # RT64 already produced the output cadence; FFmpeg only encodes it.
-    filters.extend([
-        "null",
-        f"trim=end_frame={gameplay_frames}",
-        f"settb=1/{VIDEO_FPS}",
-        "setpts=N",
-    ])
+    filters.extend(
+        [
+            "null",
+            f"trim=end_frame={gameplay_frames}",
+            f"settb=1/{VIDEO_FPS}",
+            "setpts=N",
+        ]
+    )
     hold = BOOKEND_FRAMES - FADE_FRAMES
     outro_start = BOOKEND_FRAMES + gameplay_frames
     margin = max(2, height // 50)
@@ -70,25 +83,28 @@ def picture_filter(height, gameplay_frames, credit):
         f",drawtext=font='DejaVu Sans':textfile=racer-credit.txt:expansion=none:"
         f"fontsize={round(height * 0.032)}:fontcolor=white@0.80:shadowcolor=black@0.8:"
         f"shadowx=1:shadowy=1:x={margin}:y=h-th-{margin}"
-        if credit else ""
+        if credit
+        else ""
     )
     # The transitions fade over held pictures. The original gameplay pictures
     # and the corresponding audio start together after the full intro.
-    return ";".join([
-        "[0:v]" + ",".join(filters) + "[game]",
-        "[1:v]format=rgba,split=2[mark_source][title_source]",
-        f"[mark_source]scale={mark_size}:{mark_size}:flags=lanczos,format=rgba,colorchannelmixer=aa=0.34[mark]",
-        f"[game][mark]overlay=x=W-w-{margin}:y=H-h-{margin}{credit_filter}[marked]",
-        f"[marked]tpad=start_mode=clone:start={FADE_FRAMES}:stop_mode=clone:stop={FADE_FRAMES},"
-        f"fade=t=in:s=0:n={FADE_FRAMES},fade=t=out:s={gameplay_frames + FADE_FRAMES}:n={FADE_FRAMES - 1},"
-        f"tpad=start={hold}:stop={hold}[stage]",
-        f"[title_source]scale={centre_size}:{centre_size}:flags=lanczos,format=rgba,"
-        f"loop=loop={BOOKEND_FRAMES - 1}:size=1:start=0,settb=1/{VIDEO_FPS},setpts=N,split=2[lead][tail]",
-        f"[lead]fade=t=out:s={hold}:n={FADE_FRAMES - 1}:alpha=1[intro]",
-        f"[tail]fade=t=in:s=0:n={FADE_FRAMES}:alpha=1,setpts=PTS+{outro_start}[outro]",
-        "[stage][intro]overlay=x=(W-w)/2:y=(H-h)/2:eof_action=pass[opening]",
-        "[opening][outro]overlay=x=(W-w)/2:y=(H-h)/2:eof_action=pass[branded]",
-    ])
+    return ";".join(
+        [
+            "[0:v]" + ",".join(filters) + "[game]",
+            "[1:v]format=rgba,split=2[mark_source][title_source]",
+            f"[mark_source]scale={mark_size}:{mark_size}:flags=lanczos,format=rgba,colorchannelmixer=aa=0.34[mark]",
+            f"[game][mark]overlay=x=W-w-{margin}:y=H-h-{margin}{credit_filter}[marked]",
+            f"[marked]tpad=start_mode=clone:start={FADE_FRAMES}:stop_mode=clone:stop={FADE_FRAMES},"
+            f"fade=t=in:s=0:n={FADE_FRAMES},fade=t=out:s={gameplay_frames + FADE_FRAMES}:n={FADE_FRAMES - 1},"
+            f"tpad=start={hold}:stop={hold}[stage]",
+            f"[title_source]scale={centre_size}:{centre_size}:flags=lanczos,format=rgba,"
+            f"loop=loop={BOOKEND_FRAMES - 1}:size=1:start=0,settb=1/{VIDEO_FPS},setpts=N,split=2[lead][tail]",
+            f"[lead]fade=t=out:s={hold}:n={FADE_FRAMES - 1}:alpha=1[intro]",
+            f"[tail]fade=t=in:s=0:n={FADE_FRAMES}:alpha=1,setpts=PTS+{outro_start}[outro]",
+            "[stage][intro]overlay=x=(W-w)/2:y=(H-h)/2:eof_action=pass[opening]",
+            "[opening][outro]overlay=x=(W-w)/2:y=(H-h)/2:eof_action=pass[branded]",
+        ]
+    )
 
 
 def stop(process: subprocess.Popen) -> None:
@@ -106,12 +122,19 @@ def size_capture_window(env: dict, game: subprocess.Popen) -> None:
     while game.poll() is None and time.monotonic() < deadline:
         match = subprocess.run(
             ["xdotool", "search", "--onlyvisible", "--name", "^DKR-R"],
-            env=env, capture_output=True, text=True, timeout=3,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=3,
         )
         if match.returncode == 0 and match.stdout.split():
             window = match.stdout.split()[-1]
-            subprocess.run(["xdotool", "windowmove", window, "0", "0", "windowsize", window, str(WIDTH), str(HEIGHT)],
-                           env=env, check=True, timeout=3)
+            subprocess.run(
+                ["xdotool", "windowmove", window, "0", "0", "windowsize", window, str(WIDTH), str(HEIGHT)],
+                env=env,
+                check=True,
+                timeout=3,
+            )
             return
         time.sleep(0.15)
     raise ValueError("The verifier did not open its capture window.")
@@ -119,11 +142,21 @@ def size_capture_window(env: dict, game: subprocess.Popen) -> None:
 
 class X11Image(ctypes.Structure):
     _fields_ = [
-        ("width", ctypes.c_int), ("height", ctypes.c_int), ("offset", ctypes.c_int),
-        ("format", ctypes.c_int), ("data", ctypes.c_void_p), ("byte_order", ctypes.c_int),
-        ("bitmap_unit", ctypes.c_int), ("bitmap_bit_order", ctypes.c_int), ("bitmap_pad", ctypes.c_int),
-        ("depth", ctypes.c_int), ("stride", ctypes.c_int), ("bits_per_pixel", ctypes.c_int),
-        ("red_mask", ctypes.c_ulong), ("green_mask", ctypes.c_ulong), ("blue_mask", ctypes.c_ulong),
+        ("width", ctypes.c_int),
+        ("height", ctypes.c_int),
+        ("offset", ctypes.c_int),
+        ("format", ctypes.c_int),
+        ("data", ctypes.c_void_p),
+        ("byte_order", ctypes.c_int),
+        ("bitmap_unit", ctypes.c_int),
+        ("bitmap_bit_order", ctypes.c_int),
+        ("bitmap_pad", ctypes.c_int),
+        ("depth", ctypes.c_int),
+        ("stride", ctypes.c_int),
+        ("bits_per_pixel", ctypes.c_int),
+        ("red_mask", ctypes.c_ulong),
+        ("green_mask", ctypes.c_ulong),
+        ("blue_mask", ctypes.c_ulong),
     ]
 
 
@@ -137,8 +170,14 @@ class Screen:
         lib.XCloseDisplay.argtypes = [ctypes.c_void_p]
         lib.XDestroyImage.argtypes = [ctypes.POINTER(X11Image)]
         lib.XGetImage.argtypes = [
-            ctypes.c_void_p, ctypes.c_ulong, ctypes.c_int, ctypes.c_int, ctypes.c_uint, ctypes.c_uint,
-            ctypes.c_ulong, ctypes.c_int,
+            ctypes.c_void_p,
+            ctypes.c_ulong,
+            ctypes.c_int,
+            ctypes.c_int,
+            ctypes.c_uint,
+            ctypes.c_uint,
+            ctypes.c_ulong,
+            ctypes.c_int,
         ]
         lib.XGetImage.restype = ctypes.POINTER(X11Image)
         self.display = lib.XOpenDisplay(None)
@@ -156,8 +195,12 @@ class Screen:
             raise ValueError("The replay picture could not be read.")
         try:
             info = image.contents
-            if (info.stride != width * 4 or info.bits_per_pixel != 32 or info.byte_order != 0 or
-                    (info.red_mask, info.green_mask, info.blue_mask) != (0xFF0000, 0xFF00, 0xFF)):
+            if (
+                info.stride != width * 4
+                or info.bits_per_pixel != 32
+                or info.byte_order != 0
+                or (info.red_mask, info.green_mask, info.blue_mask) != (0xFF0000, 0xFF00, 0xFF)
+            ):
                 raise ValueError("The replay display is not in the expected 32-bit pixel format.")
             return ctypes.string_at(info.data, info.stride * height)
         finally:
@@ -174,7 +217,7 @@ class Screen:
         for row in range(HEIGHT - FRAME_TAG_SIZE, HEIGHT):
             end = (row + 1) * WIDTH * 4
             start = end - FRAME_TAG_SIZE * 4
-            picture[start:end] = picture[start - 4:start] * FRAME_TAG_SIZE
+            picture[start:end] = picture[start - 4 : start] * FRAME_TAG_SIZE
         return picture
 
 
@@ -227,29 +270,82 @@ def capture_frames(game_args, env, job, count, timeout, adventure, racer_credit,
     if racer_credit:
         (job / "racer-credit.txt").write_text(racer_credit, encoding="utf-8")
     encoder = [
-        "ffmpeg", "-nostdin", "-v", "error", "-f", "rawvideo", "-pixel_format", "bgr0",
-        "-video_size", f"{WIDTH}x{HEIGHT}", "-framerate", str(VIDEO_FPS), "-i", "pipe:0",
-        "-framerate", str(VIDEO_FPS), "-i", str(BRAND_LOGO),
-        "-filter_complex_threads", "1", "-filter_complex", picture_filter(height, gameplay_frames, bool(racer_credit)),
-        "-map", "[branded]", "-frames:v", str(video_frames),
-        "-c:v", "libx264", "-threads", "3", *options,
-        "-pix_fmt", "yuv420p", str(raw_movie),
+        "ffmpeg",
+        "-nostdin",
+        "-v",
+        "error",
+        "-f",
+        "rawvideo",
+        "-pixel_format",
+        "bgr0",
+        "-video_size",
+        f"{WIDTH}x{HEIGHT}",
+        "-framerate",
+        str(VIDEO_FPS),
+        "-i",
+        "pipe:0",
+        "-framerate",
+        str(VIDEO_FPS),
+        "-i",
+        str(BRAND_LOGO),
+        "-filter_complex_threads",
+        "1",
+        "-filter_complex",
+        picture_filter(height, gameplay_frames, bool(racer_credit)),
+        "-map",
+        "[branded]",
+        "-frames:v",
+        str(video_frames),
+        "-c:v",
+        "libx264",
+        "-threads",
+        "3",
+        *options,
+        "-pix_fmt",
+        "yuv420p",
+        str(raw_movie),
     ]
-    mixer = ["ffmpeg", "-nostdin", "-v", "error", "-f", "s16le", "-ar", "48000", "-ac", "2", "-i", "pipe:0",
-             "-af", f"adelay={int(bookend_seconds * 1000)}:all=1,apad=pad_dur={bookend_seconds}",
-             "-c:a", "aac", "-b:a", str(audio_rate), str(raw_audio)]
+    mixer = [
+        "ffmpeg",
+        "-nostdin",
+        "-v",
+        "error",
+        "-f",
+        "s16le",
+        "-ar",
+        "48000",
+        "-ac",
+        "2",
+        "-i",
+        "pipe:0",
+        "-af",
+        f"adelay={int(bookend_seconds * 1000)}:all=1,apad=pad_dur={bookend_seconds}",
+        "-c:a",
+        "aac",
+        "-b:a",
+        str(audio_rate),
+        str(raw_audio),
+    ]
     parent, child = socket.socketpair()
-    with (parent, child, Screen() as screen,
-          (job / "game.log").open("wb") as game_log, (job / "capture.log").open("wb") as errors):
+    with (
+        parent,
+        child,
+        Screen() as screen,
+        (job / "game.log").open("wb") as game_log,
+        (job / "capture.log").open("wb") as errors,
+    ):
         env["DKR_REPLAY_CAPTURE_SOCKET"] = str(child.fileno())
         deadline = time.monotonic() + timeout + 15
-        game = subprocess.Popen(game_args, cwd=job, env=env, stdout=game_log, stderr=subprocess.STDOUT,
-                                pass_fds=(child.fileno(),))
+        game = subprocess.Popen(
+            game_args, cwd=job, env=env, stdout=game_log, stderr=subprocess.STDOUT, pass_fds=(child.fileno(),)
+        )
         child.close()
         try:
             size_capture_window(env, game)
-            with (subprocess.Popen(encoder, cwd=job, stdin=subprocess.PIPE, stderr=errors) as video,
-                  subprocess.Popen(mixer, stdin=subprocess.PIPE, stderr=errors) as audio):
+            with (
+                subprocess.Popen(encoder, cwd=job, stdin=subprocess.PIPE, stderr=errors) as video,
+                subprocess.Popen(mixer, stdin=subprocess.PIPE, stderr=errors) as audio,
+            ):
                 try:
                     with parent.makefile("rb") as stream:
                         parent.settimeout(min(90, max(1, deadline - time.monotonic())))
@@ -259,9 +355,12 @@ def capture_frames(game_args, env, job, count, timeout, adventure, racer_credit,
                         for frame in range(1, count + 1):
                             parent.settimeout(min(90, max(1, deadline - time.monotonic())))
                             paired, changed = capture_update(
-                                stream, frame,
+                                stream,
+                                frame,
                                 lambda tag: screen.picture(tag, min(deadline, time.monotonic() + 10)),
-                                video.stdin.write, audio.stdin.write, lambda: parent.sendall(b"K"),
+                                video.stdin.write,
+                                audio.stdin.write,
+                                lambda: parent.sendall(b"K"),
                             )
                             pairs += paired
                             moving_pairs += changed
@@ -319,8 +418,15 @@ def render(options: argparse.Namespace) -> dict:
     env["TMPDIR"] = str(temporary)
     env.update(SDL_AUDIODRIVER="dummy", SDL_VIDEODRIVER="x11")
     game_args = [
-        str(runtime), "--rom", str(rom), "--config", str(profile),
-        "--watch-time-trial", str(attempt), "--timeout", str(options.timeout),
+        str(runtime),
+        "--rom",
+        str(rom),
+        "--config",
+        str(profile),
+        "--watch-time-trial",
+        str(attempt),
+        "--timeout",
+        str(options.timeout),
     ]
     if options.track_package:
         game_args.extend(("--time-trial-map", str(options.track_package.resolve(strict=True))))
@@ -332,36 +438,73 @@ def render(options: argparse.Namespace) -> dict:
         countdown = max(0, finish - metadata["clockTicks"] // (VIDEO_FPS // REPLAY_HZ))
         race_updates = range(countdown + 1, finish + 1)
     raw_movie, raw_audio, pairs, moving_pairs, race_pairs, race_moving_pairs = capture_frames(
-        game_args, env, job, count, options.timeout, adventure, options.racer_credit, race_updates,
+        game_args,
+        env,
+        job,
+        count,
+        options.timeout,
+        adventure,
+        options.racer_credit,
+        race_updates,
     )
 
     if file_digest(binary) != expected_binary:
         raise ValueError("The runtime changed during the render.")
     game_log = (profile / "logs/runtime.log").read_text(encoding="utf-8", errors="replace")
     proof = verification_result(game_log, metadata, {"replaySha256": replay_sha, "runtimeSha256": expected_binary})
-    if (proof["clockTicks"] != metadata["clockTicks"] or proof["checkpoints"] != metadata["checkpoints"] or
-            proof["updates"] != metadata.get("finishTick", metadata["ticks"])):
+    if (
+        proof["clockTicks"] != metadata["clockTicks"]
+        or proof["checkpoints"] != metadata["checkpoints"]
+        or proof["updates"] != metadata.get("finishTick", metadata["ticks"])
+    ):
         raise ValueError("The captured evidence differs from the supplied replay.")
 
     movie = job / "verified.mp4"
-    subprocess.run([
-        "ffmpeg", "-nostdin", "-v", "error", "-i", str(raw_movie),
-        "-i", str(raw_audio), "-c", "copy", "-movflags", "+faststart", str(movie),
-    ], check=True)
-    probe = subprocess.check_output([
-        "ffprobe", "-v", "error", "-show_entries",
-        "format=duration:stream=codec_name,nb_frames,duration,start_time,avg_frame_rate,width,height",
-        "-of", "json", str(movie),
-    ], text=True)
+    subprocess.run(
+        [
+            "ffmpeg",
+            "-nostdin",
+            "-v",
+            "error",
+            "-i",
+            str(raw_movie),
+            "-i",
+            str(raw_audio),
+            "-c",
+            "copy",
+            "-movflags",
+            "+faststart",
+            str(movie),
+        ],
+        check=True,
+    )
+    probe = subprocess.check_output(
+        [
+            "ffprobe",
+            "-v",
+            "error",
+            "-show_entries",
+            "format=duration:stream=codec_name,nb_frames,duration,start_time,avg_frame_rate,width,height",
+            "-of",
+            "json",
+            str(movie),
+        ],
+        text=True,
+    )
     media = json.loads(probe)
     if [stream["codec_name"] for stream in media["streams"]] != ["h264", "aac"]:
         raise ValueError("The video needs H.264 picture and AAC game audio.")
     picture, sound = media["streams"]
     expected_duration = count / REPLAY_HZ + 2 * BOOKEND_FRAMES / VIDEO_FPS
-    if (int(picture["nb_frames"]) != count * VIDEO_FPS // REPLAY_HZ + 2 * BOOKEND_FRAMES or
-            picture["avg_frame_rate"] != f"{VIDEO_FPS}/1" or picture["width"] * 9 != picture["height"] * 16 or
-            any(abs(float(stream["duration"]) - expected_duration) > 0.03
-                or abs(float(stream["start_time"])) > 0.002 for stream in (picture, sound))):
+    if (
+        int(picture["nb_frames"]) != count * VIDEO_FPS // REPLAY_HZ + 2 * BOOKEND_FRAMES
+        or picture["avg_frame_rate"] != f"{VIDEO_FPS}/1"
+        or picture["width"] * 9 != picture["height"] * 16
+        or any(
+            abs(float(stream["duration"]) - expected_duration) > 0.03 or abs(float(stream["start_time"])) > 0.002
+            for stream in (picture, sound)
+        )
+    ):
         raise ValueError("The video and audio did not stay on the authored replay clock.")
     proof["videoSha256"] = file_digest(movie)
     proof["videoDuration"] = float(media["format"]["duration"])
@@ -403,10 +546,22 @@ def main() -> int:
     if not args.isolated_display:
         # Give FFmpeg and the guest the same private X11 socket. Isolating the
         # guest alone blocks access to Xvfb's abstract Unix socket.
-        return subprocess.run([
-            "unshare", "--map-current-user", "--net", "--", "xvfb-run", "-a", "-s", f"-screen 0 {WIDTH}x{HEIGHT}x24",
-            sys.executable, str(Path(__file__).resolve()), *sys.argv[1:], "--isolated-display",
-        ]).returncode
+        return subprocess.run(
+            [
+                "unshare",
+                "--map-current-user",
+                "--net",
+                "--",
+                "xvfb-run",
+                "-a",
+                "-s",
+                f"-screen 0 {WIDTH}x{HEIGHT}x24",
+                sys.executable,
+                str(Path(__file__).resolve()),
+                *sys.argv[1:],
+                "--isolated-display",
+            ]
+        ).returncode
     try:
         print(json.dumps(render(args), indent=2))
     except (OSError, ValueError, subprocess.SubprocessError) as error:

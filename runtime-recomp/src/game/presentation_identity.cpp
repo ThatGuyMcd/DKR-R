@@ -1210,8 +1210,8 @@ bool dkr::runtime::presentation::record_presentation_marker(std::uint32_t comman
                                                             std::uint16_t token, std::uint8_t variant,
                                                             PresentationMarkerKind kind,
                                                             hud::groups::Transform hud_transform) {
-    const bool world_boundary = kind == PresentationMarkerKind::CameraWorldBegin ||
-                                kind == PresentationMarkerKind::CameraWorldEnd;
+    const bool world_boundary =
+        kind == PresentationMarkerKind::CameraWorldBegin || kind == PresentationMarkerKind::CameraWorldEnd;
     if (!dkr::runtime::enhancements::modern_presentation_enabled() &&
         !(world_boundary && dkr::runtime::time_trial::ghost_nameplate_active())) {
         return false;
@@ -1509,13 +1509,13 @@ extern "C" void dkr_presentation_task_submitted(std::uint8_t* rdram, recomp_cont
                 for (const auto& [address, binding] : g_matrix_maps[buffer]) {
                     if (!capture_motion && binding.world_projection.authored_fov <= 0.0F && !binding.camera_root)
                         continue;
-                    sidecar->matrices.push_back({
-                        address,
-                        {binding.matrix_identity, capture_motion && binding.interpolate_vertices,
-                         capture_motion && binding.interpolate_texcoords, capture_motion && binding.interpolate_tiles,
-                         capture_motion && binding.procedural_water,
-                         capture_motion ? binding.water_scroll_tag : std::uint8_t{0},
-                         binding.world_projection, binding.camera_root}});
+                    sidecar->matrices.push_back(
+                        {address,
+                         {binding.matrix_identity, capture_motion && binding.interpolate_vertices,
+                          capture_motion && binding.interpolate_texcoords, capture_motion && binding.interpolate_tiles,
+                          capture_motion && binding.procedural_water,
+                          capture_motion ? binding.water_scroll_tag : std::uint8_t{0}, binding.world_projection,
+                          binding.camera_root}});
                 }
                 for (const auto& [key, motion] : g_shadow_owner_motion_maps[buffer]) {
                     const auto policy = g_rigid_shadow_owner_policies.find(key);
@@ -1531,7 +1531,7 @@ extern "C" void dkr_presentation_task_submitted(std::uint8_t* rdram, recomp_cont
             g_shadow_owner_motion_maps[buffer].clear();
         }
         dkr::runtime::time_trial::theatre_graphics_submitted(rdram, static_cast<std::uint32_t>(context->r4),
-                                                           std::move(sidecar));
+                                                             std::move(sidecar));
         return;
     }
     if (!dkr::runtime::enhancements::modern_presentation_enabled() &&

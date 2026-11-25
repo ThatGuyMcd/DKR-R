@@ -17,7 +17,12 @@ from regression import execute
 MAX_REPLAY_BYTES = 1024 * 1024
 MAX_ADVENTURE_BYTES = 3 * 1024 * 1024
 ADVENTURE_SPLIT_RULES = {"adventure-us80-5", "adventure-us80-6", "adventure-us80-7"}
-ADVENTURE_RULES = {"adventure-us80-1", "adventure-us80-2", "adventure-us80-3", "adventure-us80-4"} | ADVENTURE_SPLIT_RULES
+ADVENTURE_RULES = {
+    "adventure-us80-1",
+    "adventure-us80-2",
+    "adventure-us80-3",
+    "adventure-us80-4",
+} | ADVENTURE_SPLIT_RULES
 CUSTOM_LAP_RULES = "custom-time-trial-us80-2"
 CUSTOM_RULES = {"custom-time-trial-us80-1", CUSTOM_LAP_RULES}
 ADVENTURE_PASS = re.compile(

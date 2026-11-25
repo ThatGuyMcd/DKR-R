@@ -2085,7 +2085,8 @@ void dkr::runtime::F3DDKRRT64Bridge::ApplyPresentationMarkers(RT64::State* state
         if (marker.kind == PresentationMarkerKind::CameraWorldBegin ||
             marker.kind == PresentationMarkerKind::CameraWorldEnd) {
             if (auto* online = active_->data_->online_view)
-                online->ghost_world_boundary(*state, marker.token, marker.kind == PresentationMarkerKind::CameraWorldEnd);
+                online->ghost_world_boundary(*state, marker.token,
+                                             marker.kind == PresentationMarkerKind::CameraWorldEnd);
             continue;
         }
         if (active_->data_->camera && active_->data_->camera->replaced_command(std::uint32_t(command - rdram_begin)) &&
@@ -2133,9 +2134,10 @@ void dkr::runtime::F3DDKRRT64Bridge::ApplyPresentationMarkers(RT64::State* state
                 scope.transform = data.online_view && data.online_view->focused_hud() ? hud::groups::Transform{}
                                                                                       : marker.hud_transform;
                 scope.motion_identity =
-                    marker.token != 0 ? presentation::normalise_identity(0x54544855U ^
-                                            (presentation::task_scene_generation() * 0x9E3779B9U) ^ marker.token)
-                                      : presentation::kIgnoredIdentity;
+                    marker.token != 0
+                        ? presentation::normalise_identity(
+                              0x54544855U ^ (presentation::task_scene_generation() * 0x9E3779B9U) ^ marker.token)
+                        : presentation::kIgnoredIdentity;
                 const auto& t = scope.transform;
                 state->rdp->pushScissor();
                 auto& clip = state->rdp->scissorRectStack[state->rdp->scissorStackSize - 1];
@@ -2688,8 +2690,7 @@ void dkr::runtime::F3DDKRRT64Bridge::HudTextureRect(RT64::State* state, RT64::Di
     auto& rdp = *state->rdp;
     const auto& active_clip = rdp.scissorRectStack[rdp.scissorStackSize - 1];
     const bool expand_clip = time_trial::watching() && data.world_window_aspect > 4.F / 3.F &&
-                             active_clip.lry > active_clip.uly &&
-                             rdp.scissorStackSize < RDP_EXTENDED_STACK_SIZE &&
+                             active_clip.lry > active_clip.uly && rdp.scissorStackSize < RDP_EXTENDED_STACK_SIZE &&
                              !dkr::sdk2::hud_hidden.load(std::memory_order_relaxed);
     if (expand_clip) {
         // Widen the text rectangle's clip without changing the projection
@@ -2871,7 +2872,7 @@ void dkr::runtime::F3DDKRRT64Bridge::Vertex(RT64::State* state, RT64::DisplayLis
         water::enhanced::requested_quality.load(std::memory_order_relaxed) == water::enhanced::Quality::Original);
 #endif
     const auto hud_motion = data.hud_widget_depth ? data.hud_widgets[data.hud_widget_depth - 1].motion_identity
-                                                 : presentation::kIgnoredIdentity;
+                                                  : presentation::kIgnoredIdentity;
     if (hud_motion != presentation::kIgnoredIdentity) {
         auto& extended = rsp.extended;
         auto& group = extended.modelMatrixIdStack[extended.modelMatrixIdStackSize - 1];

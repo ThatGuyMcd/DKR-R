@@ -18,8 +18,11 @@ from verify_time_trial import (  # noqa: E402
 class VerifyTimeTrialTests(unittest.TestCase):
     @unittest.skipUnless(os.name == "posix", "Linux verifier environment")
     def test_home_is_writable_inside_a_protected_service(self):
-        with TemporaryDirectory() as temp, patch.dict(
-            os.environ, {"HOME": "/inaccessible", "XDG_CONFIG_HOME": "/inaccessible/config", "DKR_TEST": "ignored"}
+        with (
+            TemporaryDirectory() as temp,
+            patch.dict(
+                os.environ, {"HOME": "/inaccessible", "XDG_CONFIG_HOME": "/inaccessible/config", "DKR_TEST": "ignored"}
+            ),
         ):
             home = Path(temp) / "home"
             env = verification_environment(Path(temp), xvfb=True)
@@ -63,8 +66,9 @@ class VerifyTimeTrialTests(unittest.TestCase):
             adventure_result(start + progress + finished, {"category": "any-percent"})
         with_splits = {**manifest, "ruleset": "adventure-us80-5", "splits": [["Overworld", 2], ["Finish", 26]]}
         line = '[adventure] splits=[["Overworld",2],["Finish",26]]\n'
-        self.assertEqual(adventure_result(start + progress + line + finished, with_splits)["splits"],
-                         with_splits["splits"])
+        self.assertEqual(
+            adventure_result(start + progress + line + finished, with_splits)["splits"], with_splits["splits"]
+        )
         with self.assertRaises(ValueError):
             adventure_result(start + progress + line.replace("26", "24") + finished, with_splits)
 

@@ -198,8 +198,7 @@ void DrawDumpPreviewCard(const dumping::Thumbnail& item, float width) {
          166.F, kSetMuted);
     line(detail, item.preview_error.empty() ? item.status : "Preview unavailable", 190.F,
          item.preview_error.empty() ? kSetMuted : kSetWarm);
-    if (ImGui::IsWindowHovered() && ImGui::IsMouseHoveringRect(at, end) &&
-        dkr::runtime::ui::begin_dialog_tooltip()) {
+    if (ImGui::IsWindowHovered() && ImGui::IsMouseHoveringRect(at, end) && dkr::runtime::ui::begin_dialog_tooltip()) {
         ImGui::PushTextWrapPos(320.F);
         ImGui::TextUnformatted(item.name.c_str());
         if (!item.preview_error.empty())

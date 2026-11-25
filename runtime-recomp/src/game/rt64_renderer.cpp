@@ -526,7 +526,8 @@ dkr::runtime::RT64Renderer::RT64Renderer(std::uint8_t* rdram, ultramodern::rende
         // PresentEarly uses historical VIs during DL decode and ignores the
         // explicit updateScreen below. That native scheduler policy must not
         // choose an obsolete buffer after an owned scene/rollback boundary.
-        application_->enhancementConfig.presentation.mode = PresentationMode(owned_mode_ || time_trial::exporting_video());
+        application_->enhancementConfig.presentation.mode =
+            PresentationMode(owned_mode_ || time_trial::exporting_video());
         dkr::runtime::startup_performance::report("rt64-application-create", application_started_at);
     };
     create_application();
@@ -709,7 +710,8 @@ bool dkr::runtime::RT64Renderer::update_config(const ultramodern::renderer::Grap
 void dkr::runtime::RT64Renderer::enable_instant_present() {
     std::scoped_lock presentation_lock(presentation_mutex_);
     if (application_ != nullptr) {
-        application_->enhancementConfig.presentation.mode = PresentationMode(owned_mode_ || time_trial::exporting_video());
+        application_->enhancementConfig.presentation.mode =
+            PresentationMode(owned_mode_ || time_trial::exporting_video());
         application_->updateEnhancementConfig();
     }
 }
@@ -776,7 +778,8 @@ void dkr::runtime::RT64Renderer::render_dl_locked(const OSTask* task, std::uint8
         if (auto ghost = time_trial::ghost_nameplate(rdram_snapshot)) {
             if (!ghost_nameplate_pass_)
                 ghost_nameplate_pass_ = std::make_unique<online_view::Pass>();
-            ghost_nameplate_pass_->prepare_ghost(std::move(*ghost), camera_decoder_, presentation::task_scene_generation());
+            ghost_nameplate_pass_->prepare_ghost(std::move(*ghost), camera_decoder_,
+                                                 presentation::task_scene_generation());
             ghost_names = ghost_nameplate_pass_.get();
         }
     }
@@ -834,7 +837,8 @@ void dkr::runtime::RT64Renderer::render_dl_locked(const OSTask* task, std::uint8
 #if defined(__ANDROID__)
             {
                 android_frame_budget::Scope decodeTiming(android_frame_budget::Region::Decoder);
-                f3ddkr_.process(*application_, *task, nullptr, ghost_names, detail_requested ? &ordinary_models : nullptr,
+                f3ddkr_.process(*application_, *task, nullptr, ghost_names,
+                                detail_requested ? &ordinary_models : nullptr,
                                 camera_requested ? camera_pass_.get() : nullptr);
             }
             android_frame_budget::report();
@@ -961,13 +965,13 @@ bool dkr::runtime::RT64Renderer::present_theatre_frame(std::chrono::steady_clock
             unsigned pictures = 0;
             bool ok = true;
         } result{*next};
-        RT64::PresentQueue::OfflineCapture capture{
-            *next * 2 - 1, &result,
-            [](void* context, std::uint32_t index) {
-                auto& result = *static_cast<Capture*>(context);
-                result.ok = result.ok && index == result.pictures && time_trial::export_video_picture(result.frame, index);
-                ++result.pictures;
-            }};
+        RT64::PresentQueue::OfflineCapture capture{*next * 2 - 1, &result, [](void* context, std::uint32_t index) {
+                                                       auto& result = *static_cast<Capture*>(context);
+                                                       result.ok =
+                                                           result.ok && index == result.pictures &&
+                                                           time_trial::export_video_picture(result.frame, index);
+                                                       ++result.pictures;
+                                                   }};
         auto& queue = *application_->presentQueue;
         queue.offlineCapture.store(&capture, std::memory_order_release);
         application_->state->offlineCaptureVI = &vi;
@@ -978,7 +982,8 @@ bool dkr::runtime::RT64Renderer::present_theatre_frame(std::chrono::steady_clock
         application_->state->offlineCaptureVI = nullptr;
         queue.offlineCapture.store(nullptr, std::memory_order_release);
 
-        if (!result.ok || !result.pictures || !time_trial::export_video_audio(*next, time_trial::theatre_take_audio())) {
+        if (!result.ok || !result.pictures ||
+            !time_trial::export_video_audio(*next, time_trial::theatre_take_audio())) {
             time_trial::theatre_archive_error();
             return false;
         }

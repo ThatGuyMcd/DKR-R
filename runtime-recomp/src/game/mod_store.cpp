@@ -522,7 +522,8 @@ Response http(Request request, std::stop_token stop, const Sink& sink = {}) {
         if (response.status != 301 && response.status != 302 && response.status != 303 && response.status != 307 &&
             response.status != 308)
             return response;
-        if (hops == 3 || request.test_port || request.method != "GET" || !request.token.empty() || prefix(request.url, Api))
+        if (hops == 3 || request.test_port || request.method != "GET" || !request.token.empty() ||
+            prefix(request.url, Api))
             throw Error("The library returned an unsupported redirect.", response.status);
         auto next = response.location;
         if (next.starts_with('/') && !next.starts_with("//"))
@@ -751,9 +752,12 @@ struct Service::Impl {
         if (port != local.end() && port->is_number_integer()) {
             const auto value = port->get<std::int64_t>();
             auto credential = text(local, "token", 43);
-            if (value < 1024 || value > 65535 || (authenticated && (credential.size() != 43 || !identifier(credential))))
+            if (value < 1024 || value > 65535 ||
+                (authenticated && (credential.size() != 43 || !identifier(credential))))
                 throw Error("The local ranked test profile is invalid.");
-            Request request{local_ranked_origin(unsigned(value)) + path, "GET", {},
+            Request request{local_ranked_origin(unsigned(value)) + path,
+                            "GET",
+                            {},
                             authenticated ? std::move(credential) : std::string{}};
             request.test_port = unsigned(value);
             return request;
@@ -1367,9 +1371,8 @@ void Service::configure(const std::filesystem::path& config, std::string version
         p.cloud_save_worker.request_stop();
         p.community_tracking_worker.request_stop();
         p.cv.notify_all();
-        for (auto* worker :
-             {&p.worker, &p.image_worker, &p.download_worker, &p.auth_worker, &p.cloud_save_worker,
-              &p.community_tracking_worker})
+        for (auto* worker : {&p.worker, &p.image_worker, &p.download_worker, &p.auth_worker, &p.cloud_save_worker,
+                             &p.community_tracking_worker})
             if (worker->joinable())
                 worker->join();
     });
@@ -1467,8 +1470,9 @@ void Service::load_leaderboards(std::string cursor, std::optional<LeaderboardTra
             try {
                 std::string url = "/v1/speedruns";
                 if (track) {
-                    const char* kind = track->full_game ? "?kind=full-game" :
-                                       track->custom ? "?kind=custom" : "?kind=vanilla";
+                    const char* kind = track->full_game ? "?kind=full-game"
+                                       : track->custom  ? "?kind=custom"
+                                                        : "?kind=vanilla";
                     url += "/tracks/" + track->id + kind;
                     if (!track->vehicle.empty())
                         url += "&vehicle=" + track->vehicle;
@@ -1486,10 +1490,9 @@ void Service::load_leaderboards(std::string cursor, std::optional<LeaderboardTra
                                !data.contains("customTracks") || !data["customTracks"].is_array()))
                     throw Error("The leaderboard service returned an invalid track list.");
                 if (track && (!data.contains("track") || !data["track"].is_object() ||
-                              data["track"].value("id", std::string{}) != track->id ||
-                              !data.contains("entries") || !data["entries"].is_array() ||
-                              !data.contains("vehicles") || !data["vehicles"].is_array() ||
-                              !data.contains("racers") || !data["racers"].is_array()))
+                              data["track"].value("id", std::string{}) != track->id || !data.contains("entries") ||
+                              !data["entries"].is_array() || !data.contains("vehicles") ||
+                              !data["vehicles"].is_array() || !data.contains("racers") || !data["racers"].is_array()))
                     throw Error("The leaderboard service returned an invalid result list.");
                 p.update([&](Snapshot& state) {
                     state.speedrun_loading = false;
@@ -1534,10 +1537,10 @@ Json Service::overall_rankings(const std::string& player, unsigned offset) {
         path += "/" + player + "?offset=" + std::to_string(offset);
     auto data = document(impl_->ranked_request(path), {});
     if (!data.is_object() || data.value("scoringVersion", 0) != 1 ||
-        !(player.empty() ? data.contains("players") && data["players"].is_array()
-                         : data.contains("player") && data["player"].is_object() &&
-                               text(data["player"], "id", 96) == player && data.contains("events") &&
-                               data["events"].is_array()))
+        !(player.empty()
+              ? data.contains("players") && data["players"].is_array()
+              : data.contains("player") && data["player"].is_object() && text(data["player"], "id", 96) == player &&
+                    data.contains("events") && data["events"].is_array()))
         throw Error("Overall rankings are unavailable. Try refreshing.");
     return data;
 }
@@ -1642,7 +1645,8 @@ void Service::set_cloud_saves(const std::string& account, bool enabled) {
     }
     p.state.cloud_sync = cloud_saves::SyncStatus::Idle;
     p.state.cloud_saves_account = enabled ? account : std::string{};
-    p.state.cloud_saves_status = enabled ? "Cloud Saves enabled for this device." : "Cloud Saves paused on this device.";
+    p.state.cloud_saves_status =
+        enabled ? "Cloud Saves enabled for this device." : "Cloud Saves paused on this device.";
     p.publish();
 }
 
@@ -1793,20 +1797,22 @@ void Service::sync_cloud_saves(const std::string& account, cloud_saves::SyncScop
         std::lock_guard lock(p.mutex);
         check_account();
         write_json(p.root / "cloud-saves.json", state);
-        p.state.cloud_sync =
-            needs_recovery || modded_unavailable ? SyncStatus::Error : deferred ? SyncStatus::Idle : SyncStatus::Synced;
+        p.state.cloud_sync = needs_recovery || modded_unavailable ? SyncStatus::Error
+                             : deferred                           ? SyncStatus::Idle
+                                                                  : SyncStatus::Synced;
         p.state.cloud_saves_status = uploaded || downloaded
                                          ? "Cloud Saves synced. Downloaded " + std::to_string(downloaded) +
                                                " and uploaded " + std::to_string(uploaded) + " save files."
                                          : "Cloud Saves checked.";
         if (needs_recovery)
-            p.state.cloud_saves_status += " Save Manager can help recover " + std::to_string(needs_recovery) + " local files.";
+            p.state.cloud_saves_status +=
+                " Save Manager can help recover " + std::to_string(needs_recovery) + " local files.";
         if (modded_unavailable)
             p.state.cloud_saves_status += " Modded Adventure cloud sync is unavailable.";
         if (deferred)
             p.state.cloud_saves_status += scope == cloud_saves::SyncScope::PublishHostedOnline
-                                             ? " Newer cloud saves will be applied after leaving the lobby."
-                                             : " Newer cloud saves will be applied after play.";
+                                              ? " Newer cloud saves will be applied after leaving the lobby."
+                                              : " Newer cloud saves will be applied after play.";
         p.publish();
     };
     try {
@@ -1823,7 +1829,7 @@ void Service::sync_cloud_saves(const std::string& account, cloud_saves::SyncScop
         if (generation == p.account && account == p.state.cloud_saves_account) {
             const auto* http_error = dynamic_cast<const Error*>(&error);
             p.state.cloud_sync = cloud_saves::sync_failure(dynamic_cast<const TransportFailure*>(&error) != nullptr,
-                                                          http_error ? http_error->status : 0);
+                                                           http_error ? http_error->status : 0);
             p.state.cloud_saves_status = p.state.cloud_sync == SyncStatus::Unreachable
                                              ? "Could not reach Cloud Saves. Try again in a moment."
                                              : error.what();

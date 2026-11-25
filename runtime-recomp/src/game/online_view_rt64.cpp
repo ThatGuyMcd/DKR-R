@@ -112,7 +112,8 @@ void Pass::prepare_ghost(time_trial::GhostNameplate ghost, std::span<std::uint8_
     p.phase = Impl::Phase::Shared;
     p.camera_valid = false;
     p.framebuffer = ghost.framebuffer;
-    p.names.prepare_ghost(ghost.name ? std::string_view(*ghost.name) : std::string_view{}, ghost.outline, decoder, scene);
+    p.names.prepare_ghost(ghost.name ? std::string_view(*ghost.name) : std::string_view{}, ghost.outline, decoder,
+                          scene);
     p.ghost = std::move(ghost);
 }
 void Pass::ghost_world_boundary(RT64::State& s, unsigned view, bool end) {

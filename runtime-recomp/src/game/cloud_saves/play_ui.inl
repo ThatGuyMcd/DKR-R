@@ -72,8 +72,8 @@ void DrawPlayCloudSaves(float width, bool locked) {
     const auto caption = dkr::localisation::source("Cloud Saves");
     const auto type = PaddockReading(13.F, true, 1.3F);
     const bool inline_icon = width >= kPlayCloudIconWidth + kPlayCloudGap + 92.F;
-    const float switch_width = std::min(width - (inline_icon ? kPlayCloudIconWidth + kPlayCloudGap : 0.F),
-                                        PlayCloudSwitchWidth());
+    const float switch_width =
+        std::min(width - (inline_icon ? kPlayCloudIconWidth + kPlayCloudGap : 0.F), PlayCloudSwitchWidth());
 
     ImGui::BeginDisabled(blocked);
     const auto toggle = PaddockBeginPress("##play-cloud-opt-in", {switch_width, kPlayCloudControlHeight});
@@ -88,8 +88,8 @@ void DrawPlayCloudSaves(float width, bool locked) {
                    PaddockCol(0xFFF6DA), label.data(), label.data() + label.size());
     PaddockEndPress(toggle, 8.F);
     ImGui::EndDisabled();
-    const char* toggle_hint = view->signing_in ? "Waiting for Discord sign-in."
-                              : locked        ? "Return to the launcher to change Cloud Saves."
+    const char* toggle_hint = view->signing_in  ? "Waiting for Discord sign-in."
+                              : locked          ? "Return to the launcher to change Cloud Saves."
                               : account.empty() ? "Sign in with Discord to enable Cloud Saves."
                               : enabled         ? "Pause Cloud Saves on this device."
                                                 : "Enable Cloud Saves on this device.";
@@ -113,13 +113,12 @@ void DrawPlayCloudSaves(float width, bool locked) {
     ImGui::EndDisabled();
 
     const char* sync_hint = status == SyncStatus::Syncing ? "Syncing Cloud Saves..."
-                            : locked                     ? "Return to the launcher to sync."
-                            : busy                       ? "Waiting for the current save operation."
-                            : enabled                    ? "Sync Cloud Saves now"
-                                                         : "Enable Cloud Saves to sync.";
+                            : locked                      ? "Return to the launcher to sync."
+                            : busy                        ? "Waiting for the current save operation."
+                            : enabled                     ? "Sync Cloud Saves now"
+                                                          : "Enable Cloud Saves to sync.";
     CloudControlTooltip(dkr::localisation::source(sync_hint),
                         account.empty() ? std::string_view{} : dkr::localisation::source(view->cloud_saves_status));
     if (sync.pressed)
         RunCloudSaveSync(account);
 }
-

@@ -53,7 +53,8 @@ bool import_adventure(const std::filesystem::path& source, std::string& error, b
 bool reset_adventure(std::string& error, bool modded = false);
 bool load_adventure(codec::SaveImage& image, std::string& error, bool modded = false);
 bool commit_adventure(const codec::SaveImage& image, std::string& error);
-bool repair_adventure_checksums(bool& changed, std::filesystem::path& original_backup, std::string& error, bool modded = false);
+bool repair_adventure_checksums(bool& changed, std::filesystem::path& original_backup, std::string& error,
+                                bool modded = false);
 bool canonical_adventure_bytes(std::vector<std::uint8_t>& bytes, std::string& error);
 SaveInfo previous_online_adventure_info(std::string_view mod_profile = {});
 // Stages validated bytes without touching previous online progress. The host's

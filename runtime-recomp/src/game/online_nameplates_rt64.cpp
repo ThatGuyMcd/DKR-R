@@ -70,8 +70,8 @@ struct Nameplates::Impl {
         float left, top, right, bottom;
     };
     std::array<Box, 4> boxes{};
-    void draw_label(RT64::State&, const Label&, const hlslpp::float4x4&, IdentitySelector,
-                    float x, float y, float z, float object_scale, float opacity, unsigned owner);
+    void draw_label(RT64::State&, const Label&, const hlslpp::float4x4&, IdentitySelector, float x, float y, float z,
+                    float object_scale, float opacity, unsigned owner);
     Label raster(const stbtt_fontinfo& font, std::string_view text) {
         constexpr unsigned Width = 512;
         std::array<unsigned char, Width * Height> alpha{};
@@ -215,9 +215,8 @@ void Nameplates::draw(RT64::State& s, const dkr_owned_draw_event& e, const hlslp
         (p.plan.focus && p.view != p.plan.owner) || !dkr_owned_draw_event_valid(&e))
         return;
     const auto& label = p.plan.labels == Labels::NameAndPosition ? p.named[owner][rank - 1] : p.position[rank - 1];
-    p.draw_label(s, label, camera, select, std::bit_cast<float>(e.parameters[2]),
-                 std::bit_cast<float>(e.parameters[3]), std::bit_cast<float>(e.parameters[4]),
-                 std::bit_cast<float>(e.parameters[5]), 1.F, owner);
+    p.draw_label(s, label, camera, select, std::bit_cast<float>(e.parameters[2]), std::bit_cast<float>(e.parameters[3]),
+                 std::bit_cast<float>(e.parameters[4]), std::bit_cast<float>(e.parameters[5]), 1.F, owner);
 }
 void Nameplates::draw_ghost(RT64::State& s, const time_trial::GhostNameplate& ghost, const hlslpp::float4x4& camera,
                             IdentitySelector select) {
@@ -227,12 +226,12 @@ void Nameplates::draw_ghost(RT64::State& s, const time_trial::GhostNameplate& gh
     if (ghost.outline)
         p.draw_label(s, p.ghost_outline, camera, select, ghost.position[0], ghost.position[1], ghost.position[2],
                      ghost.scale, ghost.opacity, 1);
-    p.draw_label(s, p.ghost, camera, select, ghost.position[0], ghost.position[1], ghost.position[2],
-                 ghost.scale, ghost.opacity, 0);
+    p.draw_label(s, p.ghost, camera, select, ghost.position[0], ghost.position[1], ghost.position[2], ghost.scale,
+                 ghost.opacity, 0);
 }
 void Nameplates::Impl::draw_label(RT64::State& s, const Label& label, const hlslpp::float4x4& camera,
-                                  IdentitySelector select, float x, float y, float z, float object_scale,
-                                  float opacity, unsigned owner) {
+                                  IdentitySelector select, float x, float y, float z, float object_scale, float opacity,
+                                  unsigned owner) {
     if (!label.tiles)
         return;
     auto& rsp = *s.rsp;
@@ -290,8 +289,8 @@ void Nameplates::Impl::draw_label(RT64::State& s, const Label& label, const hlsl
     billboard[3] = anchor;
     // Native scenery owns placement bytes 1..128. Labels use 241..244,
     // retaining the native high bit and never matching canonical game draws.
-    select(rsp, local_scenery::native_identity(presentation::normalise_identity(scene ^ 0x4E414D45U), 0xF0U + owner,
-                                               view));
+    select(rsp,
+           local_scenery::native_identity(presentation::normalise_identity(scene ^ 0x4E414D45U), 0xF0U + owner, view));
     rsp.modelMatrixStack[2] = billboard;
     rsp.modelMatrixStackSize = 3;
     rsp.modelMatrixPhysicalAddressStack[2] = rsp.modelMatrixSegmentedAddressStack[2] = local_scenery::kVertexScratch;
