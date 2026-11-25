@@ -1,4 +1,4 @@
-# Building DKR-R v1.0.15
+# Building DKR-R v1.0.16
 
 The tree is the release: the memory, render, scheduler handoff and vehicle
 repairs, the playtest 4 fixes for mod joining, offline copies, race starts and
@@ -7,7 +7,7 @@ vehicles, achievements, texture tools and the SDK/Store/save/presentation
 work are all source here. `VERSION` and the compiled release value are
 `1.0.15`. Prepare the ROM-derived inputs (below), then build the tree.
 
-The v1.0.15 build set and exact static checks are in
+The release build set and static checks are in
 [release validation](../RELEASE-VALIDATION.md). Source build commands for Apple
 remain below; no new Apple package was built in this pass.
 
@@ -85,9 +85,8 @@ local profiles out of source control.
 ## Release packages
 
 [Releasing](RELEASING.md) is the runbook: tag, prepare, `scripts/release/build.py`
-per platform, package, evidence, finalize, sign and seal. **Until C5 lands,
-`finalize.py` refuses every release from this tree**: 15 of the checks v1.0.11
-required are pending in `scripts/release/required_checks.toml`.
+per platform, package, evidence, finalize, sign and seal. The finalizer requires
+all checks in the release registry to pass on each desktop target.
 
 Keep evidence and new outputs outside the repository. Linux packaging must
 produce both AppImages; Steam Deck copies the exact x86_64 payload.
@@ -216,7 +215,7 @@ check those on an iPhone or iPad before distributing a release.
 
 Use the reviewed Linux ARM64 toolchain/sysroot and separate compiled
 outputs. Compose both normal and owned payloads above, with matching
-visual-model inputs, then configure through the v1.0.15 release overlay.
+visual-model inputs, then use the Linux release preset with the ARM64 toolchain.
 The older [ARM recipes](history/ARM-PLATFORM-PREVIEW.md) describe the initial
 cross-build setup; their preview versions and results stay historical.
 

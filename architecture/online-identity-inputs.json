@@ -704,8 +704,8 @@
       "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
     },
     "scripts/generate_replay_probe.py": {
-      "sha256": "1c7f7db747349bc8cad85c7e8f512a696e32b8baf12a3810db63e81bcf4cc2e2",
-      "reason": "online identity changed to cfc1d8e0d92c"
+      "sha256": "b488496606e3a318a46ad3b1e1bf7fd80f7be05cdee148742eb6bd845d31ce19",
+      "reason": "The reviewed native input digest entries admit the existing local Pak save notification and offline replay presentation. The checked ROM-derived payload hashes and inherited checkpoint contract are unchanged by this pin update."
     },
     "scripts/generate_revision_policy.py": {
       "sha256": "bafbefad41542e00b6c5ec13b02acde69dda7f48e34025f46d92d028da6427b9",

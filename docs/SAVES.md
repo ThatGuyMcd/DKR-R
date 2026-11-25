@@ -17,6 +17,18 @@ not automatically combined. Open **Save Manager > Backups & Recovery**,
 inspect the copy you want and confirm the restore. The previous personal
 save is backed up first. Do not delete the old folders to tidy your profile.
 
+## Automatic Cloud Saves
+
+Enable **Cloud Saves** beside the active save on Play. Select the cloud status
+icon for a manual sync. The client checks the cloud copy before online hosting
+and offline play, when returning to the launcher, and after a successful
+gameplay save. While a write completes, the game briefly shows **Saving Progress**.
+
+An upload uses the cloud revision the device last synced from. If the copies
+diverge, the cloud copy takes priority and the replaced local image is backed
+up under **Backups & Recovery**. The switch controls this device's sync.
+Disable it before testing changes in an isolated profile.
+
 ## Save Manager
 
 Select a slot from the Adventure list to open its editor. **Progress** shows

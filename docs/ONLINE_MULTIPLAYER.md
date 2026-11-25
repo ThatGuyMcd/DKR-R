@@ -1,4 +1,4 @@
-# DKR-R Online — v1.0.15
+# DKR-R Online — v1.0.16
 
 Open **DKR-R Online** in the existing launcher. Public/Friends browsing,
 Private/Public hosting, Discord sign-in and a total online count sit alongside
@@ -34,6 +34,14 @@ number of racing controller ports or every person playing offline. One account
 on several launchers counts once; a crash or sleeping device can remain counted
 until its lease expires, normally within 60 seconds. **Disconnect Online**
 removes this instance. See [public lobbies and privacy](PUBLIC_LOBBIES.md).
+
+## Public lobbies and changing host
+
+The portal shows public lobbies and recorded player activity. Use the lobby's
+measurements to compare hosts. The current host offers ownership to a member,
+who accepts before the transfer completes. The original Online save owner
+and racer seats remain assigned. Racers can exchange live inputs directly
+with host-path recovery. A lobby supports four racers and eight spectators.
 
 ## Profile, pictures and friends
 

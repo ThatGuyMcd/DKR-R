@@ -692,7 +692,8 @@ FULL_SCENE_NATIVE_HASH = {
     # and reads __CSPPostNextSeqEvent from the generated decomp table (same
     # two addresses); the callee uses no odd float registers or doubles.
     # Nov 17: reads the selected revision through revision_addresses::current(); same addresses, no new store, call or hook.
-    "runtime-recomp/src/game/runtime_stubs.cpp": "c21640e7139e344408c3f7c9f6c4b3dd199ee12e837139ffae55c35d91feb205",
+    # Offline replays retain the selected aspect through finish presentation.
+    "runtime-recomp/src/game/runtime_stubs.cpp": "25478faeeccf80ec5adcfb026481301b510af50f0ef6548c2a97b95745d872d7",
     "runtime-recomp/src/game/track_select_draw_guest.h": "053e11b284c433b88b19470534003519ad3d16bc3e625ce4bcc2b5f4f172041e",
     "runtime-recomp/src/game/audio_event_queue.h": "7899cd55f01c95221a71eac64857611a929bc19ff2d1603ca4c3e56a1a4ebf18",
     "runtime-recomp/src/game/audio_event_queue_state.h": "7e479c5c99dc4ab0d43c9ddfc1a082437d631adc688b14e86c7d5a3edf0f7ecf",
@@ -764,8 +765,13 @@ REVIEWED_MAIN_MERGE_HASH = {
     # Nov 8: event 2 derives selected-actor label anchors and calls three
     # read-only font/camera accessors through the same private payload. The
     # reviewed diff leaves input, Pak, rumble and checkpoint ownership intact.
-    "runtime-recomp/src/game/runtime_legacy_mods.cpp": "bd8dc52a84bf7f9d9549409bd8c4e5b486a6378f28605f7d68efedbcdb0dc22b",
     "runtime-recomp/src/game/mods/legacy_guest_checkpoint.cpp": "92db808732d530ad8e70c93bad1e14f3e4396e486d71d758a75cf0f3f9d6af50",
+    # Notify the save indicator after a verified Pak write through the same writer.
+    "runtime-recomp/src/game/virtual_pak.cpp": "be26cef7546a50968c6aceaed17efb0bc7f46e85cb5b36fc0643d72ab3f2b5bb",
+    # Enable the existing presentation RNG scope during offline replay recording or playback.
+    "runtime-recomp/src/game/runtime_netplay.cpp": "d17df3cda2c7684f34458028313c8ada1c820e367cf345d885a0f219f1106e82",
+    # Suppress achievement polling during offline ghost preparation; keep guest dispatch intact.
+    "runtime-recomp/src/game/runtime_legacy_mods.cpp": "24688d062b87720e995c6418f6545711d385559b3aa4251663ed758238b5c221",
 }
 
 

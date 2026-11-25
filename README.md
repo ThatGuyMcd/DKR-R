@@ -4,31 +4,18 @@
 
 [Join our Discord](https://discord.com/invite/AMWfXdBjNP) · [Open the Mod Library](https://positron-portal.com/dkr-r/) · [Downloads](https://github.com/ThatGuyMcd/DKR-R/releases)
 
-## DKR-R v1.0.15
+## DKR-R v1.0.16
 
-I've spent quite a bit of time working through DKR-R Online since v1.0.14.
-This update improves late-input recovery, reduces some of the rollback CPU work
-and gives spectators buffered confirmed playback. Hosts can now change the
-prediction window and input delay from the lobby or in-game overlay too.
+Start a Speedrunning attempt, watch a replay or race a ghost from Play. Browse
+public lobbies, suggest a host and hand over the lobby without closing it.
+Cloud Saves can sync Vanilla, Modded and Online Adventure independently.
+Save Manager keeps slots beside the editor, and Achievements opens the Badge
+Gallery.
 
-There's also automatic cleanup for old downloads and caches, a tidier Play page
-with Start Game always within reach, and custom character names that fit Player
-Select. File dialogs run in a separate helper, and crash reports keep more useful
-diagnostic information. The unresolved startup/gameplay crashes are recorded in
-the [crash reporting guide](docs/CRASH_REPORTING.md#remaining-crash-investigations).
-
-Your saves, mods and settings can stay. Use matching complete v1.0.15 packages
-on every machine in an online lobby. See the [full release notes](docs/PUBLIC-1.0.15-NOTES.txt)
-and [changelog](CHANGELOG.md) for everything since v1.0.14.
-
-Online waits are reduced, not eliminated. Very slow connections can still run
-out of prediction history. The reported missing vanilla online car textures and
-other racers' road wheels remain under investigation. Physical Steam Deck Wi-Fi
-and separate-machine acceptance remain necessary; see [validation](RELEASE-VALIDATION.md).
-
-DKR-R is a native static recompilation of Diddy Kong Racing. Bring your own
-legally obtained **US v1.0 or US Rev A/v1.1 ROM**. No ROM or extracted game
-assets are supplied.
+Use matching builds for online play. Bring your own legally obtained
+**US v1.0 or US Rev A/v1.1 ROM**. See the [release notes](docs/releases/1.0.16/RELEASE-NOTES.txt),
+[documentation index](docs/DOCUMENTATION-1.0.16.md) and
+[validation record](RELEASE-VALIDATION.md).
 
 ## Get started
 
@@ -158,7 +145,7 @@ controls. Saves, ROMs and installed content are kept. See [Storage](docs/STORAGE
 
 ## Documentation and contributing
 
-- [All current guides](docs/README.md), [release notes](docs/PUBLIC-1.0.15-NOTES.txt)
+- [All current guides](docs/README.md), [release notes](docs/releases/1.0.16/RELEASE-NOTES.txt)
   and [known limitations/validation](RELEASE-VALIDATION.md).
 - [Troubleshooting](docs/TROUBLESHOOTING.md), [building](docs/BUILDING.md),
   [development](docs/DEVELOPMENT.md) and [contributing](CONTRIBUTING.md).

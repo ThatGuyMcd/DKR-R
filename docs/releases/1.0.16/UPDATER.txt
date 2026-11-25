@@ -1,0 +1,11 @@
+DKR-R v1.0.16 updater assets
+
+Version1.0.16 must identify the exact source commit used for the desktop
+packages. Steam Deck is an exact copy of Linux x86_64 and shares its update
+entry. Finalize the Windows x64, Linux x86_64 and Linux ARM64 builds and
+qualify the upgrade from v1.0.15.
+
+Use the existing trusted Ed25519 key to sign the exact DKR-R-update.json
+bytes. Verify DKR-R-update.sig and the package hashes before staging the
+draft release. Keep the key outside the repository, packages and logs. See
+docs/RELEASING.md for the platform and updater checks.

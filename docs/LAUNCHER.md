@@ -128,6 +128,12 @@ updates and the support summary above the credits. Support actions can open or
 export logs/crash information; review private paths and lobby details before
 sharing. Extra Save Location/Connection Details/Reflection Details disclosures
 have been removed. Detailed instructions live in the repository docs instead.
+### Speedrunning
+
+Open **Speedrunning** from Play. Top Players opens first. **Runs** contains Run,
+Replays, My Submitted Runs and Options. Moderators and admins also see Review
+Runs. See [Speedrunning](SPEEDRUNNING.md).
+
 ## Page layout and movement
 
 Play keeps the ROM controls on the left and the offline launch options on the

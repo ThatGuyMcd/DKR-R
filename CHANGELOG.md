@@ -1,5 +1,17 @@
 # DKR-R changelog
 
+## 1.0.16
+
+- Add Speedrunning, ranked verification, replay theatre, prepared ghosts,
+  automatic splits, overall standings, record history, review and hosted videos.
+- Add public lobbies and portal activity. Improve direct inputs, host handover,
+  spectator recovery and rollback presentation.
+- Add independent Cloud Saves, the save indicator and a redesigned Save Manager.
+- Add Badge Gallery, compact Play settings and Speedrunning loading transitions.
+- Integrate contributor work on custom levels, checkpoint capacity, controllers,
+  water, road wheels, relay, build tooling and tests.
+- See the [release notes](docs/releases/1.0.16/RELEASE-NOTES.txt) for details.
+
 ## 1.0.16 playtest 5 — 2026-11-25
 
 - Browse Achievements in the Badge Gallery with search, filters and individual

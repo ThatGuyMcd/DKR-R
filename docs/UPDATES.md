@@ -1,13 +1,13 @@
 # DKR-R updates
 
-## Updating to v1.0.15
+## Updating to v1.0.16
 
 Use **Check for updates** in Play or About DKR-R. Choose **Download update**,
 then **Install update and restart** after playing. Startup checks can be turned
 off, a version can be skipped, and beta/playtest releases are optional. Stable
 releases are the default. A failed check does not stop offline play.
 
-v1.0.15 has Windows x64, Linux x86_64 and Linux ARM64 update packages. Steam
+v1.0.16 has Windows x64, Linux x86_64 and Linux ARM64 update packages. Steam
 Deck uses the Linux x86_64 package. Android, macOS and iOS are excluded from
 this release. Android releases are no longer supported. Older installations
 on excluded platforms must not be pointed at a different platform's download.
@@ -55,14 +55,13 @@ DKR-R-Updater --recover <that-folder/request.json>
 Recovery checks the signed manifest and the exact recorded backup. It does
 not search other folders or delete user data. Do not remove the only backup.
 Older Android/Apple builds retain their own installer and distribution rules;
-there is no new APK, app bundle or IPA in the v1.0.15 set.
+there is no new APK, app bundle or IPA in the v1.0.16 set.
 
 ## Preparing the release update files
 
 The exact filenames are **DKR-R-update.json** and **DKR-R-update.sig**. Upload
-both beside the final downloads. The stable tag is **Version1.0.15**, and must
-match the manifest. The source commit must contain all accepted Patch Pipeline
-layers and the final release metadata.
+both beside the final downloads. The stable tag is **Version1.0.16**, and must
+match the manifest. The source commit must contain the reviewed first-party source, pinned build inputs and final release metadata.
 
 The manifest records each package's version, size, SHA256, platform and minimum
 OS requirements. Windows also has a complete file table and the package's
@@ -94,7 +93,7 @@ replacing already published assets. Publishing makes the update discoverable.
 
 ## Checks before rollout
 
-Run the updater signing/tooling and native updater tests. Check a v1.0.14 notice,
+Run the updater signing/tooling and native updater tests. Check a v1.0.15 notice,
 download, install and restart on actual Windows/Linux installations, including
 portable data and Unicode paths. Keep interrupted-download/install recovery,
 corrupt signatures/packages, locked files, multiple instances, read-only folders
