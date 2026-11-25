@@ -38,10 +38,11 @@ There is no bundled revision-conversion data. See [ROM setup](docs/ROM_SETUP.md)
 ## Play and the overlay
 
 **Escape**, **F1** or controller **Back/View** opens the overlay. It uses the same
-pages as the launcher. **Play** contains Achievements, Session mods and Save
-Manager. Turn Session mods OFF for your next vanilla session without changing
-any individual mod selections. Ordinary offline mods still share your personal
-Adventure; online and development saves keep separate owners.
+pages as the launcher. **Play** contains Achievements, **Speedrunning**,
+**Session Mods** and Save Manager. Turn **Session Mods** off to play Vanilla
+Adventure or on to play Modded Adventure. Each has its own save slots, balloons
+and unlocks. Online and development saves are stored separately. See the
+[Speedrunning guide](docs/SPEEDRUNNING.md) and [Saves](docs/SAVES.md).
 
 Start Game stays in a compact bar at the bottom while the page scrolls above it.
 It starts selected when a ROM is ready, and you can move away with the controller
@@ -99,8 +100,11 @@ and correction work. Spectators never supply racing inputs; loading and catching
 up can take longer than the initial 1.5-second playback-buffer target.
 
 See [Online](docs/ONLINE_MULTIPLAYER.md), [public lobbies](docs/PUBLIC_LOBBIES.md)
-and [spectators](docs/SPECTATORS.md). Gameplay uses the admitted peer transport;
-the website handles discovery and accounts. Host migration is not available.
+and [spectators](docs/SPECTATORS.md). Gameplay uses the admitted peer transport.
+The website handles discovery and accounts. In a supported waiting lobby, the
+host can offer ownership to another connected player. Everyone stays in the
+lobby once the new host accepts and the transfer completes. If the current host
+disconnects before a transfer completes, the lobby closes.
 
 ## Free mods and authoring
 

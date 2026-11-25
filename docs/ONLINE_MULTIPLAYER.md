@@ -2,11 +2,12 @@
 
 Open **DKR-R Online** in the existing launcher. Public/Friends browsing,
 Private/Public hosting, Discord sign-in and a total online count sit alongside
-the existing lobby controls. There is no separate website page to use.
+the existing lobby controls. The [public lobby guide](PUBLIC_LOBBIES.md) also
+explains discovery and player activity on the portal.
 
 Races and minigames support up to four racing ports; Adventure supports two
 racers. A spectator-capable lobby can also have eight spectators. Everyone
-needs a compatible complete v1.0.15 package, supported original ROM revision,
+needs a matching complete v1.0.16 package, supported original ROM revision,
 admitted gameplay rules and verified session mods. Keep `assets` and private
 workers with the installation.
 
@@ -220,7 +221,11 @@ the previous repeated zero-byte catch-up/start loop is repaired.
 
 A spectator leaving does not end the race. Loss of a required racer returns
 the match safely to the lobby rather than continuing with a missing input
-owner. Closing the host closes the room. There is no host migration.
+owner. In a lobby with host handover enabled, the host can offer ownership to
+another connected player while the room is waiting. The successor must accept
+and all connected members must complete the transfer before the next match can
+start. The original Online Adventure save stays with its owner. If the current
+host leaves or disconnects before the transfer completes, the room closes.
 
 If the directory is unavailable, already admitted native peers can still
 ready, check the connection, start, race, return or leave. Discovery and new
