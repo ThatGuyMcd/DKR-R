@@ -106,8 +106,9 @@ def main():
         matches = re.findall(
             r"\[launcher-layout\]\[isolated-check\] step=(\d+) page=(\d+) width=(\d+) height=(\d+) captured", text
         )
-        assert code == 0 and len(matches) == 4, matches
-        assert [int(match[1]) for match in matches] == [0, 14, 14, 14]
+        assert code == 0, code
+        assert [int(match[0]) for match in matches] == list(range(5)), matches
+        assert [int(match[1]) for match in matches] == [0, 14, 14, 14, 14], matches
         for step, _, width, height in matches:
             data = (profile / f"layout-{step}.bmp").read_bytes()
             assert data[:2] == b"BM" and struct.unpack_from("<I", data, 2)[0] == len(data)

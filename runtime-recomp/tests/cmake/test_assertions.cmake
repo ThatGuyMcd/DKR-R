@@ -1,5 +1,13 @@
 cmake_minimum_required(VERSION 3.24)
 
+# MSBuild's file tracker has a shorter path limit than CMake. The nested
+# compiler check can exceed it when the release checkout has a long path.
+if(CMAKE_HOST_WIN32 AND IS_DIRECTORY "$ENV{TEMP}")
+    string(SHA256 fixture_id "${TEST_BINARY_DIR}")
+    string(SUBSTRING "${fixture_id}" 0 12 fixture_id)
+    set(TEST_BINARY_DIR "$ENV{TEMP}/dkr-assertions-${fixture_id}")
+endif()
+
 function(run_checked)
     execute_process(COMMAND ${ARGV} RESULT_VARIABLE result OUTPUT_VARIABLE output ERROR_VARIABLE error)
     if(NOT result EQUAL 0)
