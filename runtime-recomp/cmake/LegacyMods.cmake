@@ -6,19 +6,37 @@ set(_dkr_xdelta_dir "${CMAKE_BINARY_DIR}/_deps/dkr-xdelta-3.2.0")
 file(MAKE_DIRECTORY "${_dkr_xdelta_dir}")
 function(dkr_xdelta_file name digest)
     set(path "${_dkr_xdelta_dir}/${name}")
+    string(TOLOWER "${digest}" digest)
     if(EXISTS "${path}")
         file(SHA256 "${path}" actual)
-        string(TOLOWER "${digest}" digest)
         if(actual STREQUAL digest)
             return()
         endif()
     endif()
-    file(
-        DOWNLOAD "https://raw.githubusercontent.com/jmacd/xdelta/${_dkr_xdelta_rev}/xdelta3/${name}"
-        "${path}"
-        EXPECTED_HASH "SHA256=${digest}"
-        TLS_VERIFY ON
-    )
+    set(url "https://raw.githubusercontent.com/jmacd/xdelta/${_dkr_xdelta_rev}/xdelta3/${name}")
+    # A configure makes eleven of these requests and the host now and then
+    # answers one with an HTTP error, so a failed transfer is tried again. The
+    # digest is checked here because EXPECTED_HASH turns a failed transfer into
+    # an error that can't be retried. A file with the wrong digest never is.
+    foreach(wait IN ITEMS 0 2 10 30)
+        if(wait)
+            message(STATUS "xdelta ${name}: ${reason}, trying again in ${wait} s")
+            execute_process(COMMAND "${CMAKE_COMMAND}" -E sleep ${wait})
+        endif()
+        file(DOWNLOAD "${url}" "${path}" TLS_VERIFY ON STATUS status)
+        list(GET status 0 code)
+        list(GET status 1 reason)
+        if(code EQUAL 0)
+            file(SHA256 "${path}" actual)
+            if(NOT actual STREQUAL digest)
+                file(REMOVE "${path}")
+                message(FATAL_ERROR "${url}\n  sha256 is ${actual}\n  expected  ${digest}")
+            endif()
+            return()
+        endif()
+    endforeach()
+    file(REMOVE "${path}")
+    message(FATAL_ERROR "Could not download ${url}\n  ${reason}")
 endfunction()
 dkr_xdelta_file(xdelta3.c 7859a6c730de096f9d3a342d43de33df2d1ea7119e179d938a75aba8a52ea9ab)
 dkr_xdelta_file(xdelta3.h 72371206cc4b7ee5a9c7f52c56e1eb92d204756db433a718caae2062097382f2)
