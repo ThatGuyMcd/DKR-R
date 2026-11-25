@@ -10205,6 +10205,8 @@ namespace {
 // ordinary Custom Magic Code library (import, select, approve, enable), as if
 // the player had done it in the Mods page. Self-test only.
 bool g_owned_check_mods = false;
+// DKR_OWNED_CHECK_TRACKS_DIR: the Track Lab packages the self-test installed into its fresh profile.
+bool g_owned_check_tracks = false;
 bool InstallOwnedCheckMods(const std::filesystem::path& directory, std::string& error) {
     const auto wait = [&] {
         const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(60);
@@ -10252,6 +10254,28 @@ bool InstallOwnedCheckMods(const std::filesystem::path& directory, std::string& 
         }
         std::fprintf(stderr, "[check][mods] installed id=%s version=%s digest=%s\n", item.id.c_str(),
                      item.version.c_str(), item.digest.c_str());
+    }
+    return true;
+}
+// Installs every .dkrmap folder or archive in `directory` into the self-test's disposable custom-tracks folder.
+// Those are the courses the host then offers, exactly as an enabled library would.
+bool InstallOwnedCheckTracks(const std::filesystem::path& directory, std::string& error) {
+    std::vector<std::filesystem::path> packages;
+    for (const auto& entry : std::filesystem::directory_iterator(directory))
+        if (entry.path().extension() == ".dkrmap" || (entry.is_regular_file() && entry.path().extension() == ".zip"))
+            packages.push_back(entry.path());
+    std::ranges::sort(packages);
+    if (packages.empty()) {
+        error = "DKR_OWNED_CHECK_TRACKS_DIR holds no .dkrmap folder or .zip archive: " + directory.string();
+        return false;
+    }
+    for (const auto& package : packages) {
+        std::string reason;
+        if (!dkr::runtime::custom_tracks::install(package, reason)) {
+            error = "Could not install " + package.filename().string() + ": " + reason;
+            return false;
+        }
+        std::fprintf(stderr, "[check][tracks] installed %s\n", package.filename().string().c_str());
     }
     return true;
 }
@@ -10313,15 +10337,39 @@ bool dkr::runtime::ui::configure_owned_online_check(const rom::Identity& identit
         // Mod preparation checks the lobby against the Game Pak this run was started with.
         g_online_mod_selected_rom = rom;
     }
-    if (const char* track = std::getenv("DKR_OWNED_CHECK_TRACK"); track && *track) {
-        const std::string_view text(track);
-        const int world = text.size() == 1 && text[0] >= '0' && text[0] <= '3' ? text[0] - '0' : -1;
-        if (world < 0) {
-            error = "DKR_OWNED_CHECK_TRACK must be a world index 0 to 3 (a fresh save unlocks one track per world).";
+    if (const char* tracks = std::getenv("DKR_OWNED_CHECK_TRACKS_DIR"); tracks && *tracks) {
+        const std::filesystem::path directory = std::filesystem::u8path(tracks);
+        std::error_code status;
+        if (!directory.is_absolute() || !std::filesystem::is_directory(directory, status)) {
+            error = "DKR_OWNED_CHECK_TRACKS_DIR must be an absolute path to an existing directory.";
             return false;
         }
-        dkr::runtime::netplay::experimental::set_check_course_world(world);
-        std::fprintf(stderr, "[check][course] steering to world %d (first track, default vehicle)\n", world);
+        // Only the host offers courses; a joiner just accepts the lobby's, so it installs nothing.
+        if (host && !InstallOwnedCheckTracks(directory, error))
+            return false;
+        g_owned_check_tracks = true;
+        // Mod preparation checks the lobby against the Game Pak this run was started with.
+        g_online_mod_selected_rom = rom;
+    }
+    if (const char* track = std::getenv("DKR_OWNED_CHECK_TRACK"); track && *track) {
+        namespace check = dkr::runtime::netplay::experimental;
+        const std::string_view text(track);
+        const int world =
+            text.size() == 1 && text[0] >= '0' && text[0] <= '0' + check::kCheckCourseCustomRow ? text[0] - '0' : -1;
+        if (world < 0) {
+            error = "DKR_OWNED_CHECK_TRACK must be a world index 0 to 3 (a fresh save unlocks one track per world), "
+                    "or 4 for the first DKR_OWNED_CHECK_TRACKS_DIR course.";
+            return false;
+        }
+        if (world == check::kCheckCourseCustomRow && !g_owned_check_tracks) {
+            error = "DKR_OWNED_CHECK_TRACK=4 races the first Track Lab course, so it needs DKR_OWNED_CHECK_TRACKS_DIR.";
+            return false;
+        }
+        check::set_check_course_world(world);
+        if (world == check::kCheckCourseCustomRow)
+            std::fprintf(stderr, "[check][course] steering to the first Track Lab course (default vehicle)\n");
+        else
+            std::fprintf(stderr, "[check][course] steering to world %d (first track, default vehicle)\n", world);
     }
     if (const char* missing = std::getenv("DKR_OWNED_CHECK_MISSING_TARGET");
         missing && std::string_view(missing) == "1")
@@ -10389,7 +10437,8 @@ bool dkr::runtime::ui::configure_owned_online_check(const rom::Identity& identit
         std::fprintf(stderr, "[spectator][qualification] watch=1; fresh-profile=1\n");
         return true;
     }
-    if (std::getenv("DKR_OWNED_CHECK_CARS") || std::getenv("DKR_OWNED_CHECK_ROAD_WHEELS") || g_owned_check_mods) {
+    if (std::getenv("DKR_OWNED_CHECK_CARS") || std::getenv("DKR_OWNED_CHECK_ROAD_WHEELS") || g_owned_check_mods ||
+        g_owned_check_tracks) {
         g_online_mod_identity = identity;
         dkr::runtime::vehicles::lighting::owned_car_check = std::getenv("DKR_OWNED_CHECK_CARS") != nullptr;
         dkr::runtime::vehicles::lighting::owned_road_wheel_check =
@@ -10411,8 +10460,9 @@ bool dkr::runtime::ui::configure_owned_online_check(const rom::Identity& identit
                                              std::ranges::all_of(view.manifest->content, [](const auto& content) {
                                                  return content.kind == dkr::mods::online::Kind::Character;
                                              });
-                // DKR_OWNED_CHECK_MODS: this peer accepts the lobby's exact mods, code included.
-                if (g_owned_check_mods)
+                // DKR_OWNED_CHECK_MODS or DKR_OWNED_CHECK_TRACKS_DIR: this peer accepts the lobby's
+                // exact offer, code included.
+                if (g_owned_check_mods || g_owned_check_tracks)
                     g_online_mod_sync->consent(true, false, view.offer);
                 else
                     g_online_mod_sync->consent(cars_only || characters_only, false);
@@ -10462,7 +10512,8 @@ bool dkr::runtime::ui::configure_owned_online_check(const rom::Identity& identit
     request.room = g_online_room_name;
     request.name = netplay::check_names::choose();
     std::fprintf(stderr, "[check][name] %s\n", request.name.c_str());
-    if (std::getenv("DKR_OWNED_CHECK_CARS") || std::getenv("DKR_OWNED_CHECK_ROAD_WHEELS") || g_owned_check_mods) {
+    if (std::getenv("DKR_OWNED_CHECK_CARS") || std::getenv("DKR_OWNED_CHECK_ROAD_WHEELS") || g_owned_check_mods ||
+        g_owned_check_tracks) {
         // The fresh-profile launcher starts asynchronous library scans. Let
         // those release their ordinary library locks before freezing cars.
         const auto ready = std::chrono::steady_clock::now() + std::chrono::seconds(30);
@@ -10475,9 +10526,14 @@ bool dkr::runtime::ui::configure_owned_online_check(const rom::Identity& identit
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
         }
         auto settings = OnlineModSettings();
+        std::vector<std::filesystem::path> labs;
+        if (g_owned_check_tracks)
+            for (const auto& track : dkr::runtime::custom_tracks::tracks())
+                if (track.enabled)
+                    labs.push_back(track.source);
         if (!g_online_mod_sync ||
             !g_online_mod_sync->prepare_host(
-                settings, g_config_directory / "mods" / "legacy", {},
+                settings, g_config_directory / "mods" / "legacy", std::move(labs),
                 std::string(dkr::mods::online::asset_revision(identity.revision)), true,
                 OnlineModRuntimePreparation(settings.imported_roms, request.rules.synchronization))) {
             error = "The isolated car preparation could not start.";

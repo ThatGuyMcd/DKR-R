@@ -1,5 +1,6 @@
 #include "netplay/check_autopilot.hpp"
 #include "autopilot_symbols.hpp"
+#include "netplay/check_course.hpp"
 #include <cassert>
 #include <cmath>
 #include <cstdio>
@@ -544,9 +545,27 @@ void capture_case() {
         const auto& o = view[1];
         assert(o.valid && o.vehicle == 2 && o.position.x == 10 && o.position.y == 20 && o.position.z == 30);
         assert(o.heading == std::int16_t(0x8123) && o.next_checkpoint == 0 && o.checkpoint_distance == 0.25f);
+        assert(o.checkpoints == 6);
         const float want[4] = {4, 5, 0, 1};
         for (int i = 0; i < 4; ++i)
             assert(o.nodes[i].x == want[i] && o.nodes[i].z == -want[i]);
+        // The full table: 127 gates, the racer heading for the last one.
+        ram.put(s.checkpoint_count, 127, 4);
+        ram.put(Data + 0x192, 126, 1);
+        for (unsigned i = 0; i < 127; ++i) {
+            ram.real(Nodes + i * 0x3C + 0x10, float(i));
+            ram.real(Nodes + i * 0x3C + 0x14, 0);
+            ram.real(Nodes + i * 0x3C + 0x18, 0);
+            ram.put(Nodes + i * 0x3C + 0x3A, 0xFF, 1);
+        }
+        const auto full = capture_autopilot_observations(ram.bytes.data(), ram.bytes.size(), revision)[1];
+        assert(full.valid && full.checkpoints == 127 && full.next_checkpoint == 126);
+        const float last[4] = {124, 125, 126, 0};
+        for (int i = 0; i < 4; ++i)
+            assert(full.nodes[i].x == last[i]);
+        // One more than a signed byte can count is not a table the game makes.
+        ram.put(s.checkpoint_count, 128, 4);
+        assert(!capture_autopilot_observations(ram.bytes.data(), ram.bytes.size(), revision)[1].valid);
         // Unreadable: no checkpoints, or a missing image.
         ram.put(s.checkpoint_count, 0, 4);
         assert(!capture_autopilot_observations(ram.bytes.data(), ram.bytes.size(), revision)[1].valid);
@@ -640,6 +659,34 @@ void capture_extras_case() {
         assert(!view[0].has_ahead && !view[0].has_behind && view[0].race_start_timer == 0);
     }
 }
+
+// DKR_OWNED_CHECK_TRACK: the host moves the cursor one row per pulse, nobody
+// presses A before it is there, and then every peer does.
+void course_select_case() {
+    static_assert(kCheckCourseCustomRow == kCheckCourseWorlds);
+    for (int row : {0, 1, kCheckCourseWorlds - 1, kCheckCourseCustomRow}) {
+        int moves = 0;
+        std::uint32_t last_move = 0, host_confirm = 0, peer_confirm = 0;
+        for (std::uint32_t age = 0; age < 600; ++age) {
+            const auto host = check_track_select_input(row, true, age);
+            const auto peer = check_track_select_input(row, false, age);
+            if (host && host->stick_y) {
+                assert(host->stick_y == -AutopilotStickLimit && !host->buttons && !host->stick_x && !host_confirm);
+                ++moves;
+                last_move = age;
+            }
+            if (host && host->buttons == 0x8000 && !host_confirm)
+                host_confirm = age;
+            if (peer) {
+                assert(peer->buttons == 0x8000 && !peer->stick_y);
+                if (!peer_confirm)
+                    peer_confirm = age;
+            }
+        }
+        assert(moves == row && host_confirm && host_confirm == peer_confirm);
+        assert(row == 0 || host_confirm >= last_move + 40);
+    }
+}
 } // namespace
 
 int main() {
@@ -665,6 +712,7 @@ int main() {
     expert_is_faster_case();
     capture_case();
     capture_extras_case();
+    course_select_case();
     std::puts("check autopilot ok");
     return 0;
 }

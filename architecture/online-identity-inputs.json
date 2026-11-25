@@ -316,8 +316,8 @@
       "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
     },
     "runtime-recomp/src/game/netplay/experimental_runtime.cpp": {
-      "sha256": "55920d9beaa803801c417bfe64bfe741b118a0a65dd7551e68972bea098a4fae",
-      "reason": "online identity changed to cfc1d8e0d92c"
+      "sha256": "a9028bf0eb17d727e5513310d612bc6e0d056fcdb5b6dd0c2f1c374ac06c562e",
+      "reason": "PR #195 adds the checkpoint count to the opt-in rollback self-test log. The integrated race simulation and peer protocol are unchanged by that logging."
     },
     "runtime-recomp/src/game/netplay/experimental_runtime.hpp": {
       "sha256": "e2bd584098e45af7e67b6198f650d18a204d3b57be6bbe3214639e3abe73598c",

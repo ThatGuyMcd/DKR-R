@@ -135,7 +135,8 @@ lists live in `netplay/check_names.hpp`; anything added there is checked
 against the lobby's name rules when it compiles.
 
 The menus are not steered: the test presses Start and A on a timer, so the
-race is whatever the character, vehicle and track cursors start on.
+race is whatever the character, vehicle and track cursors start on, unless
+`DKR_OWNED_CHECK_TRACK` picks the course (Switches, below).
 
 ## Comparing state between peers
 
@@ -174,6 +175,44 @@ or fewer than `--minimum` frames compared, 20 by default, so a run that barely
 started doesn't count as equal). It only speaks for the frames that were
 logged, and logs from different runs aren't expected to agree.
 
+## Racing a Track Lab course
+
+The host can bring `.dkrmap` courses to the lobby and the race can be one of
+them. Any race package works. This one is made for the job:
+
+```sh
+python3 tools/blender/make_dense_checkpoint_track.py \
+    --assets extern/dkr-decomp/assets/.vanilla/us.v77 --out /tmp/check/tracks
+
+export DKR_OWNED_CHECK_TRACKS_DIR=/tmp/check/tracks DKR_OWNED_CHECK_TRACK=4
+# start the host and the joiner as in "Running it", with --timeout 180
+```
+
+`--assets` is an extracted asset tree: the decomp's, or the one
+`python -m track_lab.rom_extract ROM DEST` writes (run it from `tools/blender`;
+it needs numpy). The package is Ancient Lake with the checkpoints its cars and
+hovercraft use grown from 18 to 127, the most a set can hold. Retail's largest
+set has 48, so no stock course reaches the end of the table DKR-R enlarged
+(`docs/CUSTOM_TRACKS.md`, "A vehicle set holds up to 127 checkpoints"); this
+one walks all of it.
+
+`DKR_OWNED_CHECK_TRACKS_DIR` installs every package in the folder into the
+host's new profile and offers them to the lobby, the joiner receives and
+accepts them, and `DKR_OWNED_CHECK_TRACK=4` picks the first one in Track
+Select. A good run has, on every peer:
+
+```text
+[check][course] raced level=65 race-type=0 checkpoints=127 vehicles=0,0,0,0
+[check][lap] port=0 mode=cpu lap=2 done frame=.. lap_frames=..
+```
+
+`level` is the id the package was given (65 is the first after the retail
+levels) and `checkpoints` is what the race loaded. `checkpoint=` in the
+`[check][autopilot]` lines climbs to 126 before it wraps. Three `lap=.. done`
+lines for a port, then `[party][scene] .. menu=1 id=17`, are a race driven to
+the results screen. Compare the state hashes as above: the table sits in guest
+memory, so a peer that loaded it differently shows there.
+
 ## Switches
 
 Set these in the environment of a peer before starting it. They only do
@@ -194,7 +233,8 @@ anything in a self-test run.
 | `DKR_OWNED_CHECK_WATCH=1` | On a joiner: join as a spectator, not a racer. |
 | `DKR_OWNED_CHECK_STATE_EVERY=<n>` | Log `[check][state]` every `n` confirmed frames (1 to 100, default 30). 1 is every frame. |
 | `DKR_OWNED_CHECK_MODS=<absolute dir>` | Before the lobby forms, install every `.nrm` or `.dkrcode` in that directory through the ordinary Custom Magic Code library (import, select, approve, enable), as if the player had done it in the Mods page. The host offers them to the lobby; a joiner that sets it too accepts the lobby's exact mods, code included. The path must be absolute and exist, or the run refuses. Logs `[check][mods] installed id=... digest=...`. A joiner without it never consents and waits in the lobby. |
-| `DKR_OWNED_CHECK_TRACK=<0..3>` | Race a different world's track: the host steers the real track-select cursor down that many rows and every peer then confirms. Set it on every peer (the others hold A until the cursor is in place). A fresh session save unlocks only the first track of each world, each with its default vehicle (choosing a vehicle needs a cleared race), so 0 is the default and nothing else can be selected. Logs `[check][course] steering ...` at start and `[check][course] raced level=.. vehicles=..` once the race is running. Any other value refuses. |
+| `DKR_OWNED_CHECK_TRACKS_DIR=<absolute dir>` | Host: before the lobby forms, install every `.dkrmap` folder or `.zip` archive in that directory into the profile's custom-tracks folder through `custom_tracks::install`, as if the player had imported them in the Track Lab library, and offer them to the lobby. A boss, hub or battle package is refused online with the usual message; a race package is a real online course. Joiner: set it too, to any existing absolute directory. It installs nothing and accepts the lobby's courses; without it a joiner never consents and waits in the lobby. The path must be absolute and exist, or the run refuses. Logs `[check][tracks] installed <name>` on the host. |
+| `DKR_OWNED_CHECK_TRACK=<0..4>` | Race another course: the host steers the real track-select cursor down that many rows and every peer then confirms. Set it on every peer (the others hold A until the cursor is in place). 0 to 3 are the four worlds: a fresh session save unlocks only the first track of each, with its default vehicle (choosing a vehicle needs a cleared race), so 0 is the default course. 4 is the row under them, the first course `DKR_OWNED_CHECK_TRACKS_DIR` installed, and refuses without that switch. Logs `[check][course] steering ...` at start and `[check][course] raced level=.. race-type=.. checkpoints=.. vehicles=..` once the race is running; `checkpoints` is how many gates the course loaded for the vehicle being raced. Any other value refuses. |
 | `DKR_OWNED_CHECK_CONNECTION_TEST=1` | Host only. Once the lobby is full and everyone is ready, run the Rollback connection check (the Connection panel button) and wait for it, up to 30 s, before starting the race. Logs `[check][connection-test] complete=.. party=.. rows=..` and one line per peer. `DKR_OWNED_CHECK_PARTY=0` on the host asks for the classic lobby instead of the party lobby. |
 | `DKR_OWNED_CHECK_PARTY=0` | Host: make a classic four-port lobby instead of the party lobby the check uses by default. |
 | `DKR_OWNED_CHECK_CHAT=1` | Once the lobby chat is up, each peer sends one fixed message through the ordinary session chat and logs `[check][chat] sent role=host\|joiner text="..."`, then `[check][chat] received from=host\|joiner text="..."` once per message. The host holds the race start until it has the joiner's message (and 3 s for its own to arrive), up to 25 s. Set it on every peer. |
