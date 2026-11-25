@@ -25,6 +25,7 @@ CONSTANT_KEYS = {
     "settings_version",
     "settings_complete",
     "modern_scenery_settings_version",
+    "controller_binding_version",
     "online_synchronization",
     "online_experimental_rollback",
     "online_automatic_backend",
@@ -73,6 +74,28 @@ def read(path: pathlib.Path) -> dict[str, str]:
     return dict(line.split("=", 1) for line in path.read_text().splitlines() if "=" in line)
 
 
+# The earlier action of each pair that shares a default controller source. The
+# v1.0.14 and v1.0.15 reload unbound all six for every player.
+RELOAD_UNBOUND = ("z", "c_up", "c_down", "c_left", "c_right", "accelerate")
+
+
+def rewrite(golden: pathlib.Path, target: pathlib.Path, changes: dict[str, str | None]) -> pathlib.Path:
+    """Write `golden` to `target` with some values replaced, or dropped when None."""
+    lines = []
+    for line in golden.read_text().splitlines():
+        key = line.split("=", 1)[0]
+        if key not in changes:
+            lines.append(line)
+        elif changes[key] is not None:
+            lines.append(f"{key}={changes[key]}")
+    target.write_text("\n".join(lines) + "\n")
+    return target
+
+
+def reload_damage(players: range = range(1, 5)) -> dict[str, str | None]:
+    return {f"player{player}.controller_binding.{action}": "-1" for player in players for action in RELOAD_UNBOUND}
+
+
 def main() -> int:
     if len(sys.argv) != 3:
         # The dependency-free tooling suite has no game executable; CTest
@@ -95,6 +118,36 @@ def main() -> int:
         first = run_round_trip(executable, None, scratch_path / "fresh")
         if compare(fixtures / "defaults.ini", first):
             failures.append("a fresh install no longer saves defaults.ini on the first save")
+        # A profile as v1.0.14 and v1.0.15 left it (no version key, the six
+        # bindings unbound for every player) comes back as the defaults.
+        damaged = reload_damage() | {"controller_binding_version": None}
+        source = rewrite(fixtures / "defaults.ini", scratch_path / "damaged.ini", damaged)
+        written = run_round_trip(executable, source, scratch_path / "damaged")
+        difference = compare(fixtures / "defaults.ini", written)
+        if difference:
+            failures.append(f"a profile unbound by the old reload is not repaired\n{difference}")
+        # Player 1 uses the analogue driving layout (Z on the left shoulder,
+        # the pedals on the triggers): Z and Accelerate are left as they are
+        # and only the C buttons come back. The other players get all six.
+        layout = {
+            "player1_analogue_enabled": "1",
+            "player1.controller_binding.z": "9",
+            "player1.controller_binding.l": "-1",
+        }
+        source = rewrite(fixtures / "defaults.ini", scratch_path / "analogue.ini", damaged | layout)
+        written = run_round_trip(executable, source, scratch_path / "analogue")
+        kept = layout | {"player1.controller_binding.accelerate": "-1"}
+        expected = rewrite(fixtures / "defaults.ini", scratch_path / "analogue-expected.ini", kept)
+        difference = compare(expected, written)
+        if difference:
+            failures.append(f"the analogue driving layout is not left alone by the repair\n{difference}")
+        # The same bindings in a file that carries the key are the player's
+        # own choice and are written back as they are.
+        source = rewrite(fixtures / "defaults.ini", scratch_path / "chosen.ini", reload_damage())
+        written = run_round_trip(executable, source, scratch_path / "chosen")
+        difference = compare(source, written)
+        if difference:
+            failures.append(f"bindings unbound under the current key were changed\n{difference}")
     defaults = read(fixtures / "defaults.ini")
     other = read(fixtures / "non-default.ini")
     for key in sorted((defaults.keys() ^ other.keys()) - CONDITIONAL_KEYS):
