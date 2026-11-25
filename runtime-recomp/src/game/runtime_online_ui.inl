@@ -435,6 +435,7 @@ struct OlInputOptions {
     bool disabled = false;
     ImGuiInputTextFlags flags = 0;
     ImGuiInputTextCallback callback = nullptr;
+    float height = 44.0F;
 };
 
 // A text field (.online-page input[type=text]). A controller cannot type into
@@ -451,7 +452,7 @@ OlInputResult OlInput(const char* id, const char* label, char* buffer, std::size
     ImGui::PushFont(type.font);
     ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 8.0F);
     ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0F);
-    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, {12.0F, std::max((44.0F - font_size) * 0.5F, 0.0F)});
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, {12.0F, std::max((options.height - font_size) * 0.5F, 0.0F)});
     ImGui::PushStyleColor(ImGuiCol_FrameBg, PaddockRgb(0x061D2C));
     ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, PaddockRgb(0x061D2C));
     ImGui::PushStyleColor(ImGuiCol_FrameBgActive, PaddockRgb(0x061D2C));
@@ -495,7 +496,7 @@ OlInputResult OlInput(const char* id, const char* label, char* buffer, std::size
     }
     ImGui::SameLine(0, 8);
     ImGui::BeginDisabled(options.disabled);
-    const bool keyboard = PaddockKeyboardButton();
+    const bool keyboard = PaddockKeyboardButton(options.height);
     ImGui::EndDisabled();
     ImGui::EndGroup();
     ImGui::PopID();
@@ -1573,8 +1574,9 @@ void DrawOlHostCard(ImVec2 at, float width, float height, const OnlineFrame& fra
         g_online_page.section = OlSection::Settings;
     ImGui::EndGroup();
     ImGui::SetCursorScreenPos({x, at.y + height - 2.0F - board.pad_bottom - 52.0F});
-    if (OlCta("CREATE LOBBY", OlCtaColour::Green, inner,
-              !frame.launcher || !frame.rom_ready || frame.active || OnlineModSelectionLocked() ||
+    const bool preparing_host = OnlineModSelectionLocked();
+    if (OlCta(preparing_host ? "PREPARING LOBBY..." : "CREATE LOBBY", OlCtaColour::Green, inner,
+              !frame.launcher || !frame.rom_ready || frame.active || preparing_host ||
                   (dkr::online::view()->feature_enabled && !dkr::online::view()->connected) ||
                   (dkr::online::view()->public_desired && !dkr::online::view()->connected))) {
         g_online_page.join_attempted = false;
@@ -3118,7 +3120,7 @@ void DrawOlStartBar(float width, const OnlineFrame& frame) {
         }
         if (view.host) {
             ImGui::SetCursorScreenPos(pair ? ImVec2{at.x + button + 10.0F, at.y} : ImVec2{at.x, at.y + 52.0F + 10.0F});
-            const bool can_start = !frame.busy && total >= 2U && ready == total && saves_ready;
+            const bool can_start = !frame.busy && !SharedSaveBusy() && total >= 2U && ready == total && saves_ready;
             if (OlCta("START RACE", OlCtaColour::Red, button, !can_start)) {
                 std::string error;
                 if (!online.request_start(error))

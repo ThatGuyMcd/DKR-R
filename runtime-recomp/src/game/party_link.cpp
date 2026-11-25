@@ -25,8 +25,8 @@ void party_cancel_swap(const void* s) {
 bool party_waiting_role(const void* s, MemberId id, bool racer, std::string& e) {
     auto h = party_link(s);
     std::scoped_lock lock(h->mutex);
-    if (!h->enabled || !h->host || h->launch || h->running || h->stopping) {
-        e = "Roles can only be assigned directly while waiting in the lobby.";
+    if (!h->enabled || !h->host || h->launch || h->running || h->stopping || net::links::busy(h->links)) {
+        e = "Finish the current race or host transfer before changing roles.";
         return false;
     }
     std::optional<std::uint8_t> port;
@@ -134,6 +134,7 @@ bool PartyLink::participant(MemberId id) const {
     return m && m->connected && (m->host || m->role == Role::Racer);
 }
 void PartyLink::reset_connection() {
+    links.reset();
     queue_age.reset();
     for (auto& p : peers)
         crypto_wipe(p.key.data(), p.key.size());
@@ -228,8 +229,11 @@ bool PartyLink::admit_incoming(MemberId sender, std::span<const std::uint8_t> by
         return false;
     if (host && !party.find(sender))
         return false;
-    if (!host && sender != authority)
-        return false;
+    if (!host && sender != authority) {
+        const auto* owner = party.find(sender);
+        if (!owner || owner->role != Role::Racer || !peer(sender) || bytes.size() < 21 || bytes[4] != 19)
+            return false;
+    }
     incoming.push_back({sender, {bytes.begin(), bytes.end()}});
     incoming_bytes += bytes.size();
     return true;
@@ -291,16 +295,63 @@ bool party_receive(const void* session, LinkIncoming& out) {
     p->incoming.pop_front();
     return true;
 }
+std::size_t party_retire_checkpoint(const void* session, MemberId target, std::uint64_t match, std::uint64_t transfer) {
+    auto p = party_link(session);
+    std::scoped_lock lock(p->mutex);
+    std::size_t retired = 0;
+    if (!target || !match || !transfer)
+        return 0;
+    // Only unsent observer chunks/history from this exact game and recipient.
+    // Racing inputs, repair, authority, lobby and other viewers retain priority
+    // and identity. Already submitted SCTP data remains bounded by its channel.
+    for (const auto lane : {3U, 4U})
+        for (auto it = p->outgoing[lane].begin(); it != p->outgoing[lane].end();) {
+            const auto& b = it->bytes;
+            const bool envelope =
+                b.size() >= 29 && b[0] == 'D' && b[1] == 'P' && b[2] == 'R' && b[3] == 2 && b[4] == (lane == 4 ? 3 : 7);
+            const auto number = [&](unsigned at) {
+                std::uint64_t v = 0;
+                for (unsigned i = 0; i < 8; ++i)
+                    v |= std::uint64_t(b[at + i]) << (8 * i);
+                return v;
+            };
+            if (it->target == target && it->kind == LinkKind::Runtime && envelope && number(5) == match &&
+                number(21) != transfer) {
+                retired += b.size();
+                p->outgoing_bytes -= b.size();
+                it = p->outgoing[lane].erase(it);
+            } else
+                ++it;
+        }
+    return retired;
+}
+bool party_direct_input(const void* session, MemberId target, std::span<const std::uint8_t> bytes,
+                        net::TransportTrafficClass traffic) {
+    auto p = party_link(session);
+    std::scoped_lock lock(p->mutex);
+    if (!p->enabled || p->host || target == p->authority || target == p->local || p->local_watching() ||
+        bytes.size() < 21 || bytes[4] != 19 || !p->links.introduced.contains(target) ||
+        !p->links.live_routes.contains(target))
+        return false;
+    const auto* remote = p->party.find(target);
+    const auto sample = p->links.samples.find({p->local, target});
+    if (!remote || remote->role != Role::Racer || sample == p->links.samples.end() || !sample->second.observations ||
+        std::chrono::steady_clock::now() - sample->second.measured > std::chrono::seconds(2))
+        return false;
+    return p->enqueue({target, LinkKind::Runtime, traffic, {bytes.begin(), bytes.end()}});
+}
 void party_ready(const void* session, bool ready) {
     auto p = party_link(session);
     std::scoped_lock lock(p->mutex);
+    if (net::links::busy(p->links))
+        return;
     p->ready_requested = true;
     p->ready_value = ready;
 }
 void party_start(const void* session) {
     auto p = party_link(session);
     std::scoped_lock lock(p->mutex);
-    if (p->host)
+    if (p->host && !net::links::busy(p->links))
         p->start_requested = true;
 }
 void party_stop(const void* session, std::string reason) {

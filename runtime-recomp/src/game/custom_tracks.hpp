@@ -388,6 +388,18 @@ void discard_install_temp(const std::filesystem::path& temp_root);
 // Independent package validation for the isolated online import worker.
 // Does not change the installed library, activation, auto-boot or working path.
 bool inspect_package(const std::filesystem::path& directory, Track& track, std::string& error);
+struct ReplayTrack {
+    std::string id, name;
+    unsigned vehicles;
+};
+[[nodiscard]] std::vector<ReplayTrack> installed_replay_tracks();
+[[nodiscard]] std::filesystem::path installed_replay_source(const std::string& id);
+[[nodiscard]] unsigned replay_vehicles(const Track& track);
+[[nodiscard]] unsigned replay_laps(const Track& track);
+// Solo replay assets are frozen separately from the player's enabled library.
+// Begin before loading guest resources and retire after the guest has joined.
+void begin_replay_track(Track track);
+void retire_replay_track();
 [[nodiscard]] std::size_t enabled_count();
 // Transient selection; library UI uses the persistent, error-reporting overload.
 void set_enabled(const std::string& id, bool enabled);

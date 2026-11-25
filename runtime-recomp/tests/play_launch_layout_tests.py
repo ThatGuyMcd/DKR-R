@@ -25,8 +25,14 @@ def main():
     parser.add_argument("--surface", choices=("launcher", "overlay"), default="launcher")
     parser.add_argument("--language", default="en")
     parser.add_argument("--sidebar", choices=("shoulders", "dpad"), default="shoulders")
+    parser.add_argument("--leaderboards", action="store_true", help="Capture Play, leaderboard categories and results")
     parser.add_argument("--save", type=Path, help="Check the Save Manager draft bar using an isolated copy")
+    parser.add_argument("--modded-save", action="store_true", help="Open the fixture in the Modded Save tab")
     args = parser.parse_args()
+    if args.modded_save and not args.save:
+        parser.error("--modded-save requires --save")
+    if args.leaderboards and args.save:
+        parser.error("Choose a single layout check")
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=False)
     profile = output / ("dkr-ui-navigation-check-" + secrets.token_hex(8))
@@ -50,13 +56,19 @@ def main():
         assert args.surface == "launcher", "Save editing is locked in the running overlay"
         save_bytes = args.save.read_bytes()
         assert len(save_bytes) == 512
-        (profile / "saves").mkdir()
-        (profile / "saves/dkr.us.v77.bin").write_bytes(save_bytes)
+        save_path = profile / ("saves/modded" if args.modded_save else "saves") / "dkr.us.v77.bin"
+        save_path.parent.mkdir(parents=True)
+        save_path.write_bytes(save_bytes)
     env = os.environ.copy()
     env.update(
         DKR_LAUNCHER_UI_CHECK_TOKEN=token,
         DKR_OWNED_CHECK_LAYOUT_UI=args.size,
-        DKR_OWNED_CHECK_PLAY_LAUNCH="save" if args.save else "1",
+        DKR_OWNED_CHECK_PLAY_LAUNCH=("save-modded" if args.modded_save else "save")
+        if args.save
+        else "0"
+        if args.leaderboards
+        else "1",
+        DKR_OWNED_CHECK_LEADERBOARD_LAYOUT="1" if args.leaderboards else "0",
         DKR_OWNED_CHECK_LAYOUT_SURFACE=args.surface,
         SDL_AUDIODRIVER="dummy",
         APPDATA=str(output / "appdata"),
@@ -93,6 +105,19 @@ def main():
             proc.wait(timeout=15)
             raise AssertionError("The isolated layout check did not finish") from None
     text = (profile / "logs/runtime.log").read_text(errors="replace")
+    if args.leaderboards:
+        matches = re.findall(
+            r"\[launcher-layout\]\[isolated-check\] step=(\d+) page=(\d+) width=(\d+) height=(\d+) captured", text
+        )
+        assert code == 0, code
+        assert [int(match[0]) for match in matches] == list(range(5)), matches
+        assert [int(match[1]) for match in matches] == [0, 14, 14, 14, 14], matches
+        for step, _, width, height in matches:
+            data = (profile / f"layout-{step}.bmp").read_bytes()
+            assert data[:2] == b"BM" and struct.unpack_from("<I", data, 2)[0] == len(data)
+            assert struct.unpack_from("<ii", data, 18) == (int(width), int(height))
+        print(json.dumps({"surface": args.surface, "size": args.size, "layout": matches}, indent=2))
+        return
     rows = []
     label = "save-draft" if args.save else "play-launch"
     for match in re.finditer(r"\[" + label + r"\]\[isolated-check\] ([^\r\n]+)", text):
@@ -111,8 +136,24 @@ def main():
     assert code == 0 and len(rows) == 6, result
     assert [row["step"] for row in rows] == list(range(6)), result
     if args.save:
-        assert (profile / "saves/dkr.us.v77.bin").read_bytes() == save_bytes
+        assert save_path.read_bytes() == save_bytes
+        assert [int(row["slot"]) for row in rows] == [0, 0, 1, 1, 2, 2], result
+        assert all(row["modded"] == args.modded_save for row in rows), result
         assert rows[0]["dirty"] == 0, result
+        assert all(
+            row["editor-right"] <= row["panel-right"] and row["editor-bottom"] <= row["bar-top"] for row in rows
+        ), result
+        assert all(
+            row["slots-right"] <= row["editor-left"] or row["slots-bottom"] <= row["editor-top"] for row in rows
+        ), result
+        assert all(
+            row["editor-left"] < row["editor-body-left"] < row["editor-body-right"] < row["editor-right"]
+            for row in rows
+        ), result
+        if args.size in {"deck", "desktop", "wide"}:
+            assert all(
+                row["slots-right"] < row["editor-left"] and row["slots-left"] >= row["panel-left"] for row in rows
+            ), result
     else:
         assert all(row["visible"] == 1 and row["height"] == 48 and row["parent-scroll"] == 0 for row in rows), result
         assert all(row["top"] == rows[0]["top"] and row["bottom"] == rows[0]["bottom"] for row in rows), result

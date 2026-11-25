@@ -1,4 +1,5 @@
 #pragma once
+#include "dialog_style.hpp"
 #include "render/rt64_generated_mip_config.h"
 #include "imgui.h"
 #include <algorithm>
@@ -13,9 +14,9 @@ inline void draw_mipmap_loading_modal() {
     ImGui::SetNextWindowPos(viewport->GetCenter(), ImGuiCond_Always, ImVec2{0.5F, 0.5F});
     ImGui::SetNextWindowSize(ImVec2{std::max(160.0F, std::min(560.0F, viewport->WorkSize.x - 40.0F)), 0.0F},
                              ImGuiCond_Always);
-    if (ImGui::BeginPopupModal(title, nullptr,
-                               ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
-                                   ImGuiWindowFlags_NoSavedSettings)) {
+    if (begin_dialog_modal(title, nullptr,
+                           ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
+                               ImGuiWindowFlags_NoSavedSettings)) {
         if (!visible)
             ImGui::CloseCurrentPopup();
         else {

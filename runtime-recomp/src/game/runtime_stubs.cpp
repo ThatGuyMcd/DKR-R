@@ -15,6 +15,8 @@
 #include "vi_presentation_policy.hpp"
 #include "widescreen_policy.hpp"
 #include "finish_presentation_policy.hpp"
+#include "display_settings/policy.hpp"
+#include "time_trial/session.hpp"
 #include "audio_event_queue.h"
 #include "track_select_draw_guest.h"
 #include "track_select_draw_policy.hpp"
@@ -102,9 +104,10 @@ bool g_sky_cover_active = false;
 dkr::runtime::presentation::PostraceFrameGate g_postrace_frame_gate{};
 bool g_postrace_world_framed = false;
 
-float ExpandedCoverScale() {
+float ExpandedCoverScale(bool use_replay_aspect = false) {
     using ultramodern::renderer::AspectRatio;
-    if (ultramodern::renderer::get_graphics_config().ar_option != AspectRatio::Expand) {
+    const bool replay = use_replay_aspect && dkr::runtime::time_trial::watching();
+    if (!replay && ultramodern::renderer::get_graphics_config().ar_option != AspectRatio::Expand) {
         return 1.0F;
     }
     auto* window = static_cast<SDL_Window*>(dkr::runtime::platform::sdl_window());
@@ -117,7 +120,9 @@ float ExpandedCoverScale() {
     if (width <= 0 || height <= 0) {
         return 1.0F;
     }
-    return std::max(1.0F, (static_cast<float>(width) / static_cast<float>(height)) / kOriginalAspect);
+    const float aspect =
+        replay ? dkr::display::view_aspect(width, height) : static_cast<float>(width) / static_cast<float>(height);
+    return std::max(1.0F, aspect / kOriginalAspect);
 }
 
 float ReadRdramFloat(std::uint8_t* rdram, std::uint32_t address) {
@@ -402,9 +407,10 @@ extern "C" void dkr_split_screen_viewport_fill(std::uint8_t* rdram, recomp_conte
         rdram, context->r17, PresentationGroupMode::World,
         std::uint16_t(MEM_W(0, RdramAddress(dkr::runtime::revision_addresses::current().ActiveCameraId)) & 3U), 0U,
         PresentationMarkerKind::CameraWorldBegin);
-    const float cover = ExpandedCoverScale();
+    const float cover = ExpandedCoverScale(true);
     const bool postrace = PostraceFullViewScope(rdram, cover);
-    g_postrace_world_framed = postrace && g_postrace_frame_gate.contracted_frame_submitted;
+    g_postrace_world_framed =
+        postrace && g_postrace_frame_gate.contracted_frame_submitted && !dkr::runtime::time_trial::watching();
     if (postrace && !g_postrace_world_framed) {
         // Presentation-only viewport/scissor correction: leave the authored
         // viewport, camera, menu animation and shared simulation RAM intact.

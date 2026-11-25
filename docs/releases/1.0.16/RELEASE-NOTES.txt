@@ -1,0 +1,67 @@
+DKR-R v1.0.16
+Changes since v1.0.15
+
+Speedrunning
+- Open Speedrunning from Play. Top Players shows points, published personal
+  bests and world records. Open a player to view their results. Track cards
+  show leaders by vehicle for Full Race and Best Lap. View Times includes a
+  timeline with each record holder and how long their time stood.
+- Use Runs > Run to start a Time Trial or Challenge Run. Practice and ranked
+  attempts share Start Run. Race Ghost records an attempt with the ghost's
+  racer. Visual texture packs stay enabled.
+- Sign in with Discord to submit. Eligible local runs can be linked once to an
+  account. My Submitted Runs shows review status and the next slot to reopen
+  in the rolling 24-hour window.
+- Replays offers scrubbing, frame steps, playback speed, recorded inputs and
+  prepared ghosts. Playback keeps the recorded racer. Manage local recordings
+  and overlay preferences from the launcher.
+- Challenge Runs include Any%, 100%, Glitchless, All Bosses, All Minigames,
+  All Trophy Races and its ordered variants, Car%, Hover%, Plane%, and
+  T.T. Amulet without wrong warps. Automatic splits follow route milestones.
+  Check the launcher and board for enabled submission routes.
+- Moderators and admins review verified runs. Hosted videos show player
+  credit, controller inputs and Challenge Run splits. Rendering can continue
+  after upload. The portal bell reports submission and review updates.
+
+Online
+- Browse public lobbies and recorded player activity on the portal. Use
+  connection measurements to compare hosts. A host can offer ownership to
+  another member without closing the lobby. Seats and save ownership persist.
+- Racers send inputs directly when available, with the host path available
+  for recovery. A lobby supports four racers and eight spectators. Spectators
+  buffer confirmed frames independently.
+- Rollback presentation retains pictures through brief corrections, and
+  automatic delay accounts for forward progress and replay cost.
+- Upstream improves relay and shutdown behavior, controller binding recovery,
+  custom boss races and checkpoint capacity. Use matching builds online.
+
+Cloud Saves and the launcher
+- Sign in with Discord and enable Cloud Saves beside the active save on Play.
+  The cloud icon reports sync status and runs a manual sync when selected.
+- Vanilla, Modded and Online Adventure sync independently. Session Mods
+  chooses the Modded Adventure. Existing personal progress stays in Vanilla.
+  Development saves are separate.
+- Cloud Saves refresh around launching, hosting and returning to the launcher.
+  Successful game writes show Saving Progress and queue a sync. If copies
+  diverge, the cloud copy takes priority and local recovery keeps the old copy.
+- Save Manager puts the slots beside the editor. Progress shows all editing
+  tools and Max Out actions. Files groups transfer and recovery.
+- Badge Gallery adds search, filters, badge details and pinning. The launcher
+  and overlay use padded dialogs, compact Play settings and Speedrunning
+  loading transitions.
+
+Graphics and modding
+- Replay widescreen HUD uses fit-to-window. Website videos capture up to
+  1080p at 60 fps where the category permits, with a host render profile.
+- Contributor work includes water caustics and vehicle spray, road wheels,
+  Track Lab challenge/boss/hub support, SDK schema documentation, generated
+  symbols and build tooling. The rollback self-test also accepts a Track Lab
+  course and reports the number of checkpoints it loaded.
+
+Extract the complete Windows ZIP and use DKR-R.exe. On Linux or Steam Deck
+make the AppImage executable. Keep your profile and supply your own US v1.0
+or US Rev A/v1.1 ROM. Some legacy mod patches require US v1.0. Desktop targets
+are Windows x64, Linux x86_64 and Linux ARM64. Steam Deck uses Linux x86_64.
+Ranked uploads require an eligible x86_64 build.
+
+Contributors include Steve Whittaker, ThatGuyMcd and leite-matheus.

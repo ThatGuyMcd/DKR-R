@@ -9,6 +9,17 @@
 
 int main() {
     using namespace dkr::library_ui;
+    assert(can_post_replay_attempt(true, false, false));
+    assert(can_post_replay_attempt(true, true, true));
+    assert(!can_post_replay_attempt(true, true, false));
+    assert(!can_post_replay_attempt(false, false, false));
+    assert(!can_post_replay_attempt(false, true, true));
+    assert(can_purge_replay(false, true, false, false));
+    assert(!can_purge_replay(true, true, false, false));
+    assert(!can_purge_replay(false, false, false, false));
+    assert(!can_purge_replay(true, false, true, false));
+    assert(!can_purge_replay(true, false, false, true));
+    assert(can_purge_replay(true, false, true, true));
     assert(initial_sync(true, true, false, false, 0));
     assert(initial_sync(true, true, true, true, 91));
     assert(!initial_sync(true, true, true, false, 92)); // A later scene must not rearm the intro.
@@ -129,7 +140,11 @@ int main() {
     assert(pages.size() == PageCount);
     for (int page = 0; page < PageCount + 3; ++page)
         assert(pages.contains(page) == (page != 8 && page != 4 && page != 9));
-    assert(sidebar_parent(4) == 0 && sidebar_parent(9) == 0);
+    assert(sidebar_parent(4) == 0 && sidebar_parent(9) == 0 && sidebar_parent(LeaderboardsPage) == 0);
+    assert(!pages.contains(LeaderboardsPage));
+    assert(is_content_page(LeaderboardsPage) && is_content_page(4) && is_content_page(9));
+    assert(!is_content_page(-1) && !is_content_page(PageCount) && !is_content_page(PageCount + 1) &&
+           !is_content_page(PageCount + 2));
     for (int page : SidebarOrder)
         assert(sidebar_parent(page) == page);
     assert(ModsSections.size() == 5);
@@ -203,6 +218,7 @@ int main() {
     const std::filesystem::path root = "profile";
     assert(running_save_scope(root, {}, true) == SaveScope::Unresolved);
     assert(running_save_scope(root, root / "saves/dkr.us.v77.bin", false) == SaveScope::Vanilla);
+    assert(running_save_scope(root, root / "saves/modded/dkr.us.v77.bin", false) == SaveScope::Modded);
     assert(running_save_scope(root, root / "saves/mods/abc/dkr.us.v77.bin", false) == SaveScope::Modded);
     assert(running_save_scope(root, root / "saves/online/host/dkr.us.v77.bin", true) == SaveScope::Online);
     FeaturedRotation hero;

@@ -25,7 +25,7 @@ async function main(){
   const now=Math.floor(Date.now()/1000),tokens={};
   for(const name of ['host','guest','other','intruder','closer']){
    const token=randomBytes(32).toString('base64url');tokens[name]=token;
-   await db.prepare('INSERT INTO accounts VALUES(?,?,?,?,?,?,?)').bind(name,name,'Player '+name,'player','active',now,now).run();
+   await db.prepare('INSERT INTO accounts VALUES(?,?,?,?,?,?,?)').bind(name,name,'Player '+name,'player','active',name==='closer'?now-45*86400:now,now).run();
    await db.prepare('INSERT INTO sessions VALUES(?,?,?,?,?,?,NULL)').bind(createHash('sha256').update(token).digest('base64url'),name,now,now,now+3600,now+86400).run();
   }
   const api={fetch:(...args)=>mf.dispatchFetch(...args)};
@@ -77,6 +77,27 @@ async function main(){
    };
    await client.event('snapshot');return client;
   }
+  // Use a separate private object to exercise retention without waiting months.
+  const namespace=await mf.getDurableObjectNamespace('DIRECTORY','online');
+  const historyObject=namespace.get(namespace.idFromName('activity-history-test'));
+  const today=Date.now(), day=86400000;
+  await historyObject.observeOnline(45,today-400*day);
+  await historyObject.observeOnline(30,today-15*day);
+  await historyObject.observeOnline(9,today);
+  const history=await historyObject.onlineHistory(today);
+  equal(history.periods['7'].peak,9,'weekly peak ignores older activity');
+  equal(history.periods['30'].peak,30,'monthly peak includes activity from two weeks ago');
+  equal(history.periods.all.peak,45,'old records retain the lifetime peak');
+  equal(history.periods.all.activeDays,3,'lifetime tracks active days beyond recent retention');
+  equal(history.periods.all.interval,'year','lifetime chart groups old observations by year');
+  check(history.periods.all.history.some(point=>point.players===45),'the yearly chart keeps older records');
+  const emptyActivity=await (await http('/v1/online/public')).json();
+  equal(emptyActivity.online,0,'empty directory has a real zero online count');
+  equal(emptyActivity.totalSignedUp,5,'registered count uses the library account table');
+  equal(emptyActivity.stats.peak,null,'unobserved peak is not invented');
+  equal(emptyActivity.stats.periods.all.busiestHour,null,'unobserved peak time is not invented');
+  equal(emptyActivity.newSignups['7'],4,'weekly sign-ups exclude an older account');
+  equal(emptyActivity.newSignups['30'],4,'monthly sign-ups exclude an older account');
   let host=await open('host');const guest=await open('guest'),duplicate=await open('guest'),other=await open('other');
   equal((await guest.call({type:'heartbeat'})).data.online,3,'online count deduplicates accounts across instances');
   equal((await api.fetch('https://test.invalid/v1/online/session',{method:'POST',headers:{Origin:'https://positron-portal.com',Authorization:'bearer '+tokens.other,'X-DKRR-Instance':other.instance},body:'{}'})).status,200,'authorization scheme casing does not change session binding');
@@ -85,6 +106,26 @@ async function main(){
   const state={title:'Private test',epoch:'epoch-one',compatibility:'test-network',visibility:'private',phase:'waiting',racers:1,maxRacers:2,spectators:0,maxSpectators:8,reservedRacers:0,reservedSpectators:0,roster:'1',code:'ABCD1',bootstrap:'ABCD1',canSpectateRunning:true};
   let room=(await host.call({type:'room',revision:0,state})).data;
   check(room.id,'private room created');
+  const webPrivate=await (await http('/v1/online/public')).json();
+  equal(webPrivate.online,3,'website sees the same deduplicated active player count');
+  equal(webPrivate.rooms.length,0,'website excludes live private rooms');
+  equal(webPrivate.stats.publicLobbies,0,'private rooms do not appear in public lobby totals');
+  equal(webPrivate.stats.peak.players,3,'peak counts distinct concurrent accounts');
+  check(webPrivate.stats.peak.observedAt<=webPrivate.serverTime,'recorded peak has a server timestamp');
+  for (const span of ['7','30','all']) {
+   const period=webPrivate.stats.periods[span];
+   equal(period.peak,3,'the current peak uses the same count for '+span);
+   equal(period.busiestHour.startsAt%3600000,0,'busiest hour starts on a UTC hour boundary for '+span);
+   equal(period.activeDays,1,'activity counts the current date once for '+span);
+   equal(period.history[0].players,3,'recorded history has the observed peak for '+span);
+  }
+  equal(webPrivate.stats.periods.all.interval,'month','new lifetime history is grouped by month');
+  check(webPrivate.stats.trackedSince<=webPrivate.stats.peak.observedAt,'all-time tracking begins before the peak');
+  equal(webPrivate.stats.publicRacers,0,'private racers are not counted in public totals');
+  equal(webPrivate.stats.publicSpectators,0,'private spectators are not counted in public totals');
+  equal((await http('/v1/online/public',null,null,'POST')).status,405,'website projection is read-only');
+  equal((await http('/v1/online/public?cursor=invalid')).status,400,'invalid public cursor is refused');
+  equal((await http('/v1/online/lobbies')).status,401,'launcher list remains authenticated');
   equal((await guest.call({type:'list'})).data.rooms.length,0,'private room omitted from public payload');
   equal((await guest.call({type:'join',room:room.id,role:'racer',key:key(),compatibility:'test-network'})).error.code,'unavailable','private room identifier grants no public access');
   equal((await guest.call({type:'resolve',code:'WRONG',role:'racer',key:key(),compatibility:'test-network'})).error.code,'unavailable','unknown private code is not searchable');
@@ -99,6 +140,20 @@ async function main(){
   const wire=JSON.stringify(list);
   check(!wire.includes('ABCD1')&&!wire.includes('admission')&&!wire.includes('owner')&&!wire.includes('account'),'public payload excludes connection secrets and account identifiers');
   equal(list.rooms[0].host,'Player host','verified display name preserved');
+  const webResponse=await http('/v1/online/public');
+  equal(webResponse.headers.get('Cache-Control'),'public, max-age=15, s-maxage=15','website projection is briefly cacheable');
+  const web=await webResponse.json();
+  equal(web.rooms.length,1,'public lobby visible on the website');
+  equal(web.stats.publicLobbies,1,'live public lobby appears in the aggregate');
+  equal(web.stats.publicRacers,1,'public racer occupancy is included');
+  equal(web.stats.publicSpectators,0,'public spectator occupancy is separate');
+  equal(web.stats.peak.observedAt,webPrivate.stats.peak.observedAt,'equal counts preserve the first all-time peak timestamp');
+  const projection=web.rooms[0];
+  assert.deepEqual(Object.keys(projection).sort(),
+    ['canJoin','canSpectate','id','maxRacers','maxSpectators','phase','racers','spectators','title']);
+  equal(projection.id,room.id,'public reference matches the launcher room');
+  equal(projection.title,'Public test','public title matches the launcher room');
+  equal((await (await http('/v1/online/public?cursor='+room.id)).json()).rooms.length,0,'public cursor advances the list');
   equal((await other.call({type:'room',revision:room.revision,state:{...state,epoch:'bad',visibility:'invalid'}})).error.code,'invalid','invalid host state rejected');
   const firstKey=key();
   const intent=await guest.call({type:'join',room:room.id,role:'racer',key:firstKey,compatibility:'test-network'},'idempotent');
@@ -241,6 +296,58 @@ async function main(){
     equal(contenders.filter(result=>result.error?.code==='full').length,99,'load: other last-place contenders receive full');
     console.log(JSON.stringify({loadSessions:1000,hostedRooms:100,simultaneousJoins:100,seconds:(Date.now()-loadStart)/1000,scope:'Local Cloudflare runtime; no geographical or gameplay claim.'}));
    }finally{clearInterval(heartbeatTimer);}
+  }
+  if(process.argv.includes('--handover')){
+   const members=[];
+   for(let i=0;i<12;i++){
+    const account='handover_'+i,token=randomBytes(32).toString('base64url');tokens[account]=token;
+    await db.prepare('INSERT INTO accounts VALUES(?,?,?,?,?,?,?)').bind(account,account,'Transfer '+i,'player','active',now,now).run();
+    await db.prepare('INSERT INTO sessions VALUES(?,?,?,?,?,?,NULL)').bind(createHash('sha256').update(token).digest('base64url'),account,now,now,now+3600,now+86400).run();
+    members.push(await open(account));
+   }
+   const state={title:'Twelve member handover',epoch:'full-handover',compatibility:'test-network',visibility:'public',phase:'waiting',
+    racers:1,maxRacers:4,spectators:0,maxSpectators:8,roster:'1',code:'XFER1',bootstrap:'XFER1',socialHost:'100',socialRoster:['100']};
+   let room=(await members[0].call({type:'room',revision:0,state})).data;
+   for(let i=1;i<12;i++){
+    const role=i<4?'racer':'spectator';
+    const join=await members[i].call({type:'join',room:room.id,role,key:key(),compatibility:'test-network'});
+    check(join.ok,'handover member reserves an authenticated slot');
+    await members[0].event('intent',event=>event.join.id===join.data.id);
+    check((await members[0].call({type:'grant',id:join.data.id,allowed:true,admission:key()})).ok,'handover native admission is authorized');
+    await members[i].event('bootstrap',event=>event.id===join.data.id);
+    check((await members[0].call({type:'consume',id:join.data.id,sender:String(100+i)})).ok,'handover binds account and instance to native sender');
+    state[role==='racer'?'racers':'spectators']++;state.socialRoster.push(String(100+i));state.roster=String(i+1);
+    room=(await members[0].call({type:'room',revision:room.revision,state})).data;
+   }
+   const original=room.id;
+   const transfer={epoch:state.epoch,serial:'1',digest:key(),code:state.code,nextCode:'XFER2',sender:'102'};
+   check(!(await members[2].call({type:'transfer_prepare',...transfer})).ok,'candidate cannot prepare a transfer as host');
+   check((await members[0].call({type:'transfer_prepare',...transfer})).ok,'current host prepares an admitted candidate');
+   equal((await members[0].call({type:'transfer_commit',...transfer})).error.code,'transfer_consent','host cannot transfer without successor consent');
+   const duplicate=await open('handover_2');
+   check(!(await duplicate.call({type:'transfer_accept',...transfer})).ok,'same account on another instance cannot accept');
+   check(!(await members[5].call({type:'transfer_accept',...transfer})).ok,'spectator cannot accept as another sender');
+   check(!(await members[2].call({type:'transfer_accept',...transfer,digest:key()})).ok,'successor cannot accept a different native state');
+   check((await members[2].call({type:'transfer_accept',...transfer})).ok,'exact admitted candidate accepts prepared digest');
+   const committed=await members[0].call({type:'transfer_commit',...transfer});check(committed.ok,'old host commits the acknowledged ownership transfer');
+   equal(committed.data.id,original,'host handover preserves directory room identity');
+   equal((await members[2].event('host_transferred')).id,original,'successor receives private ownership confirmation');
+   equal((await members[0].call({type:'transfer_commit',...transfer})).data.id,original,'lost commit acknowledgement is idempotent');
+   await members[0].call({type:'close'});
+   check((await members[1].call({type:'list'})).data.rooms.some(r=>r.id===original),'old host close cannot close the successor lobby');
+   state.code=state.bootstrap=transfer.nextCode;state.socialHost=transfer.sender;state.roster='13';
+   room=(await members[2].call({type:'room',revision:committed.data.revision,state})).data;
+   equal(room.id,original,'successor updates the existing room rather than duplicating it');
+   const visible=(await members[1].call({type:'list'})).data.rooms.find(r=>r.id===original);
+   equal(visible.racers,4,'four racing slots survive handover');equal(visible.spectators,8,'eight spectators survive handover');
+   members[0].socket.close(1000,'former host leaves');await pause(50);
+   check((await members[1].call({type:'list'})).data.rooms.some(r=>r.id===original),'former host disconnect cannot close the transferred lobby');
+   const again={...transfer,serial:'2',digest:key(),code:state.code,nextCode:'XFER3',sender:'111'};
+   check((await members[2].call({type:'transfer_prepare',...again})).ok,'successor can prepare a second handover');
+   check((await members[11].call({type:'transfer_accept',...again})).ok,'admitted spectator can accept hosting without acquiring a racing slot');
+   const second=await members[2].call({type:'transfer_commit',...again});check(second.ok,'second planned handover succeeds');equal(second.data.id,original,'second handover keeps the same full lobby');
+   await members[11].call({type:'close'});
+   for(const member of [...members,duplicate])try{member.socket.close(1000,'handover test finished');}catch{}
   }
   options.workers[0].bindings.ONLINE_ENABLED='false';options.workers[1].bindings.ONLINE_ENABLED='false';
   await mf.setOptions(options);

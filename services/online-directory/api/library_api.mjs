@@ -959,6 +959,7 @@ function ftpsDirectory(path) {
   if (typeof path !== 'string') throw ftpsFailure('ftp_path_invalid', 'The upload directory is not permitted.');
   for (const [kind, root] of Object.entries(FTPS_ROOTS)) {
     if (path === root) return { kind, root, category: null };
+    if (kind === 'download' && path === root + '/Replays') return { kind:'replay', root, category:'Replays' };
     if (path.startsWith(root + '/') && FTPS_CATEGORIES.has(path.slice(root.length + 1))) {
       return { kind, root, category: path.slice(root.length + 1) };
     }
@@ -973,6 +974,13 @@ function ftpsFile(path, temporaryOnly = false) {
   const slash = path.lastIndexOf('/');
   const directory = ftpsDirectory(path.slice(0, slash));
   const name = path.slice(slash + 1);
+  if (directory.kind === 'replay') {
+    const match = /^dkr-(?:run|ghost)-[A-Za-z0-9_-]{24}\.bin(\.part)?$/.exec(name);
+    if (!match || (temporaryOnly && !match[1])) {
+      throw ftpsFailure('ftp_path_invalid', 'Only generated replay filenames are permitted.');
+    }
+    return { ...directory, name, temporary: Boolean(match[1]) };
+  }
   const match = /^dkr-([0-9a-f]{32})-([a-z0-9][a-z0-9_-]{0,69})\.([a-z0-9]+)(\.part)?$/.exec(name);
   const extensions = directory.kind === 'download' ? FTPS_DOWNLOAD_EXTENSIONS : FTPS_IMAGE_EXTENSIONS;
   if (!directory.category || !match || !extensions.has(match[3]) || (temporaryOnly && !match[4])) {
@@ -1496,7 +1504,8 @@ class FtpsSession {
     });
   }
   remove(path) {
-    ftpsFile(path, true);
+    const file = ftpsFile(path);
+    if (file.kind !== 'replay') ftpsFile(path, true);
     return this.operation(async () => {
       const response = await this.command('DELE ' + path, [250, 550]);
       // A 550 refusal is not reported as a successful deletion.
@@ -3226,6 +3235,7 @@ async function action(db, request, env, user, name, input) {
     try { await db.batch([
       statement(db, "UPDATE library_audit SET actor_name='Deleted account' WHERE actor_id=?", [user.id]),
       statement(db, "UPDATE library_request_events SET actor_name='Deleted account' WHERE actor_id=?", [user.id]),
+      statement(db, 'DELETE FROM sessions WHERE user_id=?', [user.id]),
       statement(db, 'DELETE FROM accounts WHERE id=?', [user.id])
     ]); } catch (error) { if (/last_active_admin/i.test(String(error))) fail('Assign another active administrator before deleting this account.', 409, 'last_admin'); throw error; }
     return { deleted: true };
@@ -3629,7 +3639,7 @@ async function handleOnlineDirectory(request, env) {
   const headers = { 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': '*' };
   if (url.pathname === '/v1/online/capabilities' && request.method === 'GET') {
     return Response.json({ protocol: 1, enabled: env.ONLINE_ENABLED === 'true' && !!env.ONLINE_DIRECTORY,
-      runningSpectators: env.RUNNING_SPECTATORS_ENABLED === 'true', heartbeatSeconds: 20, leaseSeconds: 60 }, { headers });
+      runningSpectators: env.RUNNING_SPECTATORS_ENABLED === 'true', hostHandover: true, heartbeatSeconds: 20, leaseSeconds: 60 }, { headers });
   }
   if (env.ONLINE_ENABLED !== 'true' || !env.ONLINE_DIRECTORY)
     return Response.json({ error: { code: 'disabled', message: 'Public lobbies are not enabled yet.' } }, { status: 503, headers });
@@ -3727,4 +3737,4 @@ export default {
   }
 };
 
-export { __dkrAuth, __dkrCommon, HttpError, finish };
+export { __dkrAuth, __dkrCommon, __dkrFtps, HttpError, finish };

@@ -130,11 +130,20 @@ class RequiredChecksTests(unittest.TestCase):
 
 class PackageCheckTests(unittest.TestCase):
     def test_prerelease_labels_are_found_in_narrow_and_wide_text(self):
-        for label in ("1.0.7+beta.10", "1.0.10-vehicle-playtest.3"):
+        for label in ("1.0.7+beta.10", "1.0.10-vehicle-playtest.3", "1.0.16-playtest.1", "1.0.16-beta.2"):
             for data in (b"\0x" + label.encode() + b"\0", b"\0" + label.encode("utf-16-le")):
                 with self.subTest(label=label, wide=len(data) > 20):
                     self.assertIsNotNone(package_release.prerelease_label(data))
         self.assertIsNone(package_release.prerelease_label(b"DKR-R 1.0.11 Release Build\0"))
+
+    def test_current_playtest_does_not_hide_other_prerelease_labels(self):
+        current = "1.0.16-playtest.1"
+        for encoding in ("utf-8", "utf-16-le"):
+            self.assertIsNone(package_release.prerelease_label(current.encode(encoding), current))
+            for stale in ("1.0.15-playtest.1", "1.0.16-playtest.10", "1.0.16-beta.2"):
+                self.assertEqual(
+                    package_release.prerelease_label((current + "\0" + stale).encode(encoding), current), stale
+                )
 
     def test_the_runtime_must_carry_both_contracts(self):
         data = b"".join(package_release.FEATURES)

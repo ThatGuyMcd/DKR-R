@@ -17,6 +17,7 @@
 #include "runtime_hud_layout.hpp"
 #include "runtime_netplay.hpp"
 #include "vehicle_context_policy.hpp"
+#include "time_trial/session.hpp"
 
 #include <array>
 #include <atomic>
@@ -210,6 +211,7 @@ thread_local dkr::runtime::presentation::RetainedMetadataTable<std::uint64_t,
     g_active_owned_shadow_motion;
 thread_local std::uint32_t g_active_task_scene_generation = 0U;
 thread_local double g_active_task_presentation_time = 0.0;
+thread_local const dkr::runtime::presentation::ReplayPresentation* g_active_replay = nullptr;
 thread_local std::unordered_map<std::uint32_t, MatrixBinding> g_active_matrix_map;
 thread_local std::unordered_map<std::uint32_t, std::vector<dkr::runtime::presentation::PresentationMarker>>
     g_active_marker_map;
@@ -551,7 +553,8 @@ void NoteFree(std::uint32_t object) {
 }
 
 void RegisterCameraMatrix(std::uint8_t* rdram, std::uint32_t matrix_reference, std::uint8_t matrix_role) {
-    if (!dkr::runtime::enhancements::modern_presentation_enabled()) {
+    const bool modern = dkr::runtime::enhancements::modern_presentation_enabled();
+    if (!modern && (matrix_role != 1U || !dkr::runtime::time_trial::ghost_nameplate_active())) {
         return;
     }
     if (!ValidRange(matrix_reference, 4U)) {
@@ -566,6 +569,13 @@ void RegisterCameraMatrix(std::uint8_t* rdram, std::uint32_t matrix_reference, s
     }
 
     std::scoped_lock lock(g_identity_mutex);
+    if (!modern) {
+        // Accurate mode needs the ghost label's camera root without interpolation metadata.
+        MatrixBinding root{};
+        root.camera_root = true;
+        g_matrix_maps[g_recording_buffer & 1U].insert_or_assign(Physical(matrix_address), root);
+        return;
+    }
     const std::uint32_t scene = g_scene_generation.load(std::memory_order_relaxed);
     std::uint32_t camera_id = 0U;
     if (!ActiveLogicalCamera(rdram, camera_id)) {
@@ -642,6 +652,11 @@ void RegisterCameraMatrix(std::uint8_t* rdram, std::uint32_t matrix_reference, s
 dkr::runtime::presentation::MatrixInterpolation
 dkr::runtime::presentation::matrix_interpolation(std::uint32_t physical_matrix_address) {
     const std::uint32_t address = physical_matrix_address & kRdramMask;
+    if (g_active_replay) {
+        const auto& matrices = g_active_replay->matrices;
+        const auto found = std::ranges::lower_bound(matrices, address, {}, &OwnedMatrixBinding::address);
+        return found != matrices.end() && found->address == address ? found->interpolation : MatrixInterpolation{};
+    }
     const MatrixBinding* binding = nullptr;
     if (g_active_owned_task)
         binding = g_active_owned_matrices.find(address);
@@ -828,6 +843,18 @@ dkr::runtime::presentation::shadow_presentation_key(std::uint8_t* rdram, std::ui
     };
 }
 
+namespace {
+const dkr::runtime::presentation::OwnedShadowBinding* ReplayShadow(std::uint64_t key) {
+    using dkr::runtime::presentation::OwnedShadowBinding;
+    if ((key >> 16U) != g_active_replay->scene)
+        return nullptr;
+    const auto& shadows = g_active_replay->shadows;
+    const auto token = static_cast<std::uint16_t>(key);
+    const auto found = std::ranges::lower_bound(shadows, token, {}, &OwnedShadowBinding::token);
+    return found != shadows.end() && found->token == token ? &*found : nullptr;
+}
+} // namespace
+
 bool dkr::runtime::presentation::shadow_owner_uses_rigid_actor_proxy(std::uint64_t shadow_history_key) {
     if (shadow_history_key == 0U)
         return false;
@@ -835,6 +862,8 @@ bool dkr::runtime::presentation::shadow_owner_uses_rigid_actor_proxy(std::uint64
         const auto* found = g_active_owned_shadow_policies.find(shadow_history_key);
         return found && found->required();
     }
+    if (g_active_replay)
+        return shadow_owner_rigid_policy(shadow_history_key).required();
     std::scoped_lock lock(g_identity_mutex);
     return g_rigid_actor_shadow_keys.contains(shadow_history_key);
 }
@@ -846,6 +875,8 @@ bool dkr::runtime::presentation::shadow_owner_is_taj_carpet_actor(std::uint64_t 
         const auto* found = g_active_owned_shadow_policies.find(shadow_history_key);
         return found && found->terrain_conforming_actor();
     }
+    if (g_active_replay)
+        return shadow_owner_rigid_policy(shadow_history_key).magic_carpet();
     std::scoped_lock lock(g_identity_mutex);
     return g_taj_carpet_shadow_keys.contains(shadow_history_key);
 }
@@ -857,6 +888,10 @@ dkr::runtime::presentation::shadow_owner_rigid_policy(std::uint64_t shadow_histo
     if (g_active_owned_task) {
         const auto* found = g_active_owned_shadow_policies.find(shadow_history_key);
         return found ? *found : RigidShadowOwnerPolicy{};
+    }
+    if (g_active_replay) {
+        const auto* binding = ReplayShadow(shadow_history_key);
+        return binding ? binding->policy : RigidShadowOwnerPolicy{};
     }
     std::scoped_lock lock(g_identity_mutex);
     const auto found = g_rigid_shadow_owner_policies.find(shadow_history_key);
@@ -872,13 +907,18 @@ dkr::runtime::presentation::shadow_owner_motion_sample(std::uint64_t shadow_hist
         const auto* found = g_active_owned_shadow_motion.find(shadow_history_key);
         return found ? *found : ShadowOwnerMotionSample{};
     }
+    if (g_active_replay) {
+        const auto* binding = ReplayShadow(shadow_history_key);
+        return binding ? binding->motion : ShadowOwnerMotionSample{};
+    }
     const auto found = g_active_shadow_owner_motion.find(shadow_history_key);
     return found != g_active_shadow_owner_motion.end() ? found->second
                                                        : dkr::runtime::presentation::ShadowOwnerMotionSample{};
 }
 
 dkr::runtime::presentation::TaskIdentityScope::TaskIdentityScope(std::uint8_t* rdram_snapshot,
-                                                                 std::uint32_t display_list_address) {
+                                                                 std::uint32_t display_list_address,
+                                                                 const ReplayPresentation* replay) {
     g_active_task_presentation_time = 0.0;
     g_active_matrix_map.clear();
     g_active_marker_map.clear();
@@ -888,6 +928,17 @@ dkr::runtime::presentation::TaskIdentityScope::TaskIdentityScope(std::uint8_t* r
     g_active_task_scene_generation = 0U;
     g_active_owned_task = false;
     g_active_owned_shadow_policies.clear();
+    g_active_replay = replay;
+    if (replay) {
+        for (const auto& located : replay->markers)
+            g_active_marker_map[located.address].push_back(located.marker);
+        // Archive playback normally presents authored pictures. Video export
+        // has a sequential timeline and can use the archived motion identities.
+        g_active_task_interpolation_allowed = time_trial::exporting_video() && replay->scene != 0U;
+        g_active_task_scene_generation = replay->scene;
+        g_active_task_presentation_time = replay->time;
+        return;
+    }
     if (rdram_snapshot == nullptr) {
         return;
     }
@@ -937,6 +988,7 @@ dkr::runtime::presentation::TaskIdentityScope::TaskIdentityScope(std::uint8_t* r
 }
 
 dkr::runtime::presentation::TaskIdentityScope::~TaskIdentityScope() {
+    g_active_replay = nullptr;
     g_active_matrix_map.clear();
     g_active_marker_map.clear();
     g_active_detail.clear();
@@ -965,6 +1017,7 @@ dkr::runtime::presentation::TaskIdentityScope::TaskIdentityScope(std::span<const
     g_active_detail.clear();
     g_active_shadow_owner_motion.clear();
     g_active_owned_task = true;
+    g_active_replay = nullptr;
     g_active_task_presentation_time = std::isfinite(time) && time >= 0 ? time : 0;
     if (markers.size() > 8192 || matrices.size() > 8192 || shadows.size() > 8192) {
         g_active_owned_matrices.clear();
@@ -1157,7 +1210,10 @@ bool dkr::runtime::presentation::record_presentation_marker(std::uint32_t comman
                                                             std::uint16_t token, std::uint8_t variant,
                                                             PresentationMarkerKind kind,
                                                             hud::groups::Transform hud_transform) {
-    if (!dkr::runtime::enhancements::modern_presentation_enabled()) {
+    const bool world_boundary =
+        kind == PresentationMarkerKind::CameraWorldBegin || kind == PresentationMarkerKind::CameraWorldEnd;
+    if (!dkr::runtime::enhancements::modern_presentation_enabled() &&
+        !(world_boundary && dkr::runtime::time_trial::ghost_nameplate_active())) {
         return false;
     }
     const std::uint32_t physical = Physical(command_address);
@@ -1436,7 +1492,50 @@ extern "C" void dkr_presentation_task_submitted(std::uint8_t* rdram, recomp_cont
     }
     dkr::runtime::graphics_handoff::capture(rdram, static_cast<std::uint32_t>(context->r4),
                                             static_cast<std::uint32_t>(context->r5));
-    if (!dkr::runtime::enhancements::modern_presentation_enabled()) {
+    if (dkr::runtime::time_trial::watching()) {
+        std::shared_ptr<dkr::runtime::presentation::ReplayPresentation> sidecar;
+        if (dkr::runtime::enhancements::modern_presentation_enabled())
+            sidecar = std::make_shared<dkr::runtime::presentation::ReplayPresentation>();
+        {
+            std::scoped_lock lock(g_identity_mutex);
+            const auto buffer = g_recording_buffer & 1U;
+            if (sidecar && g_marker_integrity[buffer].valid) {
+                for (const auto& [address, markers] : g_marker_maps[buffer])
+                    for (const auto& marker : markers)
+                        sidecar->markers.push_back({address, marker});
+                sidecar->scene = g_scene_generation.load(std::memory_order_relaxed);
+                sidecar->time = double(g_presentation_ticks.load(std::memory_order_relaxed)) / 60.0;
+                const bool capture_motion = dkr::runtime::time_trial::exporting_video();
+                for (const auto& [address, binding] : g_matrix_maps[buffer]) {
+                    if (!capture_motion && binding.world_projection.authored_fov <= 0.0F && !binding.camera_root)
+                        continue;
+                    sidecar->matrices.push_back(
+                        {address,
+                         {binding.matrix_identity, capture_motion && binding.interpolate_vertices,
+                          capture_motion && binding.interpolate_texcoords, capture_motion && binding.interpolate_tiles,
+                          capture_motion && binding.procedural_water,
+                          capture_motion ? binding.water_scroll_tag : std::uint8_t{0}, binding.world_projection,
+                          binding.camera_root}});
+                }
+                for (const auto& [key, motion] : g_shadow_owner_motion_maps[buffer]) {
+                    const auto policy = g_rigid_shadow_owner_policies.find(key);
+                    if ((key >> 16U) == sidecar->scene && policy != g_rigid_shadow_owner_policies.end())
+                        sidecar->shadows.push_back({static_cast<std::uint16_t>(key), policy->second, motion});
+                }
+                std::ranges::sort(sidecar->matrices, {}, &dkr::runtime::presentation::OwnedMatrixBinding::address);
+                std::ranges::sort(sidecar->shadows, {}, &dkr::runtime::presentation::OwnedShadowBinding::token);
+            }
+            g_matrix_maps[buffer].clear();
+            g_marker_maps[buffer].clear();
+            g_detail_maps[buffer].clear();
+            g_shadow_owner_motion_maps[buffer].clear();
+        }
+        dkr::runtime::time_trial::theatre_graphics_submitted(rdram, static_cast<std::uint32_t>(context->r4),
+                                                             std::move(sidecar));
+        return;
+    }
+    if (!dkr::runtime::enhancements::modern_presentation_enabled() &&
+        !dkr::runtime::time_trial::ghost_nameplate_active()) {
         return;
     }
     SubmittedFrame frame{};

@@ -14,6 +14,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 from pathlib import Path
 import re
 import subprocess
@@ -75,9 +76,16 @@ def main(argv: list[str] | None = None) -> int:
         for link in LINK.findall(data.decode("utf-8", errors="replace")):
             if re.match(r"^[a-zA-Z][a-zA-Z0-9+.-]*:", link) or link.startswith("#"):
                 continue
-            target = (path.parent / link.split("#")[0]).resolve()
+            target = Path(os.path.abspath(path.parent / link.split("#")[0]))
             links += 1
-            if not target.is_relative_to(ROOT) or not target.exists():
+            # Match the repository link check for pinned dependencies that
+            # live in a separate checkout reached through extern/.
+            dependency = target.is_relative_to(ROOT / "extern")
+            if (
+                not target.is_relative_to(ROOT)
+                or not target.exists()
+                or (not dependency and not target.resolve().is_relative_to(ROOT))
+            ):
                 broken.append({"path": name, "link": link})
     counts: dict[str, int] = {}
     for row in inventory:

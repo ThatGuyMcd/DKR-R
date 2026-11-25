@@ -7,9 +7,12 @@
 #include "linux_keyring.hpp"
 #include "store_vehicle_adapter.hpp"
 #include "mod_store.hpp"
+#include "cloud_saves/progress.hpp"
 #include "mod_store_install.hpp"
+#include "mods/magic_code_package.hpp"
 #include "stb/stb_image.h"
 #include "updates/update_core.hpp"
+#include "time_trial/ghost_file.hpp"
 #include <algorithm>
 #include <array>
 #include <atomic>
@@ -50,6 +53,7 @@
 #define DKR_PROFILE_WITH_KEYRING 1
 #include "online_profile/linux_device_store.hpp"
 #include "atomic_snapshot.hpp"
+#include "save_manager.hpp"
 
 namespace dkr::store {
 namespace {
@@ -63,6 +67,9 @@ struct Error : std::runtime_error {
     Json details;
     Error(std::string message, unsigned s = 0, Json context = Json::object())
         : std::runtime_error(std::move(message)), status(s), details(std::move(context)) {}
+};
+struct TransportFailure : Error {
+    using Error::Error;
 };
 std::string lower(std::string value) {
     for (auto& c : value)
@@ -192,7 +199,16 @@ struct Request {
     std::uint64_t offset = 0, limit = MaxJson;
     unsigned timeout = 12000;
     std::string online_instance;
+    unsigned test_port = 0;
 };
+constexpr auto kReplayLimit = 3 * 1024 * 1024;
+std::string local_ranked_origin(unsigned port) {
+    return "http://127.0.0.1:" + std::to_string(port);
+}
+bool local_ranked_request(const Request& request) {
+    return request.test_port > 1023 && request.test_port <= 65535 &&
+           prefix(request.url, local_ranked_origin(request.test_port) + "/v1/speedruns");
+}
 using Sink = std::function<void(const char*, std::size_t, const Response&)>;
 
 #ifdef _WIN32
@@ -233,16 +249,19 @@ std::string header(HINTERNET request, DWORD field) {
     return out;
 }
 Response http_once(const Request& r, std::stop_token stop, const Sink& sink) {
-    if (!trusted_url(r.url, prefix(r.url, Api)))
+    const bool loopback = local_ranked_request(r);
+    if (!loopback && !trusted_url(r.url, prefix(r.url, Api)))
         throw Error("The library returned an unapproved file address.");
     auto url = wide(r.url);
     URL_COMPONENTS parts{};
     parts.dwStructSize = sizeof(parts);
     parts.dwHostNameLength = parts.dwUrlPathLength = parts.dwExtraInfoLength = DWORD(-1);
-    if (!WinHttpCrackUrl(url.c_str(), DWORD(url.size()), 0, &parts) || parts.nScheme != INTERNET_SCHEME_HTTPS ||
-        parts.nPort != 443)
+    if (!WinHttpCrackUrl(url.c_str(), DWORD(url.size()), 0, &parts) ||
+        parts.nScheme != (loopback ? INTERNET_SCHEME_HTTP : INTERNET_SCHEME_HTTPS) ||
+        parts.nPort != (loopback ? r.test_port : 443U))
         throw Error("Use the secure library address.");
-    Internet session{WinHttpOpen(L"DKR-R-ModStore/1.0.7-beta8", WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY,
+    Internet session{WinHttpOpen(L"DKR-R-ModStore/1.0.7-beta8",
+                                 loopback ? WINHTTP_ACCESS_TYPE_NO_PROXY : WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY,
                                  WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0)};
     if (!session.h)
         throw Error("The secure connection could not start.");
@@ -251,16 +270,16 @@ Response http_once(const Request& r, std::stop_token stop, const Sink& sink) {
 #ifdef WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_3
     tls |= WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_3;
 #endif
-    if (!WinHttpSetOption(session, WINHTTP_OPTION_SECURE_PROTOCOLS, &tls, sizeof(tls)))
+    if (!loopback && !WinHttpSetOption(session, WINHTTP_OPTION_SECURE_PROTOCOLS, &tls, sizeof(tls)))
         throw Error("The secure connection could not start.");
     std::wstring host(parts.lpszHostName, parts.dwHostNameLength), path(parts.lpszUrlPath, parts.dwUrlPathLength);
     if (parts.dwExtraInfoLength)
         path.append(parts.lpszExtraInfo, parts.dwExtraInfoLength);
-    Internet connection{WinHttpConnect(session, host.c_str(), 443, 0)};
+    Internet connection{WinHttpConnect(session, host.c_str(), parts.nPort, 0)};
     const auto method = wide(r.method);
     Internet request{connection.h
                          ? WinHttpOpenRequest(connection, method.c_str(), path.c_str(), nullptr, WINHTTP_NO_REFERER,
-                                              WINHTTP_DEFAULT_ACCEPT_TYPES, WINHTTP_FLAG_SECURE)
+                                              WINHTTP_DEFAULT_ACCEPT_TYPES, loopback ? 0 : WINHTTP_FLAG_SECURE)
                          : nullptr};
     if (!request.h)
         throw Error("The library connection could not open.");
@@ -269,8 +288,9 @@ Response http_once(const Request& r, std::stop_token stop, const Sink& sink) {
     DWORD disable = WINHTTP_DISABLE_COOKIES;
     WinHttpSetOption(request, WINHTTP_OPTION_DISABLE_FEATURE, &disable, sizeof(disable));
     std::string headers = "Accept: */*\r\n";
-    if (prefix(r.url, Api)) {
-        headers += "Origin: https://positron-portal.com\r\n";
+    if (loopback || prefix(r.url, Api)) {
+        if (!loopback)
+            headers += "Origin: https://positron-portal.com\r\n";
         if (!r.online_instance.empty())
             headers += "X-DKRR-Instance: " + r.online_instance + "\r\n";
         if (!r.token.empty()) {
@@ -283,7 +303,7 @@ Response http_once(const Request& r, std::stop_token stop, const Sink& sink) {
             throw Error("Credentials cannot be sent to a file host.");
         headers += "Referer: https://positron-portal.com/dkr-r/index.html\r\n";
     }
-    if (r.method == "POST")
+    if (r.method == "POST" || r.method == "PUT")
         headers += "Content-Type: " + r.type + "\r\n";
     if (r.offset) {
         headers += "Range: bytes=" + std::to_string(r.offset) + "-\r\n";
@@ -291,12 +311,13 @@ Response http_once(const Request& r, std::stop_token stop, const Sink& sink) {
             headers += "If-Range: " + r.etag + "\r\n";
     }
     auto wh = wide(headers);
-    if (stop.stop_requested() ||
-        !WinHttpSendRequest(request, wh.c_str(), DWORD(wh.size()),
+    if (stop.stop_requested())
+        throw Error("Transfer paused.");
+    if (!WinHttpSendRequest(request, wh.c_str(), DWORD(wh.size()),
                             r.body.empty() ? WINHTTP_NO_REQUEST_DATA : const_cast<char*>(r.body.data()),
                             DWORD(r.body.size()), DWORD(r.body.size()), 0) ||
         !WinHttpReceiveResponse(request, nullptr))
-        throw Error("Could not reach the library. Check your connection and retry.");
+        throw TransportFailure("Could not reach the library. Check your connection and retry.");
     Response response;
     response.url = r.url;
     DWORD bytes = sizeof(response.status);
@@ -323,7 +344,7 @@ Response http_once(const Request& r, std::stop_token stop, const Sink& sink) {
             throw Error("Transfer paused.");
         DWORD read = 0;
         if (!WinHttpReadData(request, buffer.data(), DWORD(buffer.size()), &read))
-            throw Error("The connection was interrupted. Retry to continue.");
+            throw TransportFailure("The connection was interrupted. Retry to continue.");
         if (!read)
             break;
         if (read > r.limit - total)
@@ -344,7 +365,8 @@ Response http_once(const Request&, std::stop_token, const Sink&) {
 }
 #else
 Response http_once(const Request& r, std::stop_token stop, const Sink& sink) {
-    if (!trusted_url(r.url, prefix(r.url, Api)))
+    const bool loopback = local_ranked_request(r);
+    if (!loopback && !trusted_url(r.url, prefix(r.url, Api)))
         throw Error("Unapproved library address.");
     static const bool initialized = [] { return curl_global_init(CURL_GLOBAL_DEFAULT) == CURLE_OK; }();
     if (!initialized)
@@ -373,8 +395,9 @@ Response http_once(const Request& r, std::stop_token stop, const Sink& sink) {
     };
     Transfer transfer{&r, &out, &sink, stop};
     auto add = [&](std::string value) { cleanup.headers = curl_slist_append(cleanup.headers, value.c_str()); };
-    if (prefix(r.url, Api)) {
-        add("Origin: https://positron-portal.com");
+    if (loopback || prefix(r.url, Api)) {
+        if (!loopback)
+            add("Origin: https://positron-portal.com");
         if (!r.online_instance.empty())
             add("X-DKRR-Instance: " + r.online_instance);
         if (!r.token.empty() && r.token.size() == 43 && identifier(r.token))
@@ -384,7 +407,8 @@ Response http_once(const Request& r, std::stop_token stop, const Sink& sink) {
             throw Error("Credentials cannot be sent to a file host.");
         add("Referer: https://positron-portal.com/dkr-r/index.html");
     }
-    if (r.method == "POST")
+    const bool sends_body = r.method == "POST" || r.method == "PUT";
+    if (sends_body)
         add("Content-Type: " + r.type);
     if (r.offset && !r.etag.empty() && r.etag.find_first_of("\r\n") == r.etag.npos)
         add("If-Range: " + r.etag);
@@ -396,11 +420,15 @@ Response http_once(const Request& r, std::stop_token stop, const Sink& sink) {
     curl_easy_setopt(cleanup.curl, CURLOPT_LOW_SPEED_TIME, 15L);
     curl_easy_setopt(cleanup.curl, CURLOPT_NOSIGNAL, 1L);
     curl_easy_setopt(cleanup.curl, CURLOPT_FOLLOWLOCATION, 0L);
-    curl_easy_setopt(cleanup.curl, CURLOPT_PROTOCOLS_STR, "https");
-    if (r.method == "POST") {
+    curl_easy_setopt(cleanup.curl, CURLOPT_PROTOCOLS_STR, loopback ? "http" : "https");
+    if (loopback)
+        curl_easy_setopt(cleanup.curl, CURLOPT_PROXY, "");
+    if (sends_body) {
         curl_easy_setopt(cleanup.curl, CURLOPT_POST, 1L);
         curl_easy_setopt(cleanup.curl, CURLOPT_POSTFIELDS, r.body.data());
         curl_easy_setopt(cleanup.curl, CURLOPT_POSTFIELDSIZE_LARGE, curl_off_t(r.body.size()));
+        if (r.method == "PUT")
+            curl_easy_setopt(cleanup.curl, CURLOPT_CUSTOMREQUEST, "PUT");
     }
     std::string range;
     if (r.offset) {
@@ -481,7 +509,7 @@ Response http_once(const Request& r, std::stop_token stop, const Sink& sink) {
     if (transfer.error)
         std::rethrow_exception(transfer.error);
     if (code != CURLE_OK)
-        throw Error("The library connection was interrupted. Retry to continue.");
+        throw TransportFailure("The library connection was interrupted. Retry to continue.");
     return out;
 }
 #endif
@@ -494,7 +522,8 @@ Response http(Request request, std::stop_token stop, const Sink& sink = {}) {
         if (response.status != 301 && response.status != 302 && response.status != 303 && response.status != 307 &&
             response.status != 308)
             return response;
-        if (hops == 3 || request.method != "GET" || !request.token.empty() || prefix(request.url, Api))
+        if (hops == 3 || request.test_port || request.method != "GET" || !request.token.empty() ||
+            prefix(request.url, Api))
             throw Error("The library returned an unsupported redirect.", response.status);
         auto next = response.location;
         if (next.starts_with('/') && !next.starts_with("//"))
@@ -638,6 +667,7 @@ struct Service::Impl {
     std::mutex download_persist_mutex;
     std::condition_variable_any cv;
     Snapshot state;
+    std::mutex cloud_saves_mutex;
     dkr::runtime::AtomicSnapshot<const Snapshot> published{std::make_shared<const Snapshot>()};
     std::filesystem::path root;
     std::string version, token, device, browser;
@@ -665,8 +695,11 @@ struct Service::Impl {
     std::map<std::string, std::stop_source> preparation_stops;
 #include "mod_store/community_service.inl"
     // Workers are last: joined before the objects captured by their callbacks.
-    std::jthread worker, image_worker, download_worker, auth_worker;
+    std::jthread worker, image_worker, download_worker, auth_worker, cloud_save_worker;
     void publish() {
+        const bool cloud_active = !token.empty() && !state.cloud_saves_account.empty() &&
+                                  state.cloud_saves_account == text(state.user, "id", 160);
+        cloud_saves::progress_writes.account(cloud_active ? std::optional(account) : std::nullopt);
         community_fence();
         ++state.generation;
         published.store(std::make_shared<const Snapshot>(state));
@@ -713,6 +746,27 @@ struct Service::Impl {
         } catch (...) { /* A diagnostic must never replace the original failure. */
         }
     }
+    Request ranked_request(std::string path, bool authenticated = false) {
+        const auto local = read_json(root.parent_path() / "ranked-local.json");
+        const auto port = local.find("port");
+        if (port != local.end() && port->is_number_integer()) {
+            const auto value = port->get<std::int64_t>();
+            auto credential = text(local, "token", 43);
+            if (value < 1024 || value > 65535 ||
+                (authenticated && (credential.size() != 43 || !identifier(credential))))
+                throw Error("The local ranked test profile is invalid.");
+            Request request{local_ranked_origin(unsigned(value)) + path,
+                            "GET",
+                            {},
+                            authenticated ? std::move(credential) : std::string{}};
+            request.test_port = unsigned(value);
+            return request;
+        }
+        std::lock_guard lock(mutex);
+        if (authenticated && token.empty())
+            throw Error("Sign in to the Mod Library to submit a run.");
+        return {std::string(Api) + path, "GET", {}, authenticated ? token : std::string{}};
+    }
     Json get(std::string path, std::stop_token stop, bool private_request = false) {
         std::string credential;
         {
@@ -752,6 +806,8 @@ struct Service::Impl {
         token.clear();
         ++account;
         state.user = nullptr;
+        state.cloud_sync = cloud_saves::SyncStatus::Idle;
+        state.cloud_saves_status.clear();
         state.personal = Json::object();
         state.staff = Json::object();
         state.admin = Json::object();
@@ -1269,6 +1325,7 @@ Service::~Service() {
     p.image_worker.request_stop();
     p.download_worker.request_stop();
     p.auth_worker.request_stop();
+    p.cloud_save_worker.request_stop();
     p.community_tracking_worker.request_stop();
     p.cv.notify_all();
 }
@@ -1280,6 +1337,7 @@ std::string download_key(const std::string& item, const std::string& release, co
     return item + "_" + release + (instance.empty() ? "" : "_" + instance);
 }
 void Service::gameplay(bool active) {
+    cloud_saves::progress_writes.gameplay(active);
     dkr::storage::gameplay(active);
     auto& p = *impl_;
     {
@@ -1310,10 +1368,11 @@ void Service::configure(const std::filesystem::path& config, std::string version
         p.image_worker.request_stop();
         p.download_worker.request_stop();
         p.auth_worker.request_stop();
+        p.cloud_save_worker.request_stop();
         p.community_tracking_worker.request_stop();
         p.cv.notify_all();
-        for (auto* worker :
-             {&p.worker, &p.image_worker, &p.download_worker, &p.auth_worker, &p.community_tracking_worker})
+        for (auto* worker : {&p.worker, &p.image_worker, &p.download_worker, &p.auth_worker, &p.cloud_save_worker,
+                             &p.community_tracking_worker})
             if (worker->joinable())
                 worker->join();
     });
@@ -1322,15 +1381,19 @@ void Service::configure(const std::filesystem::path& config, std::string version
     p.worker = std::jthread([&p](std::stop_token stop) { p.run(stop); });
     p.image_worker = std::jthread([&p](std::stop_token stop) { p.image_run(stop); });
     p.download_worker = std::jthread([&p](std::stop_token stop) { p.download_run(stop); });
+    p.cloud_save_worker = std::jthread([this](std::stop_token stop) { publish_progress(stop); });
     p.community_tracking_worker = std::jthread([&p](std::stop_token stop) { p.community_tracking(stop); });
     p.queue([&p](std::stop_token stop) {
         const auto preferences = read_json(p.root / "preferences.json"), cached = read_json(p.root / "catalogue.json");
+        const auto cloud = read_json(p.root / "cloud-saves.json");
         const auto saved = read_json(p.root / "downloads.json");
         const auto receipts = read_json(p.root / "installations.json");
         auto restored = dkr::store::history::restore<Download>(saved, receipts, [&](const std::string& path) {
             return dkr::store::history::member_present(p.root.parent_path(), path);
         });
         p.update([&](Snapshot& s) {
+            if (cloud.value("enabled", false))
+                s.cloud_saves_account = text(cloud, "account", 160);
             if (preferences.value("layout", 0) == 1)
                 s.layout = 1;
             s.remember = preferences.contains("remember") && preferences["remember"] == true;
@@ -1389,6 +1452,393 @@ void Service::refresh() {
     auto& p = *impl_;
     p.queue([&p](std::stop_token stop) { p.refresh(stop); });
 }
+void Service::load_leaderboards(std::string cursor, std::optional<LeaderboardTrackQuery> track) {
+    if ((!cursor.empty() && !identifier(cursor)) ||
+        (track && (!identifier(track->id) || (!track->vehicle.empty() && !identifier(track->vehicle)) ||
+                   (!track->racer.empty() && !identifier(track->racer)))))
+        return;
+    auto& p = *impl_;
+    {
+        std::lock_guard lock(p.mutex);
+        if (!p.configured || p.state.speedrun_loading)
+            return;
+        p.state.speedrun_loading = true;
+        p.state.speedrun_error.clear();
+        p.publish();
+    }
+    if (!p.queue([&p, cursor = std::move(cursor), track = std::move(track)](std::stop_token stop) {
+            try {
+                std::string url = "/v1/speedruns";
+                if (track) {
+                    const char* kind = track->full_game ? "?kind=full-game"
+                                       : track->custom  ? "?kind=custom"
+                                                        : "?kind=vanilla";
+                    url += "/tracks/" + track->id + kind;
+                    if (!track->vehicle.empty())
+                        url += "&vehicle=" + track->vehicle;
+                    if (!track->racer.empty())
+                        url += "&racer=" + track->racer;
+                    if (track->best_lap)
+                        url += "&score=lap";
+                    if (track->offset)
+                        url += "&offset=" + std::to_string(track->offset);
+                } else if (!cursor.empty()) {
+                    url += "?cursor=" + cursor;
+                }
+                auto data = document(p.ranked_request(url), stop);
+                if (!track && (!data.contains("boards") || !data["boards"].is_array() ||
+                               !data.contains("customTracks") || !data["customTracks"].is_array()))
+                    throw Error("The leaderboard service returned an invalid track list.");
+                if (track && (!data.contains("track") || !data["track"].is_object() ||
+                              data["track"].value("id", std::string{}) != track->id || !data.contains("entries") ||
+                              !data["entries"].is_array() || !data.contains("vehicles") ||
+                              !data["vehicles"].is_array() || !data.contains("racers") || !data["racers"].is_array()))
+                    throw Error("The leaderboard service returned an invalid result list.");
+                p.update([&](Snapshot& state) {
+                    state.speedrun_loading = false;
+                    if (track) {
+                        if (track->offset && state.speedrun_board) {
+                            Json combined = *state.speedrun_board;
+                            for (auto& row : data["entries"])
+                                combined["entries"].push_back(std::move(row));
+                            data["entries"] = std::move(combined["entries"]);
+                            data["history"] = std::move(combined["history"]);
+                        }
+                        state.speedrun_board = std::make_shared<const Json>(std::move(data));
+                        return;
+                    }
+                    if (!cursor.empty() && state.speedrun_catalogue) {
+                        Json combined = *state.speedrun_catalogue;
+                        for (auto& item : data["customTracks"])
+                            combined["customTracks"].push_back(std::move(item));
+                        combined["nextCursor"] = data["nextCursor"];
+                        data = std::move(combined);
+                    }
+                    state.speedrun_catalogue = std::make_shared<const Json>(std::move(data));
+                });
+            } catch (const std::exception&) {
+                p.update([](Snapshot& state) {
+                    state.speedrun_loading = false;
+                    state.speedrun_error = "Leaderboards are unavailable. Try refreshing.";
+                });
+            }
+        })) {
+        p.update([](Snapshot& state) {
+            state.speedrun_loading = false;
+            state.speedrun_error = "Wait for the current library request to finish.";
+        });
+    }
+}
+Json Service::overall_rankings(const std::string& player, unsigned offset) {
+    if (!player.empty() && !identifier(player))
+        throw Error("Invalid leaderboard player.");
+    auto path = std::string("/v1/speedruns/overall");
+    if (!player.empty())
+        path += "/" + player + "?offset=" + std::to_string(offset);
+    auto data = document(impl_->ranked_request(path), {});
+    if (!data.is_object() || data.value("scoringVersion", 0) != 1 ||
+        !(player.empty()
+              ? data.contains("players") && data["players"].is_array()
+              : data.contains("player") && data["player"].is_object() && text(data["player"], "id", 96) == player &&
+                    data.contains("events") && data["events"].is_array()))
+        throw Error("Overall rankings are unavailable. Try refreshing.");
+    return data;
+}
+Json Service::ranked_attempt(std::string board) {
+    auto request = impl_->ranked_request("/v1/speedruns/attempts", true);
+    request.method = "POST";
+    request.body = Json{{"board", std::move(board)}}.dump();
+    return document(request, {});
+}
+Json Service::adventure_record(const std::string& category) {
+    if (!identifier(category))
+        throw Error("Invalid Full Game category.");
+    return document(impl_->ranked_request("/v1/speedruns/tracks/" + category + "?kind=full-game", false), {});
+}
+Json Service::submit_ranked_replay(const std::filesystem::path& path, bool link_local) {
+    const auto file = dkr::mods::read_file(path, kReplayLimit);
+    auto request = impl_->ranked_request(link_local ? "/v1/speedruns/runs/claim" : "/v1/speedruns/runs", true);
+    request.method = "POST";
+    request.type = "application/octet-stream";
+    request.body.assign(file.begin(), file.end());
+    return document(request, {});
+}
+Json Service::ranked_runs(bool review) {
+    return document(impl_->ranked_request(review ? "/v1/speedruns/review" : "/v1/speedruns/mine", true), {});
+}
+std::vector<PublishedReplayTime> Service::published_replay_times() {
+    auto request = impl_->ranked_request("/v1/speedruns/mine/published", true);
+    const auto route = request.url;
+    std::vector<PublishedReplayTime> times;
+    for (;;) {
+        const auto page = document(request, {});
+        const auto& scores = page.at("scores");
+        const bool more = page.at("more").get<bool>();
+        if (!scores.is_array() || scores.size() > 256 || (more && scores.empty()))
+            throw Error("The leaderboard returned an invalid time page.");
+        for (const auto& score : scores) {
+            const auto board = text(score, "board", 96);
+            const auto& ticks = score.at("ticks");
+            if (!identifier(board) || !ticks.is_number_integer() || ticks.get<std::int64_t>() <= 0)
+                throw Error("The leaderboard returned an invalid time.");
+            PublishedReplayTime time{board, ticks.get<std::int64_t>()};
+            if (!times.empty() && times.back() >= time)
+                throw Error("The leaderboard returned an invalid time order.");
+            times.push_back(std::move(time));
+        }
+        if (!more)
+            return times;
+        const auto& [board, ticks] = times.back();
+        request.url = route + "?afterBoard=" + board + "&afterTicks=" + std::to_string(ticks);
+    }
+}
+void Service::review_ranked_run(const std::string& id, bool publish, std::string reason) {
+    if (!identifier(id))
+        throw Error("Invalid replay ID.");
+    auto request = impl_->ranked_request("/v1/speedruns/runs/" + id + "/review", true);
+    request.method = "POST";
+    Json review{{"decision", publish ? "published" : "rejected"}, {"reason", std::move(reason)}};
+    if (publish)
+        review["evidence"] = "replay";
+    request.body = review.dump();
+    (void)document(request, {});
+}
+void Service::save_ranked_replay(const std::string& id, const std::filesystem::path& destination, bool own_run) {
+    if (!identifier(id))
+        throw Error("Invalid replay ID.");
+    auto request = impl_->ranked_request("/v1/speedruns/runs/" + id + "/replay", own_run);
+    request.limit = kReplayLimit;
+    const auto file = http(std::move(request), {});
+    if (file.status != 200 || !file.body.starts_with("DKRREPL2"))
+        throw Error("The replay could not be downloaded.");
+    const dkr::mods::Bytes replay(file.body.begin(), file.body.end());
+    dkr::mods::write_new_file(destination, replay);
+    try {
+        namespace trial = dkr::runtime::time_trial;
+        auto ghost_request = impl_->ranked_request("/v1/speedruns/runs/" + id + "/ghost", own_run);
+        ghost_request.limit = trial::kMaxPortableGhostBytes;
+        const auto ghost = http(std::move(ghost_request), {});
+        if (ghost.status == 200 && ghost.body.starts_with(trial::portable_ghost_prefix(dkr::mods::sha256(replay))))
+            dkr::mods::write_new_file(trial::portable_ghost_file(destination),
+                                      dkr::mods::Bytes(ghost.body.begin(), ghost.body.end()));
+    } catch (const std::exception&) {
+        // Older runs and temporarily unavailable ghosts are still playable from their replay.
+    }
+}
+void Service::set_cloud_saves(const std::string& account, bool enabled) {
+    auto& p = *impl_;
+    std::scoped_lock operation(p.cloud_saves_mutex);
+    std::lock_guard lock(p.mutex);
+    if (p.gameplay || account.empty() || p.token.empty() || text(p.state.user, "id") != account)
+        throw Error("Sign in with Discord and return to the launcher to change Cloud Saves.");
+    auto state = read_json(p.root / "cloud-saves.json");
+    if (text(state, "account") != account || (enabled && !state.value("enabled", false)))
+        state = {{"account", account}, {"common", Json::object()}};
+    state["enabled"] = enabled;
+    try {
+        write_json(p.root / "cloud-saves.json", state);
+    } catch (const std::exception&) {
+        p.state.cloud_sync = cloud_saves::SyncStatus::Error;
+        p.state.cloud_saves_status = "Could not save the Cloud Saves setting on this device.";
+        p.publish();
+        throw;
+    }
+    p.state.cloud_sync = cloud_saves::SyncStatus::Idle;
+    p.state.cloud_saves_account = enabled ? account : std::string{};
+    p.state.cloud_saves_status =
+        enabled ? "Cloud Saves enabled for this device." : "Cloud Saves paused on this device.";
+    p.publish();
+}
+
+void Service::publish_progress(std::stop_token stop) {
+    while (auto batch = cloud_saves::progress_writes.take(stop)) {
+        std::string account;
+        {
+            std::lock_guard lock(impl_->mutex);
+            if (impl_->account != batch->account_generation)
+                continue;
+            account = impl_->state.cloud_saves_account;
+        }
+        try {
+            sync_cloud_saves(account, cloud_saves::SyncScope::PublishProgress, &*batch, stop);
+        } catch (const Error& error) {
+            if (!stop.stop_requested() &&
+                (dynamic_cast<const TransportFailure*>(&error) || error.status >= 500 || error.status == 409))
+                cloud_saves::progress_writes.retry(*batch);
+        } catch (const std::exception&) {
+            // The shared sync path publishes the failure for the launcher.
+        }
+    }
+}
+
+void Service::sync_cloud_saves(const std::string& account, cloud_saves::SyncScope scope) {
+    sync_cloud_saves(account, scope, nullptr, {});
+}
+
+void Service::sync_cloud_saves(const std::string& account, cloud_saves::SyncScope scope,
+                               const cloud_saves::ProgressBatch* progress, std::stop_token stop) {
+    namespace saves = dkr::runtime::saves;
+    using cloud_saves::Action;
+    using cloud_saves::SyncStatus;
+    auto& p = *impl_;
+    std::scoped_lock operation(p.cloud_saves_mutex);
+    std::string credential;
+    std::uint64_t generation;
+    {
+        std::lock_guard lock(p.mutex);
+        if (progress && progress->account_generation != p.account)
+            return;
+        if ((!progress && p.gameplay) || account.empty() || account != p.state.cloud_saves_account ||
+            account != text(p.state.user, "id") || p.token.empty())
+            throw Error("Enable Cloud Saves while signed in with Discord on this device.");
+        credential = p.token;
+        generation = p.account;
+        p.state.cloud_sync = SyncStatus::Syncing;
+        p.state.cloud_saves_status = "Syncing Cloud Saves...";
+        p.publish();
+    }
+    const auto check_account = [&] {
+        if (stop.stop_requested() || (!progress && p.gameplay) || generation != p.account ||
+            account != p.state.cloud_saves_account || account != text(p.state.user, "id"))
+            throw Error("The signed-in account changed while syncing. Your local saves are still available.");
+    };
+    unsigned uploaded = 0, downloaded = 0;
+    const auto reconcile = [&] {
+        constexpr std::string_view route = "/v1/launcher/cloud-saves";
+        const auto make_request = [&](std::string suffix = {}) {
+            Request request{std::string(Api) + std::string(route) + std::move(suffix), "GET", {}, credential};
+            request.timeout = 4500;
+            return request;
+        };
+        auto state = read_json(p.root / "cloud-saves.json");
+        if (text(state, "account") != account || !state.value("enabled", false))
+            throw Error("Cloud Saves are disabled on this device.");
+        auto& common = state["common"];
+        if (!common.is_object())
+            common = Json::object();
+        const auto inventory = document(make_request("?format=2"), stop);
+        if (text(inventory, "accountId") != account || !inventory.contains("saves") || !inventory["saves"].is_array() ||
+            inventory["saves"].size() > saves::cloud_save_slots().size())
+            throw Error("The Cloud Save service returned an invalid account or save inventory.");
+        std::map<std::string, Json> remote;
+        for (const auto& entry : inventory["saves"])
+            if (!remote.emplace(text(entry, "key", 40), entry).second)
+                throw Error("Cloud Save inventory contains a duplicate save.");
+
+        const bool modded_supported = inventory.value("moddedAdventure", false);
+        unsigned needs_recovery = 0, deferred = 0;
+        bool modded_unavailable = false;
+        for (const auto& slot : saves::cloud_save_slots()) {
+            if (!cloud_saves::includes_slot(scope, slot.key) || (progress && !progress->slots.contains(slot.key)))
+                continue;
+            const std::string key(slot.key);
+            if (key == "modded-adventure" && !modded_supported) {
+                modded_unavailable = true;
+                continue;
+            }
+            std::string error;
+            std::vector<std::uint8_t> local;
+            if (!saves::read_cloud_save(key, local, error)) {
+                ++needs_recovery;
+                continue;
+            }
+            const auto found = remote.find(key);
+            const auto local_hash = local.empty() ? std::string{} : dkr::mods::sha256(local);
+            const auto cloud_hash = found == remote.end() ? std::string{} : text(found->second, "digest", 64);
+            const auto revision = found == remote.end() ? 0ULL : found->second.value("revision", 0ULL);
+            const auto size = found == remote.end() ? 0ULL : found->second.value("bytes", 0ULL);
+            if (found != remote.end() && (!hash_string(cloud_hash) || !revision || !size || size > slot.limit))
+                throw Error("The cloud metadata for " + std::string(slot.label) + " is invalid.");
+            const auto action = cloud_saves::next_action(local_hash, cloud_hash, text(common, key.c_str(), 64), scope);
+            if (action == Action::Defer) {
+                ++deferred;
+                continue;
+            }
+            if (action == Action::None) {
+                if (!local_hash.empty())
+                    common[key] = local_hash;
+                continue;
+            }
+
+            auto request = make_request("/" + key + "?revision=" + std::to_string(revision));
+            {
+                std::lock_guard lock(p.mutex);
+                check_account();
+            }
+            if (action == Action::Upload) {
+                request.method = "PUT";
+                request.type = "application/octet-stream";
+                request.body.assign(reinterpret_cast<const char*>(local.data()), local.size());
+                const auto result = document(request, stop);
+                if (text(result, "digest", 64) != local_hash || result.value("revision", 0ULL) != revision + 1)
+                    throw Error("The cloud service did not confirm the uploaded save.");
+                common[key] = local_hash;
+                ++uploaded;
+            } else {
+                request.limit = slot.limit;
+                const auto result = http(request, stop);
+                const std::vector<std::uint8_t> replacement(result.body.begin(), result.body.end());
+                if (result.status != 200)
+                    throw Error("The cloud image could not be downloaded. Sync again to retry.", result.status);
+                if (result.type != "application/octet-stream" || replacement.size() != size ||
+                    dkr::mods::sha256(replacement) != cloud_hash)
+                    throw Error("The cloud image changed or could not be verified. Sync again to retry.");
+                std::lock_guard lock(p.mutex);
+                check_account();
+                if (!saves::replace_cloud_save(key, local, replacement, error))
+                    throw Error(error);
+                common[key] = cloud_hash;
+                ++downloaded;
+            }
+            std::lock_guard lock(p.mutex);
+            check_account();
+            write_json(p.root / "cloud-saves.json", state);
+        }
+        std::lock_guard lock(p.mutex);
+        check_account();
+        write_json(p.root / "cloud-saves.json", state);
+        p.state.cloud_sync = needs_recovery || modded_unavailable ? SyncStatus::Error
+                             : deferred                           ? SyncStatus::Idle
+                                                                  : SyncStatus::Synced;
+        p.state.cloud_saves_status = uploaded || downloaded
+                                         ? "Cloud Saves synced. Downloaded " + std::to_string(downloaded) +
+                                               " and uploaded " + std::to_string(uploaded) + " save files."
+                                         : "Cloud Saves checked.";
+        if (needs_recovery)
+            p.state.cloud_saves_status +=
+                " Save Manager can help recover " + std::to_string(needs_recovery) + " local files.";
+        if (modded_unavailable)
+            p.state.cloud_saves_status += " Modded Adventure cloud sync is unavailable.";
+        if (deferred)
+            p.state.cloud_saves_status += scope == cloud_saves::SyncScope::PublishHostedOnline
+                                              ? " Newer cloud saves will be applied after leaving the lobby."
+                                              : " Newer cloud saves will be applied after play.";
+        p.publish();
+    };
+    try {
+        try {
+            reconcile();
+        } catch (const Error& error) {
+            if (error.status != 409)
+                throw;
+            // Another device committed a newer revision. Recheck which copy to use.
+            reconcile();
+        }
+    } catch (const std::exception& error) {
+        std::lock_guard lock(p.mutex);
+        if (generation == p.account && account == p.state.cloud_saves_account) {
+            const auto* http_error = dynamic_cast<const Error*>(&error);
+            p.state.cloud_sync = cloud_saves::sync_failure(dynamic_cast<const TransportFailure*>(&error) != nullptr,
+                                                           http_error ? http_error->status : 0);
+            p.state.cloud_saves_status = p.state.cloud_sync == SyncStatus::Unreachable
+                                             ? "Could not reach Cloud Saves. Try again in a moment."
+                                             : error.what();
+            p.publish();
+        }
+        throw;
+    }
+}
+
 bool Service::refresh_names() {
     auto& p = *impl_;
     {
@@ -1668,6 +2118,8 @@ void Service::login() {
                     p.token = token;
                     p.device = device;
                     ++p.account;
+                    p.state.cloud_sync = cloud_saves::SyncStatus::Idle;
+                    p.state.cloud_saves_status.clear();
                     p.upload_proofs.clear();
                     p.state.personal = Json::object();
                     p.state.staff = Json::object();
@@ -1715,6 +2167,8 @@ void Service::logout() {
         ++p.account;
         p.browser.clear();
         p.state.user = nullptr;
+        p.state.cloud_sync = cloud_saves::SyncStatus::Idle;
+        p.state.cloud_saves_status.clear();
         p.state.personal = Json::object();
         p.state.staff = Json::object();
         p.state.admin = Json::object();

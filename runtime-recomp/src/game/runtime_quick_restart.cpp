@@ -4,6 +4,7 @@
 #include "game_payload.hpp"
 #include "runtime_enhancements.hpp"
 #include "runtime_input.hpp"
+#include "time_trial/session.hpp"
 #include "revision_addresses.hpp"
 
 #include "recomp.h"
@@ -62,6 +63,9 @@ extern "C" void dkr_quick_restart_poll(std::uint8_t* rdram, recomp_context* cont
     if (rdram == nullptr || context == nullptr || !dkr::runtime::input::consume_quick_restart_request()) {
         return;
     }
+
+    if (dkr::runtime::time_trial::request_restart())
+        return;
 
     const dkr::runtime::GamePayload* payload = dkr::runtime::active_payload();
     if (payload == nullptr || payload->get_settings == nullptr || payload->leveltable_type == nullptr ||

@@ -43,6 +43,7 @@ float SettingsHelp(std::string_view text, float width, unsigned colour = kSetMut
 // ------------------------------------------------------------ drop-down
 
 using SettingsChoice = dkr::localisation::Choice;
+constexpr float kSettingsDropdownHeight = 52.0F;
 
 // The open list (.picker): a dark panel under its field, with a check on
 // the current choice. Returns the picked index, or -1.
@@ -65,7 +66,8 @@ int DrawSettingsPicker(const char* popup, ImVec2 anchor_min, ImVec2 anchor_max, 
     const float above = anchor_min.y - 6.0F - 12.0F;
     const bool flip = natural > below && above > below;
     const float height = std::min(natural, std::max(flip ? above : below, 120.0F));
-    const ImVec2 at{anchor_min.x, flip ? anchor_min.y - 6.0F - height : anchor_max.y + 6.0F};
+    const float left = std::clamp(anchor_min.x, 0.0F, std::max(0.0F, display.x - width - 12.0F));
+    const ImVec2 at{left, flip ? anchor_min.y - 6.0F - height : anchor_max.y + 6.0F};
     ImGui::SetNextWindowPos(at);
     ImGui::SetNextWindowSize({width, height});
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, {6.0F, 6.0F});
@@ -164,10 +166,12 @@ int DrawSettingsPicker(const char* popup, ImVec2 anchor_min, ImVec2 anchor_max, 
     return picked;
 }
 
+// The default dropdown for launcher pages, with its label above the field.
 // A labelled drop-down: the field shows the current choice and opens the
 // list (dropdownRow). Returns true when the choice changed.
 bool SettingsDropdown(const char* id, std::string_view label, int* value, const std::vector<SettingsChoice>& choices,
-                      float width, bool disabled = false, std::string_view help = {}) {
+                      float width, bool disabled = false, std::string_view help = {},
+                      float height = kSettingsDropdownHeight) {
     SettingsLabel(label, width);
     *value = std::clamp(*value, 0, std::max(static_cast<int>(choices.size()) - 1, 0));
     ImGui::PushID(id);
@@ -175,7 +179,7 @@ bool SettingsDropdown(const char* id, std::string_view label, int* value, const 
     const bool open = ImGui::IsPopupOpen(popup);
     if (disabled)
         ImGui::BeginDisabled();
-    const PaddockPress press = PaddockBeginPress("##field", {width, 52.0F});
+    const PaddockPress press = PaddockBeginPress("##field", {width, height});
     if (disabled)
         ImGui::EndDisabled();
     if (press.pressed && !disabled)
@@ -195,10 +199,10 @@ bool SettingsDropdown(const char* id, std::string_view label, int* value, const 
                          choices.empty() ? dkr::localisation::source("Unavailable")
                                          : choices[static_cast<std::size_t>(*value)].display_label(),
                          width - 14.0F - 14.0F - 12.0F - 16.0F);
-    PaddockDrawRun(draw, type, {press.min.x + 15.0F, std::round(press.min.y + (52.0F - type.line) * 0.5F)},
+    PaddockDrawRun(draw, type, {press.min.x + 15.0F, std::round(press.min.y + (height - type.line) * 0.5F)},
                    PaddockRgb(0xFFFFFF), shown.data(), shown.data() + shown.size());
     if (!disabled) {
-        PaddockChevron(draw, {press.max.x - 14.0F - 2.0F - 6.0F, press.min.y + 52.0F * 0.5F - 3.0F}, 45.0F, 10.0F,
+        PaddockChevron(draw, {press.max.x - 14.0F - 2.0F - 6.0F, press.min.y + height * 0.5F - 3.0F}, 45.0F, 10.0F,
                        PaddockRgb(0xFFFFFF), 2.5F);
     }
     OlFade(draw, first, disabled ? 0.6F : 1.0F);
@@ -555,8 +559,8 @@ enum class SettingsButtonTone {
 
 inline float SettingsButtonWidth(std::string_view label) {
     const auto caption = dkr::localisation::label(label);
-    label = caption.c_str();
-    return std::ceil(PaddockMeasure(PaddockReading(14.0F, true, 1.35F), label) + 28.0F + 2.0F);
+    const char* begin = caption.c_str();
+    return std::ceil(PaddockMeasure(PaddockReading(14.0F, true, 1.35F), begin, PaddockLabelEnd(begin)) + 30.0F);
 }
 
 // .settings-button: the quiet action of the settings pages. width <= 0 sizes
@@ -693,25 +697,26 @@ int SettingsSecondaryNav(const char* id, const std::vector<const char*>& labels,
 
 // A row of painted section signs (.mods-section-nav), wrapping, with the
 // heavy hairline under it. Returns the picked index, or -1.
-int SettingsSectionSigns(const std::vector<const char*>& labels, int current, float width) {
+int SettingsSectionSigns(const std::vector<const char*>& labels, int current, float width, bool compact = false) {
     const ImVec2 at = ImGui::GetCursorScreenPos();
-    const float tab_height = PaddockSectionTabHeight();
+    const float tab_height = PaddockSectionTabHeight(compact);
+    const float gap = compact ? 6.0F : 10.0F;
     float x = at.x;
     float y = at.y;
     int picked = -1;
     for (std::size_t index = 0; index < labels.size(); ++index) {
-        const float tab = PaddockSectionTabWidth(labels[index]);
+        const float tab = std::min(width, PaddockSectionTabWidth(labels[index], compact));
         if (x > at.x && x + tab > at.x + width) {
             x = at.x;
-            y += tab_height + 10.0F;
+            y += tab_height + gap;
         }
         ImGui::SetCursorScreenPos({x, y});
-        if (PaddockSectionTab(labels[index], static_cast<int>(index) == current)) {
+        if (PaddockSectionTab(labels[index], static_cast<int>(index) == current, tab, compact)) {
             picked = static_cast<int>(index);
         }
-        x += tab + 10.0F;
+        x += tab + gap;
     }
-    const float bottom = y + tab_height + 16.0F;
+    const float bottom = y + tab_height + (compact ? 8.0F : 16.0F);
     ImGui::GetWindowDrawList()->AddRectFilled({at.x, bottom}, {at.x + width, bottom + 2.0F}, PaddockCol(0x24495B));
     ImGui::SetCursorScreenPos(at);
     ImGui::Dummy({width, bottom + 2.0F - at.y});

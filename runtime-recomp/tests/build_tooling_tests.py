@@ -75,6 +75,38 @@ class SourcePackageTests(unittest.TestCase):
 
 
 class ReleaseMetadataTests(unittest.TestCase):
+    def test_playtest_version_still_requires_matching_appstream_and_tag(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for name in (
+                "README.md",
+                "THIRD_PARTY.md",
+                "docs/README.md",
+                "docs/BUILDING.md",
+                "docs/PLATFORMS.md",
+                "packaging/RELEASE-README.md",
+                "packaging/MACOS-BUILD-README.md",
+                "packaging/linux/dkr-port.appdata.xml",
+                "patches/manifest.json",
+            ):
+                target = root / name
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text("")
+            (root / "patches/manifest.json").write_text('{"dependencies": []}')
+            (root / "dependencies.lock.json").write_text('{"dependencies": []}')
+            with patch.object(release_metadata, "ROOT", root):
+                for number in (1, 12):
+                    version = f"1.0.16-playtest.{number}"
+                    (root / "VERSION").write_text(version)
+                    metadata = root / "packaging/linux/dkr-port.appdata.xml"
+                    metadata.write_text(f'<release version="{version}"/>')
+                    self.assertEqual(release_metadata.main(["--tag", f"Version{version}"]), 0)
+                    with self.assertRaisesRegex(RuntimeError, "doesn't match VERSION"):
+                        release_metadata.main(["--tag", "Version1.0.15"])
+                    metadata.write_text('<release version="1.0.15"/>')
+                    with self.assertRaisesRegex(RuntimeError, "AppStream"):
+                        release_metadata.main([])
+
     def test_current_release_metadata(self):
         self.assertEqual(release_metadata.main(), 0)
 
@@ -120,6 +152,8 @@ class ReleaseMetadataTests(unittest.TestCase):
                 "1.0.5-beta.15-playtest.0",
                 "1.0.5-beta.15-playtest.15-fix.0",
                 "1.0.5-garbage",
+                "1.0.16-playtest.0",
+                "1.0.16-playtest.1-extra",
             ):
                 with self.subTest(version=version):
                     (root / "VERSION").write_text(version)

@@ -1,29 +1,54 @@
 # Saves and Save Manager
 
-Your normal Adventure now stays with you when you change mods. There is one
-personal save with three slots, not a new playthrough for every mod list.
-Online and development progress still have their own owners.
+## Vanilla and Modded Adventure
 
-## Your personal Adventure
+In **Play**, turn **Session Mods** off to play Vanilla Adventure or on to play
+Modded Adventure. Each has three Adventure slots with independent balloons,
+unlocks and built-in course records. All ordinary offline mod sets share the
+same Modded Adventure. Your existing Adventure stays in Vanilla. Modded starts
+with empty slots on first use.
 
-Normal play, character mods, custom tracks and ordinary Custom Magic Codes use
-the same personal 512-byte EEPROM. Installing a .dkrmap must not change the
-stock EEPROM layout. Added-course records are stored in a separate companion
-file, so extra tracks cannot shift your initials or balloon totals.
+Cloud Saves syncs each Adventure independently. Sign in with the same Discord
+account and enable Cloud Saves on both devices. Online Adventure, custom-course
+records and Controller Paks have their own sync entries.
 
 Older saves under `saves/mods/<fingerprint>/` are kept for recovery. They are
 not automatically combined. Open **Save Manager > Backups & Recovery**,
 inspect the copy you want and confirm the restore. The previous personal
 save is backed up first. Do not delete the old folders to tidy your profile.
 
+## Automatic Cloud Saves
+
+Enable **Cloud Saves** beside the active save on Play. Select the cloud status
+icon for a manual sync. The client checks the cloud copy before online hosting
+and offline play, when returning to the launcher, and after a successful
+gameplay save. While a write completes, the game briefly shows **Saving Progress**.
+
+An upload uses the cloud revision the device last synced from. If the copies
+diverge, the cloud copy takes priority and the replaced local image is backed
+up under **Backups & Recovery**. The switch controls this device's sync.
+Disable it before testing changes in an isolated profile.
+
 ## Save Manager
 
-- **Personal save:** manage the three Adventure slots, shared unlocks and records.
+Select a slot from the Adventure list to open its editor. **Progress** shows
+initials, balloons, Trophy Races, amulets, keys and course progress. Use
+**Max Out This Save** or **Max Out This Slot** at the top of Progress.
+**Unlocks** and **Files** sit alongside Progress. **Apply Changes** and
+**Discard Changes** stay visible while the editor scrolls.
+
+
+- **Vanilla Save:** manage the Vanilla Adventure slots, progress and unlocks.
+- **Modded Save:** manage the Modded Adventure slots, progress and unlocks.
 - **Edit progress:** choose the intended slot before changing progress. Max Out
   and unlock actions save after confirmation. Manual edits need Apply Changes.
-- **Transfer & Paks:** import/export saves, Controller Paks and supported bundles.
+- **Transfer & Paks:** a bundle includes the selected Adventure and any shared
+  custom-course records and Controller Paks. Import an older bundle from the
+  Adventure tab where you want its progress to go.
+- **Reset Save:** reset the selected Adventure's slots, unlocks and built-in
+  records. The shared custom-course records and Controller Paks are kept.
 - **Online:** inspect the host's separate Adventure and choose progress for hosting.
-- **Backups & Recovery:** find older mod-set saves, history and recovery copies.
+- **Backups & Recovery:** find older saves and choose Vanilla or Modded as the restore destination.
 - **Development:** tools such as the Dev Menu use isolated development progress.
 
 Writes are checked by reading the saved bytes back. A draft opened before
@@ -53,8 +78,9 @@ the application. Android uses private app storage; use its export controls.
 Portable mode takes effect on the next application launch. It selects another
 location; it does not silently move saves, mods or settings. A config override
 can also select another profile. Check the selected location before assuming
-progress has disappeared. Personal desktop EEPROM is `saves/dkr.us.v77.bin`;
-both supported US revisions use the compatible stock layout.
+progress has disappeared. Vanilla uses `saves/dkr.us.v77.bin` and Modded
+uses `saves/modded/dkr.us.v77.bin`. Both supported US revisions use the
+compatible stock EEPROM layout.
 
 Back up your data before updating. To recover, export and inspect the surviving
 copy first, then restore it deliberately. No editor can recreate progress when
@@ -75,10 +101,9 @@ gameplay progress. See [Achievements](ACHIEVEMENTS.md) and [Spectators](SPECTATO
 
 Open Save Manager from **Play > Save Manager**. The three-light summary in Play
 describes Vanilla, Modded or Online, with Using for a running session and Next
-for the next launch. A modded label does not create a separate offline save: ordinary
-offline mods still share personal Adventure. The accepted route is frozen until
-the running game/lobby releases it. Session mods changes the next content set
-without changing individual selections, copying progress or deleting saves.
+for the next launch. The save chosen at launch stays active until the game
+or lobby ends. Session Mods changes the save and content for the next offline
+launch while preserving your individual mod selections.
 
 Save Manager keeps its pending-changes bar against the panel edges while the
 editor scrolls. Discard and Apply retain their existing backup and conflict

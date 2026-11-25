@@ -16,6 +16,8 @@ int main() {
         io.IniFilename = nullptr;
         io.DisplaySize = {1280, 800};
         io.DeltaTime = 1.F / 60;
+        ImGui::GetStyle().WindowPadding = {0.0F, 0.0F};
+        ImGui::GetStyle().WindowRounding = 0.0F;
         auto* font = io.Fonts->AddFontDefault();
         MergeLocalisationFonts(io.Fonts);
         unsigned char* pixels = nullptr;
@@ -51,11 +53,23 @@ int main() {
             const auto popup_id = ImGui::GetID("Settings##dialog");
             ImGui::OpenPopup("Settings##dialog");
             bool popup_open = true;
+            if (surface == 1) {
+                ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, {26.0F, 24.0F});
+                ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 18.0F);
+            }
             if (ImGui::UiBeginPopupModal("Settings##dialog", &popup_open)) {
-                assert(ImGui::GetCurrentWindow()->PopupId == popup_id);
+                const auto* dialog = ImGui::GetCurrentWindow();
+                assert(dialog->PopupId == popup_id);
+                assert(dialog->WindowPadding.x == (surface == 0 ? 18.0F : 26.0F));
+                assert(dialog->WindowPadding.y == (surface == 0 ? 14.0F : 24.0F));
+                assert(dialog->WindowRounding == (surface == 0 ? 16.0F : 18.0F));
                 ImGui::CloseCurrentPopup();
                 ImGui::EndPopup();
             }
+            if (surface == 1)
+                ImGui::PopStyleVar(2);
+            assert(ImGui::GetStyle().WindowPadding.x == 0.0F && ImGui::GetStyle().WindowPadding.y == 0.0F);
+            assert(ImGui::GetStyle().WindowRounding == 0.0F);
             ImGui::UiTextUnformatted("Language");
             ImGui::UiText("100% %s %n"); // prose is data when there are no format arguments
             const auto text = ui::text("nav.controls");

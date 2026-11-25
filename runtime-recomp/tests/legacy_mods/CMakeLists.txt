@@ -4,6 +4,11 @@ set(BUILD_TESTING ON)
 set(CMAKE_C_STANDARD 17)
 set(CMAKE_CXX_STANDARD 20)
 get_filename_component(DKRPORT_ROOT "${CMAKE_CURRENT_LIST_DIR}/../../.." ABSOLUTE)
+if(NOT DEFINED DKR_DEPENDENCIES_DIR)
+    set(DKR_DEPENDENCIES_DIR "${DKRPORT_ROOT}/extern")
+endif()
+include("${DKRPORT_ROOT}/runtime-recomp/cmake/GuestSymbols.cmake")
+dkr_guest_symbols_everywhere()
 include("${DKRPORT_ROOT}/runtime-recomp/cmake/LegacyMods.cmake")
 # These four link code that only the full runtime provides (achievements, saves, road wheels,
 # the launcher UI). The rest of this project builds without it.

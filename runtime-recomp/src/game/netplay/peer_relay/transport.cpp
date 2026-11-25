@@ -1,5 +1,6 @@
 #include "../../session_log.hpp"
 #include "transport.hpp"
+#include "netplay/session_links/transport.hpp"
 #include "live_datagram.hpp"
 #include "online_stability/traffic_meter.hpp"
 #include "online_stability/live_send_capacity.hpp"
@@ -77,7 +78,7 @@ bool endpoint(std::string value, net::PeerAddress& address) {
         return false;
     }
 }
-class Transport final : public net::SessionTransport {
+class Transport final : public net::SessionTransport, public net::links::IntroducedTransport {
   public:
     Transport(const void* key, std::unique_ptr<net::SessionTransport> base, NetworkOptions options)
         : key_(key), base_(std::move(base)), options_(std::move(options)), events_(std::make_shared<Events>()),
@@ -189,6 +190,25 @@ class Transport final : public net::SessionTransport {
     }
     std::uint16_t local_port() const override {
         return base_->local_port();
+    }
+    std::string local_peer_name() const override {
+        return net::links::local_peer_name(*base_);
+    }
+    std::string peer_name(const net::PeerAddress& address) const override {
+        return net::links::peer_name(*base_, address);
+    }
+    bool introduce_peer(std::string_view endpoint, bool initiate, net::PeerAddress& address,
+                        std::string& error) override {
+        return net::links::introduce_peer(*base_, endpoint, initiate, address, error);
+    }
+    bool prepare_host(std::string bootstrap, std::string& error) override {
+        return net::links::prepare_host(*base_, std::move(bootstrap), error);
+    }
+    bool alias_peer(const net::PeerAddress& address, std::string_view name, std::string& error) override {
+        return net::links::alias_peer(*base_, address, name, error);
+    }
+    bool apply_host_role(bool host, std::string_view remote, std::string& error) override {
+        return net::links::apply_host_role(*base_, host, remote, error);
     }
     net::DatagramSendStatus send_status(const net::PeerAddress& to, std::span<const std::uint8_t> bytes,
                                         net::TransportTrafficClass traffic, std::string& error) override {

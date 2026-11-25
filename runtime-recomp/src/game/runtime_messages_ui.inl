@@ -11,7 +11,9 @@ void DrawTechnicalDetails(std::string_view diagnostic, const char* label = "Deta
     const auto caption = dkr::localisation::label(label);
     if (ImGui::CollapsingHeader(caption.c_str())) {
         const float height = std::clamp(ImGui::GetIO().DisplaySize.y * 0.22F, 70.0F, 180.0F);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, {12.0F, 10.0F});
         ImGui::BeginChild("##technical-text", {0.0F, height}, true);
+        ImGui::PopStyleVar();
         PaddockText(PaddockReading(14.0F, false, 1.5F), PaddockRgb(0xB0C9CC), diagnostic,
                     std::max(ImGui::GetContentRegionAvail().x, 1.0F));
         ImGui::EndChild();

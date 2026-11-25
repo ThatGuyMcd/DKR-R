@@ -3,25 +3,20 @@
 // repairs, resets and the Save Builder go through dkr::runtime::saves exactly
 // as before.
 //
-// SAVE MANAGER in the look of tools/launcher-html (pages/saves.js,
-// styles/saves.css): the current save, then Overview / Edit progress /
-// Transfer & Paks. Edits stay in a draft until they are applied, and every
-// replacing action asks first.
+// The slot list and editor share each scope's draft. File operations and
+// quick actions keep the same confirmation and backup flow.
+
+enum class SaveEditorSection { Progress, Unlocks, Files };
 
 struct SavesPageState {
     ImGuiContext* context = nullptr;
     int last_frame = -100;
-    int section = 0; // Overview, Edit progress, Transfer & Paks
-    int scope = 0;   // Offline, Online, Modded, Recovery
-    int tab = 0;     // Slot 1-3, Unlocks, Records
-    std::array<bool, 3> courses_open{};
-    std::array<bool, 2> records_open{};
-    bool all_backups = false;
-    // The save as it was loaded into the builder, to tell a draft's changes.
-    std::optional<dkr::runtime::saves::codec::SaveImage> original;
-    // The slot summaries on Overview, read again with the view cache.
-    std::optional<dkr::runtime::saves::codec::SaveImage> summary;
-    std::chrono::steady_clock::time_point summary_at{};
+    SaveEditorSection section = SaveEditorSection::Progress;
+    int scope = 0; // Vanilla, Online, Modded, Recovery
+    bool personal_modded = false;
+    bool import_modded = false;
+    int selected_slot = 0;
+    bool scroll_editor_to_top = false;
     // The confirmation in flight.
     enum class Ask {
         None,
@@ -45,9 +40,8 @@ struct SavesPageState {
 SavesPageState g_saves_page;
 
 constexpr unsigned kSavesAccent = 0x1AC2A3;
-constexpr unsigned kSavesError = 0xFFAAA0;
 
-enum class SavesTone { Plain, Primary, Danger };
+enum class SavesTone { Plain, Primary, Featured, Danger };
 
 // .saves-button: a race button on the page's quiet #123e50, or the accent
 // primary, or the danger red.
@@ -60,6 +54,9 @@ bool SavesRaceButton(const char* label, float width = 0.0F, SavesTone tone = Sav
         look.border = kSavesAccent;
         look.text = 0x062C30;
         look.text_shadow = false;
+    } else if (tone == SavesTone::Featured) {
+        look.fill = 0xAD481C;
+        look.border = kSetWarm;
     } else if (tone == SavesTone::Danger) {
         look.fill = 0x73171A;
         look.border = 0xD97773;
@@ -116,76 +113,13 @@ std::string SavesBackupTime(const std::filesystem::path& path) {
     return text;
 }
 
-bool SavesDraftDirty() {
+bool SavesDraftDirty(const AdventureDraft& draft) {
     using dkr::runtime::saves::codec::encode;
-    return g_save_builder_image && g_saves_page.original &&
-           encode(*g_save_builder_image) != encode(*g_saves_page.original);
-}
-
-void SavesForgetDraft() {
-    g_save_builder_image.reset();
-    g_saves_page.original.reset();
-    g_saves_page.summary.reset();
+    return draft.image && draft.original && encode(*draft.image) != encode(*draft.original);
 }
 
 // ------------------------------------------------------------ editor
 
-// A row of quiet tabs over a hairline (.saves-tabs).
-int SavesEditorTabs(const std::vector<const char*>& labels, int current, float width) {
-    const PaddockType type = PaddockSign(17.0F, 1.2F, 0.0F);
-    const ImVec2 at = ImGui::GetCursorScreenPos();
-    ImDrawList* draw = ImGui::GetWindowDrawList();
-    float natural = 8.0F + 4.0F * static_cast<float>(labels.size() - 1U);
-    std::vector<float> widths;
-    for (const char* label : labels) {
-        widths.push_back(std::ceil(PaddockMeasure(type, label) + 28.0F));
-        natural += widths.back();
-    }
-    // flex: 1 0 auto shares the spare room between the tabs.
-    const float spare = std::max(width - natural, 0.0F) / static_cast<float>(labels.size());
-    int picked = -1;
-    float x = at.x + 4.0F;
-    for (std::size_t index = 0; index < labels.size(); ++index) {
-        const float tab_width = widths[index] + spare;
-        ImGui::SetCursorScreenPos({x, at.y + 4.0F});
-        ImGui::PushID(static_cast<int>(index));
-        const PaddockPress press = PaddockBeginPress("##tab", {tab_width, 44.0F});
-        ImGui::PopID();
-        if (press.pressed)
-            picked = static_cast<int>(index);
-        const bool selected = static_cast<int>(index) == current;
-        const PaddockRadii radii{6.0F, 6.0F, 0.0F, 0.0F};
-        if (selected) {
-            PaddockFill(draw, press.min, press.max, radii, PaddockCol(0x123E50));
-        } else if (press.hover > 0.0F) {
-            PaddockFill(draw, press.min, press.max, radii,
-                        PaddockApply(PaddockMix(PaddockRgb(0x174C60, 0U), PaddockRgb(0x174C60), press.hover)));
-        }
-        if (selected) {
-            draw->AddRectFilled({press.min.x, press.max.y - 3.0F}, press.max, PaddockCol(kSetWarm));
-        }
-        const unsigned ink = selected ? 0xFFF0C2U : press.hover > 0.5F ? kSetText : kSetMuted;
-        const float text_width = PaddockMeasure(type, labels[index]);
-        PaddockDrawRun(draw, type,
-                       {std::round(press.min.x + (tab_width - text_width) * 0.5F),
-                        std::round(press.min.y + (44.0F - 3.0F - type.line) * 0.5F)},
-                       PaddockCol(ink), labels[index], labels[index] + std::strlen(labels[index]));
-        PaddockEndPress(press, 6.0F, 1.0F, false);
-        if (press.focused) {
-            draw->AddRect({press.min.x + 1.5F, press.min.y + 1.5F}, {press.max.x - 1.5F, press.max.y - 1.5F},
-                          PaddockCol(kSetFocus), 6.0F, 0, 3.0F);
-        }
-        x += tab_width + 4.0F;
-    }
-    const float bottom = at.y + 4.0F + 44.0F;
-    draw->AddRectFilled({at.x, bottom}, {at.x + width, bottom + 1.0F}, PaddockCol(kSetBorder));
-    ImGui::SetCursorScreenPos(at);
-    ImGui::Dummy({width, bottom + 1.0F - at.y});
-    return picked;
-}
-
-// A grid of settings (.saves-setting-grid): three columns, two below 780 px of
-// panel and one below 540 px.
 struct SavesGrid {
     int count = 0;
     ImVec2 origin{};
@@ -195,7 +129,7 @@ struct SavesGrid {
     float row_bottom = 0.0F;
 
     SavesGrid(float width, float panel) : origin(ImGui::GetCursorScreenPos()) {
-        per_row = panel <= 540.0F ? 1 : panel <= 780.0F ? 2 : 3;
+        per_row = panel < 375.0F ? 1 : panel < 545.0F ? 2 : 3;
         column = std::floor((width - 16.0F * static_cast<float>(per_row - 1)) / static_cast<float>(per_row));
         row_top = row_bottom = origin.y;
     }
@@ -219,14 +153,27 @@ struct SavesGrid {
     }
 };
 
-void DrawSavesSlotEditor(SavesPageState& state, float width, float panel, int slot_index) {
+void DrawSavesSlotEditor(SavesPageState& state, float outer, int slot_index) {
     using namespace dkr::runtime::saves::codec;
-    AdventureSlot& slot = g_save_builder_image->slots[static_cast<std::size_t>(slot_index)];
+    AdventureSlot& slot = g_adventure_drafts[state.personal_modded].image->slots[static_cast<std::size_t>(slot_index)];
     ImGui::PushID(slot_index);
-    PaddockText(PaddockSign(19.0F, 1.45F, 0.0F), PaddockRgb(kSetText), "Racer initials", width);
-    PaddockGap(13.0F);
+    const auto paint = [](ImDrawList* draw, ImVec2 min, ImVec2 max) {
+        PaddockPanel(draw, min, max, {PaddockRound(9.0F), PaddockRgb(0x102E40), PaddockRgb(kSetBorder), 1.0F});
+    };
+    const auto title = [](const char* caption, float width) {
+        PaddockText(PaddockSign(19.0F, 1.2F, 0.0F), PaddockRgb(kSetText), caption, width);
+        PaddockGap(8.0F);
+    };
+
+    PaddockBox balloon_box(outer, {10.0F, 10.0F});
+    const float width = balloon_box.Inner();
+    title("Golden balloons", width);
+    const auto summary = ImGui::GetCursorScreenPos();
+    const float initials_width = std::min(width, 290.0F);
+    PaddockText(PaddockReading(16.0F, true, 1.25F), PaddockRgb(kSetText), "Racer initials", initials_width);
+    PaddockGap(6.0F);
     {
-        // Three letter pickers, 280 px wide together (.saves-initials).
+        // Three letter pickers sized for the widest initial (.saves-initials).
         static const std::vector<SettingsChoice> kLetters = [] {
             std::vector<SettingsChoice> letters;
             for (char letter = 'A'; letter <= 'Z'; ++letter)
@@ -238,7 +185,7 @@ void DrawSavesSlotEditor(SavesPageState& state, float width, float panel, int sl
         }();
         std::string padded = sanitise_name(slot.name);
         padded.resize(3U, ' ');
-        const float cell = std::floor((std::min(width, 280.0F) - 16.0F) / 3.0F);
+        const float cell = std::floor((initials_width - 16.0F) / 3.0F);
         const ImVec2 at = ImGui::GetCursorScreenPos();
         for (int character = 0; character < 3; ++character) {
             ImGui::SetCursorScreenPos({at.x + (cell + 8.0F) * static_cast<float>(character), at.y});
@@ -261,26 +208,26 @@ void DrawSavesSlotEditor(SavesPageState& state, float width, float panel, int sl
         }
         ImGui::SetCursorScreenPos({at.x, at.y + 52.0F});
         ImGui::Dummy({width, 0.0F});
-        PaddockGap(20.0F);
     }
-
-    SavesSeparator("Golden Balloons", width, false);
+    const float letters_bottom = ImGui::GetCursorScreenPos().y;
+    const bool inline_total = width >= initials_width + 170.0F;
+    const float total_width = inline_total ? width - initials_width - 16.0F : width;
+    if (inline_total)
+        ImGui::SetCursorScreenPos({summary.x + initials_width + 16.0F, summary.y + 24.0F});
+    else
+        PaddockGap(8.0F);
     int hub = static_cast<int>(hub_balloons(slot));
     const unsigned bonus = bonus_balloons(slot);
-    SavesNote(bonus > 0U ? "Up to 7 on the central island and 8 in each world. Remove the bonus balloons before "
-                           "lowering the central island."
-                         : "Up to 7 on the central island and 8 in each world. The total updates automatically.",
-              width);
     {
         // The total (.saves-progress): a dark bar that fills amber.
         const ImVec2 at = ImGui::GetCursorScreenPos();
         ImDrawList* draw = ImGui::GetWindowDrawList();
-        PaddockFill(draw, at, {at.x + width, at.y + 32.0F}, PaddockRound(6.0F), PaddockCol(0x153E50));
+        PaddockFill(draw, at, {at.x + total_width, at.y + 32.0F}, PaddockRound(6.0F), PaddockCol(0x153E50));
         const float t =
             std::min(1.0F, static_cast<float>(slot.balloons[0]) / static_cast<float>(kMaximumTotalBalloons));
         if (t > 0.0F) {
-            draw->PushClipRect(at, {at.x + width * t, at.y + 32.0F}, true);
-            PaddockFill(draw, at, {at.x + width, at.y + 32.0F}, PaddockRound(6.0F), PaddockCol(0x806000));
+            draw->PushClipRect(at, {at.x + total_width * t, at.y + 32.0F}, true);
+            PaddockFill(draw, at, {at.x + total_width, at.y + 32.0F}, PaddockRound(6.0F), PaddockCol(0x806000));
             draw->PopClipRect();
         }
         std::string total = std::to_string(slot.balloons[0] - bonus) + " / " + std::to_string(kMaximumTotalBalloons);
@@ -288,16 +235,20 @@ void DrawSavesSlotEditor(SavesPageState& state, float width, float panel, int sl
             total += " + " + std::to_string(bonus) + " bonus";
         const PaddockType type = PaddockReading(16.0F, true, 1.0F);
         const float text_width = PaddockMeasure(type, total);
-        PaddockDrawRun(draw, type,
-                       {std::round(at.x + (width - text_width) * 0.5F), std::round(at.y + (32.0F - type.line) * 0.5F)},
-                       PaddockCol(kSetText), total.data(), total.data() + total.size());
-        ImGui::Dummy({width, 32.0F});
+        PaddockDrawRun(
+            draw, type,
+            {std::round(at.x + (total_width - text_width) * 0.5F), std::round(at.y + (32.0F - type.line) * 0.5F)},
+            PaddockCol(kSetText), total.data(), total.data() + total.size());
+        ImGui::Dummy({total_width, 32.0F});
+        const float total_bottom = ImGui::GetItemRectMax().y;
+        ImGui::SetCursorScreenPos({summary.x, std::max(letters_bottom, total_bottom)});
+        ImGui::Dummy({width, 0.0F});
         PaddockGap(18.0F);
     }
     constexpr std::array<const char*, kWorldCount> kAreas{
-        {"DKR-R", "Dino Domain", "Sherbet Island", "Snowflake Mountain", "Dragon Forest", "Future Fun Land"}};
+        {"Central island", "Dino Domain", "Sherbet Island", "Snowflake Mountain", "Dragon Forest", "Future Fun Land"}};
     const auto count = [](int value) { return SettingsRangeValue{std::to_string(value), ""}; };
-    SavesGrid balloons(width, panel);
+    SavesGrid balloons(width, width);
     for (std::size_t area = 0; area < kWorldCount; ++area) {
         balloons.Begin();
         ImGui::PushID(static_cast<int>(area));
@@ -318,26 +269,49 @@ void DrawSavesSlotEditor(SavesPageState& state, float width, float panel, int sl
     }
     balloons.Finish(width);
 
-    SavesSeparator("Bonus balloons", width, false);
-    SavesNote("Extra balloons from the Free Balloon magic code. They need a full central island.", width);
-    SavesGrid extra(width, panel);
-    extra.Begin();
+    const auto bonus_row = ImGui::GetCursorScreenPos();
+    const float remove_width = SettingsButtonWidth("Remove bonus balloons");
+    const bool inline_bonus = width >= remove_width + 180.0F;
     int bonus_value = static_cast<int>(bonus_balloons(slot));
     const int bonus_limit = static_cast<int>(maximum_bonus_balloons(slot));
-    if (SettingsRange("##bonus-balloons", "Bonus balloons", &bonus_value, 0, bonus_limit, extra.column, count, {},
-                      bonus_limit == 0)) {
+    if (SettingsRange("##bonus-balloons", "Bonus balloons", &bonus_value, 0, bonus_limit,
+                      inline_bonus ? width - remove_width - 9.0F : width, count, {}, bonus_limit == 0)) {
         set_balloon_total(slot, hub_balloons(slot), static_cast<unsigned>(bonus_value));
     }
-    extra.End();
-    extra.Finish(width);
-    if (SavesRaceButton("REMOVE BONUS BALLOONS", 0.0F, SavesTone::Plain, bonus_balloons(slot) == 0U,
-                        "This slot has no bonus balloons.")) {
+    const float bonus_bottom = ImGui::GetCursorScreenPos().y;
+    if (inline_bonus)
+        ImGui::SetCursorScreenPos({bonus_row.x + width - remove_width, bonus_row.y});
+    if (SettingsButton("Remove bonus balloons", remove_width, bonus_balloons(slot) == 0U))
         set_balloon_total(slot, hub_balloons(slot), 0U);
-    }
-    PaddockGap(20.0F);
+    ImGui::SetCursorScreenPos({bonus_row.x, std::max(bonus_bottom, ImGui::GetItemRectMax().y)});
+    ImGui::Dummy({width, 0.0F});
+    balloon_box.End(paint);
 
-    SavesSeparator("Amulets and keys", width, false);
-    SavesGrid keys(width, panel);
+    PaddockGap(9.0F);
+    PaddockBox trophy_box(outer, {10.0F, 10.0F});
+    title("Trophy races", width);
+    constexpr std::array<const char*, 5> kTrophies{"Dino Domain", "Sherbet Island", "Snowflake Mountain",
+                                                   "Dragon Forest", "Future Fun Land"};
+    SavesGrid trophies(width, width);
+    for (std::size_t world = 0; world < kTrophies.size(); ++world) {
+        trophies.Begin();
+        ImGui::PushID(static_cast<int>(world));
+        const unsigned shift = static_cast<unsigned>(world) * 2;
+        int place = (slot.trophies >> shift) & 3;
+        if (SettingsDropdown("##trophy", kTrophies[world], &place, {"None", "Bronze", "Silver", "Gold"},
+                             trophies.column))
+            slot.trophies =
+                static_cast<std::uint16_t>((slot.trophies & ~(3U << shift)) | (static_cast<unsigned>(place) << shift));
+        ImGui::PopID();
+        trophies.End();
+    }
+    trophies.Finish(width);
+
+    trophy_box.End(paint);
+    PaddockGap(9.0F);
+    PaddockBox keys_box(outer, {10.0F, 10.0F});
+    title("Amulets and keys", width);
+    SavesGrid keys(width, width);
     keys.Begin();
     int tt = slot.tt_amulet;
     if (SettingsRange("##tt-amulet", "T.T. amulet pieces", &tt, 0, kMaximumAmuletPieces, keys.column, count)) {
@@ -369,36 +343,40 @@ void DrawSavesSlotEditor(SavesPageState& state, float width, float panel, int sl
     }
     keys.Finish(width);
 
-    bool& courses_open = state.courses_open[static_cast<std::size_t>(slot_index)];
-    if (SavesRaceButton(courses_open ? "HIDE COURSE PROGRESS (34)" : "SHOW COURSE PROGRESS (34)")) {
-        courses_open = !courses_open;
-    }
-    PaddockGap(16.0F);
-    if (courses_open) {
-        const auto& names = course_names();
-        SavesGrid courses(width, panel);
-        for (std::size_t course = 0; course < kCourseCount; ++course) {
+    keys_box.End(paint);
+    PaddockGap(9.0F);
+    PaddockBox courses_box(outer, {10.0F, 10.0F});
+    title("Course progress", width);
+    constexpr std::array<int, kCourseCount> kCourses{3,  1,  20, 5, 6,  8,  2,  21, 10, 4,  7,  19, 14, 13, 15, 22, 12,
+                                                     23, 11, 24, 9, 17, 18, 16, 26, 29, 27, 31, 0,  30, 28, 32, 25, 33};
+    const auto& names = course_names();
+    for (std::size_t group = 0; group <= kTrophies.size(); ++group) {
+        const char* title = group < kTrophies.size() ? kTrophies[group] : "Challenges and bosses";
+        PaddockText(PaddockReading(16.0F, true), PaddockRgb(kSetWarm), title, width);
+        PaddockGap(8.0F);
+        SavesGrid courses(width, width);
+        // Course IDs index the Adventure save's course status array.
+        const std::size_t last = group < kTrophies.size() ? (group + 1) * 4 : kCourses.size();
+        for (std::size_t index = group * 4; index < last; ++index) {
+            const int course = kCourses[index];
             courses.Begin();
-            ImGui::PushID(static_cast<int>(course));
+            ImGui::PushID(course);
             int status = slot.course_status[course];
             if (SettingsDropdown("course", names[course], &status,
-                                 {"Not started", "Race won", "Silver Coins won", "Complete"}, courses.column)) {
+                                 {"Not started", "Race won", "Silver Coins won", "Complete"}, courses.column))
                 slot.course_status[course] = static_cast<std::uint8_t>(status);
-            }
             ImGui::PopID();
             courses.End();
         }
         courses.Finish(width);
+        PaddockGap(14.0F);
     }
-    if (SavesRaceButton("MAX OUT THIS ADVENTURE")) {
-        state.ask = SavesPageState::Ask::MaxOut;
-        state.slot = slot_index;
-    }
+    courses_box.End(paint);
     ImGui::PopID();
 }
 
 void DrawSavesUnlocks(SavesPageState& state, float width, float panel) {
-    auto& settings = g_save_builder_image->settings;
+    auto& settings = g_adventure_drafts[state.personal_modded].image->settings;
     SavesGrid grid(width, panel);
     grid.Begin();
     SettingsCheck("##adventure-two", "Adventure Two", &settings.adventure_two, grid.column);
@@ -436,234 +414,69 @@ void DrawSavesUnlocks(SavesPageState& state, float width, float panel) {
         state.ask = SavesPageState::Ask::UnlockAll;
 }
 
-void DrawSavesRecords(SavesPageState& state, float width) {
-    using namespace dkr::runtime::saves::codec;
-    PaddockText(PaddockSign(19.0F, 1.45F, 0.0F), PaddockRgb(kSetText),
-                "Personal records are view-only. Race in Time Trial mode to set or improve them.", width);
-    PaddockGap(13.0F);
-    const std::array<std::pair<const char*, const std::array<Record, kRecordCount>*>, 2> kLists{{
-        {"Fastest laps", &g_save_builder_image->fastest_laps},
-        {"Course times", &g_save_builder_image->course_times},
-    }};
-    for (std::size_t list = 0; list < kLists.size(); ++list) {
-        ImGui::PushID(static_cast<int>(list));
-        // The summary (.saves-records summary): a quiet bar with a marker.
-        const PaddockPress press = PaddockBeginPress("##records", {width, 44.0F});
-        bool& open = state.records_open[list];
-        if (press.pressed)
-            open = !open;
-        ImDrawList* draw = ImGui::GetWindowDrawList();
-        PaddockFill(draw, press.min, press.max, PaddockRound(8.0F),
-                    PaddockApply(PaddockMix(PaddockRgb(0x123E50), PaddockRgb(0x174C60), press.hover)));
-        const PaddockType type = PaddockSign(19.0F, 1.2F, 0.0F);
-        const ImVec2 marker{press.min.x + 16.0F + 4.0F, (press.min.y + press.max.y) * 0.5F};
-        if (open) {
-            draw->AddTriangleFilled({marker.x - 4.5F, marker.y - 3.0F}, {marker.x + 4.5F, marker.y - 3.0F},
-                                    {marker.x, marker.y + 4.0F}, PaddockCol(kSetText));
-        } else {
-            draw->AddTriangleFilled({marker.x - 3.0F, marker.y - 4.5F}, {marker.x + 4.0F, marker.y},
-                                    {marker.x - 3.0F, marker.y + 4.5F}, PaddockCol(kSetText));
-        }
-        PaddockDrawRun(draw, type, {press.min.x + 36.0F, std::round(press.min.y + (44.0F - type.line) * 0.5F)},
-                       PaddockCol(kSetText), kLists[list].first, kLists[list].first + std::strlen(kLists[list].first));
-        PaddockEndPress(press, 8.0F, 1.0F);
-        if (open) {
-            const auto& records = *kLists[list].second;
-            for (std::size_t index = 0; index < records.size(); ++index) {
-                const ImVec2 at = ImGui::GetCursorScreenPos();
-                PaddockGap(12.0F);
-                PaddockText(PaddockReading(16.0F, false, 1.4F), PaddockRgb(kSetText), record_names()[index], width);
-                PaddockGap(4.0F);
-                std::string detail = "Time: " + (records[index].time != 0U ? FormatRecordTime(records[index].time)
-                                                                           : std::string("No personal record yet"));
-                if (records[index].time != 0U) {
-                    detail += "    Racer: " +
-                              (records[index].initials.empty() ? std::string("---") : records[index].initials);
-                }
-                PaddockText(PaddockReading(16.0F, false, 1.45F), PaddockRgb(kSetMuted), detail, width);
-                PaddockGap(12.0F);
-                const float bottom = ImGui::GetCursorScreenPos().y;
-                draw->AddRectFilled({at.x, bottom - 1.0F}, {at.x + width, bottom}, PaddockCol(kSetBorder));
-            }
-        }
-        PaddockGap(12.0F);
-        ImGui::PopID();
+bool LoadSavesEditorDraft(SavesPageState& state, bool valid) {
+    auto& draft = g_adventure_drafts[state.personal_modded];
+    if (draft.image || !valid)
+        return draft.image.has_value();
+    dkr::runtime::saves::codec::SaveImage image;
+    std::string error;
+    if (!dkr::runtime::saves::shared::load_draft(image, draft.revision, error, state.personal_modded)) {
+        g_save_manager_status = error;
+        return false;
     }
+    draft.original = image;
+    draft.image = std::move(image);
+    return true;
 }
 
-void DrawSavesEditor(SavesPageState& state, float width, float panel, bool editable, bool exists) {
-    using namespace dkr::runtime::saves;
-    if (!editable) {
-        SavesSeparator("A valid save is needed", width, false);
-        SavesNote(exists ? "Restore a valid backup or import a working save from Overview before editing."
-                         : "Start an adventure in the game, import a save, or create a fresh adventure from Overview.",
-                  width);
-        if (SavesRaceButton("GO TO OVERVIEW"))
-            state.section = 0;
-        return;
-    }
-    if (!g_save_builder_image) {
-        codec::SaveImage image{};
-        std::string error;
-        if (load_adventure(image, error)) {
-            // Opening the editor must not silently normalise existing progress.
-            g_save_builder_image = image;
-            state.original = image;
-            g_shared_draft_revision = dkr::runtime::saves::shared::revision();
-        } else {
-            g_save_manager_status = error;
-            return;
-        }
-    }
-    if (!state.original)
-        state.original = *g_save_builder_image;
-    SavesNote("Manual edits use Apply Changes. Completion and unlock buttons save when confirmed.", width);
-    const int picked = SavesEditorTabs({"SLOT 1", "SLOT 2", "SLOT 3", "UNLOCKS", "RECORDS"}, state.tab, width);
-    if (picked >= 0)
-        state.tab = picked;
-    PaddockGap(20.0F);
-    if (state.tab < 3)
-        DrawSavesSlotEditor(state, width, panel, state.tab);
-    else if (state.tab == 3)
-        DrawSavesUnlocks(state, width, panel);
-    else
-        DrawSavesRecords(state, width);
+struct SavesFooterLayout {
+    float discard_width;
+    float apply_width;
+    bool stacked;
+    float height;
+};
 
-    // The draft bar (.saves-draft-bar): it rides the bottom of the panel
-    // while the editor scrolls under it.
-    PaddockGap(20.0F);
-    const bool dirty = SavesDraftDirty();
-    const ImVec2 natural = ImGui::GetCursorScreenPos();
+SavesFooterLayout MeasureSavesFooter(float width) {
     const float discard_width = PaddockRaceButtonWidth("DISCARD CHANGES");
     const float apply_width = PaddockRaceButtonWidth("APPLY CHANGES");
-    const bool wraps = width - discard_width - apply_width - 24.0F < 180.0F;
-    const float bar_height = 1.0F + 16.0F + (wraps ? 49.0F + 12.0F + 44.0F : std::max(49.0F, 44.0F)) + 16.0F;
+    const bool stacked = width - discard_width - apply_width - 24.0F < 150.0F;
+    return {discard_width, apply_width, stacked, stacked ? 106.0F : 66.0F};
+}
+
+void DrawSavesDraftBar(const SavesPageState& state, float width, float top, const SavesFooterLayout& layout, bool dirty,
+                       bool locked, SavesPageState::Ask& ask) {
     ImGuiWindow* window = ImGui::GetCurrentWindow();
-    const float visible_bottom = PanelFooterBounds(window).Max.y;
-    const float top = std::min(natural.y, visible_bottom - bar_height);
+    const auto panel = PanelFooterBounds(window);
+    const float left = ImGui::GetCursorScreenPos().x;
     DrawPanelFooterBackground(window, top, PaddockCol(0x0A202C), PaddockCol(kSetBorder));
-    if (SaveDraftLayoutCheck())
-        g_save_draft_geometry = {
-            PanelFooterBounds(window),
-            {{window->Pos.x + window->WindowBorderSize, window->Pos.y + window->WindowBorderSize},
-             {window->Pos.x + window->Size.x - window->WindowBorderSize - window->ScrollbarSizes.x,
-              window->Pos.y + window->Size.y - window->WindowBorderSize - window->ScrollbarSizes.y}},
-            top,
-            dirty};
-    // Its own child window, so it stays above the editor it covers for both
-    // drawing and the pointer.
-    ImGui::SetCursorScreenPos({natural.x, top});
-    ImGui::BeginChild("##draft-bar", {width, bar_height}, false,
-                      ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse |
-                          ImGuiWindowFlags_NavFlattened | ImGuiWindowFlags_NoBackground);
-    ImGui::SetCursorScreenPos({natural.x, top + 17.0F});
-    ImGui::BeginGroup();
-    const float text_width = wraps ? width : width - discard_width - apply_width - 24.0F;
-    PaddockText(PaddockReading(17.0F, false, 1.5F), PaddockRgb(kSetText),
-                dirty ? "Unapplied changes" : "No pending changes", text_width);
-    PaddockText(PaddockReading(14.0F, false, 1.45F), PaddockRgb(kSetMuted), "Applying creates a backup first.",
-                text_width);
-    ImGui::EndGroup();
-    const float buttons_y = wraps ? top + 17.0F + 49.0F + 12.0F : top + 17.0F + (49.0F - 44.0F) * 0.5F;
-    ImGui::SetCursorScreenPos({wraps ? natural.x : natural.x + width - apply_width - 12.0F - discard_width, buttons_y});
-    if (SavesRaceButton("DISCARD CHANGES", discard_width, SavesTone::Plain, !dirty,
-                        "There are no changes to discard.")) {
-        state.ask = SavesPageState::Ask::Discard;
+    if (SaveDraftLayoutCheck()) {
+        g_save_draft_geometry.panel = panel;
+        g_save_draft_geometry.bounds = {
+            {window->Pos.x + window->WindowBorderSize, window->Pos.y + window->WindowBorderSize},
+            {window->Pos.x + window->Size.x - window->WindowBorderSize - window->ScrollbarSizes.x,
+             window->Pos.y + window->Size.y - window->WindowBorderSize - window->ScrollbarSizes.y}};
+        g_save_draft_geometry.top = top;
+        g_save_draft_geometry.dirty = dirty;
     }
+    ImGui::SetCursorScreenPos({left, top + (layout.stacked ? 10.0F : 17.0F)});
+    const float text_width = layout.stacked ? width : width - layout.discard_width - layout.apply_width - 24.0F;
+    const std::string_view status = state.personal_modded
+                                        ? (dirty ? "Modded Adventure · Unsaved changes" : "Modded Adventure")
+                                        : (dirty ? "Vanilla Adventure · Unsaved changes" : "Vanilla Adventure");
+    PaddockText(PaddockReading(16.0F, true, 1.25F), PaddockRgb(kSetText), status, text_width);
+
+    const float buttons_y = top + (layout.stacked ? 48.0F : 11.0F);
+    const float actions_width = layout.discard_width + layout.apply_width + 12.0F;
+    ImGui::SetCursorScreenPos({left + std::max(0.0F, width - actions_width), buttons_y});
+    if (SavesRaceButton("DISCARD CHANGES", layout.discard_width, SavesTone::Plain, locked || !dirty))
+        ask = SavesPageState::Ask::Discard;
     ImGui::SameLine(0.0F, 12.0F);
-    if (SavesRaceButton("APPLY CHANGES", apply_width, SavesTone::Primary, !dirty, "There are no changes to apply.")) {
-        state.ask = SavesPageState::Ask::Apply;
-    }
-    ImGui::EndChild();
-    ImGui::SetCursorScreenPos({natural.x, natural.y + bar_height});
-    ImGui::Dummy({width, 0.0F});
+    if (SavesRaceButton("APPLY CHANGES", layout.apply_width, SavesTone::Primary, locked || !dirty))
+        ask = SavesPageState::Ask::Apply;
+    LibraryNavigationPinnedAction(!locked && dirty ? ImGui::GetItemID() : 0);
 }
 
-// ------------------------------------------------------------ overview
-
-void DrawSavesOverview(SavesPageState& state, float width, float panel, const SaveManagerViewCache& view,
-                       bool editable) {
-    using namespace dkr::runtime::saves;
-    SavesNote(
-        "One personal save for normal play, with or without mods. Three Adventure slots, shared unlocks and records.",
-        width);
-    const bool busy = SharedSaveBusy();
-    const auto button = [&](const char* label, bool disabled = false, SavesTone tone = SavesTone::Plain) {
-        return SavesRaceButton(label, 0, tone, busy || disabled);
-    };
-    if (button("BACK UP SAVE", !editable, SavesTone::Primary))
-        BeginSharedSaveJob(
-            [](std::string& error) {
-                std::filesystem::path created;
-                return backup_adventure(created, error);
-            },
-            "Personal save backed up.");
-    PaddockGap(8);
-    if (button("EXPORT SAVE", !editable))
-        ExportAdventureWithDialog();
-    PaddockGap(8);
-    if (button("IMPORT SAVE"))
-        ImportAdventureWithDialog();
-    PaddockGap(14);
-    if (!view.adventure.exists) {
-        if (button("CREATE PERSONAL SAVE"))
-            state.ask = SavesPageState::Ask::Reset;
-        return;
-    }
-    if (editable) {
-        if (!state.summary && view.image)
-            state.summary = view.image;
-        if (state.summary) {
-            SavesSeparator("Adventure slots", width);
-            for (unsigned i = 0; i < 3; ++i) {
-                const auto& slot = state.summary->slots[i];
-                SavesNote("Slot " + std::to_string(i + 1) + " - " + (slot.name.empty() ? "---" : slot.name) + " - " +
-                              std::to_string(slot.balloons[0] - codec::bonus_balloons(slot)) + " / 47 balloons" +
-                              (codec::bonus_balloons(slot) > 0U
-                                   ? " + " + std::to_string(codec::bonus_balloons(slot)) + " bonus"
-                                   : ""),
-                          width, 18, kSetText);
-            }
-            const auto& settings = state.summary->settings;
-            SavesNote(std::string("Drumstick: ") + (settings.drumstick ? "unlocked" : "locked") + "   |   T.T.: " +
-                          (std::all_of(settings.tt_trials.begin(), settings.tt_trials.end(), [](bool x) { return x; })
-                               ? "unlocked"
-                               : "locked") +
-                          "   |   Adventure Two: " + (settings.adventure_two ? "unlocked" : "locked"),
-                      width);
-        }
-        if (button("MAX OUT ENTIRE SAVE", false, SavesTone::Primary)) {
-            state.slot = -1;
-            state.ask = SavesPageState::Ask::MaxOut;
-        }
-        PaddockGap(8);
-        if (button("UNLOCK ALL RACERS AND MODES"))
-            state.ask = SavesPageState::Ask::UnlockAll;
-        SavesSeparator("Development tools", width);
-        SavesNote(
-            "Dev Menu uses a separate copy, not this personal save. New development copies start from your saved progress. You can refresh an existing copy below; its previous progress is kept.",
-            width);
-        if (button("COPY PERSONAL SAVE TO DEVELOPMENT"))
-            state.ask = SavesPageState::Ask::DevelopmentCopy;
-    }
-    SavesSeparator("Older progress and backups", width);
-    SavesNote(
-        "Older mod-set saves are kept. Choose one from Backups & Recovery if it contains the progress you want to keep. Nothing is merged or deleted automatically.",
-        width);
-    if (button("OPEN BACKUPS & RECOVERY")) {
-        state.scope = 3;
-        state.ask = SavesPageState::Ask::None;
-    }
-    PaddockGap(20);
-    if (button("RESET PERSONAL SAVE", false, SavesTone::Danger))
-        state.ask = SavesPageState::Ask::Reset;
-    (void)panel;
-}
-
-// ------------------------------------------------------------ transfer
-
-// Complete manager actions and stored-save recovery. This replaces the old
-// split-profile UI, but keeps the proven slot/record editor above unchanged.
+// File tools shared by both Adventure saves.
 void SharedPakDialog(int port, bool importing) {
     if (SharedSaveBusy())
         return;
@@ -704,55 +517,156 @@ void SharedRawExportDialog(const std::filesystem::path& source) {
     }
     NFD_Quit();
 }
-void DrawSavesTransfer(float width, float panel, const SaveManagerViewCache& view) {
+struct SavesFileActions {
+    float width;
+    float used = 0.0F;
+
+    bool Button(const char* label, bool disabled = false, SettingsButtonTone tone = SettingsButtonTone::Plain) {
+        constexpr float gap = 8.0F;
+        const float size = std::min(width, SettingsButtonWidth(label));
+        if (used > 0.0F && used + gap + size <= width) {
+            ImGui::SameLine(0.0F, gap);
+            used += gap;
+        } else {
+            if (used > 0.0F)
+                PaddockGap(gap);
+            used = 0.0F;
+        }
+        used += size;
+        return SettingsButton(label, size, disabled, tone);
+    }
+};
+
+void DrawSavesFiles(SavesPageState& state, float width, const AdventureView& adventure,
+                    const SaveManagerViewCache& view) {
     using namespace dkr::runtime::saves;
-    SavesNote(
-        "Move your personal Adventure, custom-course records and Controller Paks together. Older save bundles can still be imported.",
-        width);
-    if (SavesRaceButton("EXPORT SAVE BUNDLE", 0, SavesTone::Plain, SharedSaveBusy()))
-        ExportSaveBundleWithDialog();
-    PaddockGap(8);
-    if (SavesRaceButton("IMPORT SAVE BUNDLE", 0, SavesTone::Plain, SharedSaveBusy()))
-        ImportSaveBundleWithDialog();
-    SavesSeparator("Controller Paks", width);
-    SavesNote("DKR-R virtual memory cards. Use DKR-R-format .mpk files, not an unrelated emulator format.", width);
+    const bool modded = state.personal_modded;
+    const bool busy = SharedSaveBusy();
+    const bool valid = adventure.info.valid;
+    const auto heading = [](const char* label, float available) {
+        PaddockText(PaddockSign(20.0F, 1.2F, 0.0F), PaddockRgb(kSetText), label, available);
+        PaddockGap(9.0F);
+    };
+
+    constexpr float gap = 12.0F;
+    const bool side_by_side = width >= 460.0F;
+    const float column = side_by_side ? std::floor((width - gap) * 0.5F) : width;
+    const ImVec2 top = ImGui::GetCursorScreenPos();
+    constexpr std::string_view adventure_help = "Back up, export or replace this Adventure.";
+    constexpr std::string_view bundle_help =
+        "Transfer this Adventure with shared custom-course records and Controller Paks.";
+    const auto note_type = PaddockReading(16.0F, false, 1.45F);
+    const float note_height = std::max(PaddockTextHeight(note_type, adventure_help, column),
+                                       PaddockTextHeight(note_type, bundle_help, column));
+    const auto transfer_note = [&](std::string_view note) {
+        SavesNote(note, column);
+        if (side_by_side)
+            PaddockGap(note_height - PaddockTextHeight(note_type, note, column));
+    };
+    ImGui::BeginGroup();
+    heading("Adventure save", column);
+    transfer_note(adventure_help);
+    SavesFileActions adventure_actions{column};
+    if (adventure_actions.Button("Back up save", busy || !valid))
+        BeginSharedSaveJob(
+            [modded](std::string& error) {
+                std::filesystem::path created;
+                return backup_adventure(created, error, modded);
+            },
+            "Adventure backed up.");
+    if (adventure_actions.Button("Export save", busy || !valid))
+        ExportAdventureWithDialog(adventure.info.path);
+    if (adventure_actions.Button("Import save", busy))
+        ImportAdventureWithDialog(modded);
+    if (!adventure.info.exists && adventure_actions.Button("Create personal save", busy))
+        state.ask = SavesPageState::Ask::Reset;
+    if (adventure.info.exists && !valid && adventure.info.size == 512 &&
+        adventure_actions.Button("Back up & repair checksums", busy))
+        state.ask = SavesPageState::Ask::Repair;
+    ImGui::EndGroup();
+    const float first_bottom = ImGui::GetItemRectMax().y;
+    ImGui::SetCursorScreenPos(side_by_side ? ImVec2{top.x + column + gap, top.y} : ImVec2{top.x, first_bottom + 16.0F});
+    ImGui::BeginGroup();
+    heading("Save bundle", column);
+    transfer_note(bundle_help);
+    SavesFileActions bundle_actions{column};
+    if (bundle_actions.Button("Export save bundle", busy))
+        ExportSaveBundleWithDialog(modded);
+    if (bundle_actions.Button("Import save bundle", busy))
+        ImportSaveBundleWithDialog(modded);
+    ImGui::EndGroup();
+    ImGui::SetCursorScreenPos({top.x, std::max(first_bottom, ImGui::GetItemRectMax().y)});
+    ImGui::Dummy({width, 0.0F});
+
+    SavesSeparator("Controller Paks", width, false);
+    SavesNote("Use DKR-R-format .mpk files for these virtual memory cards.", width);
     for (int port = 0; port < 4; ++port) {
         ImGui::PushID(port);
         const auto& pak = view.controller_paks[port];
-        SavesNote("Controller " + std::to_string(port + 1) + ": " +
-                      (!pak.exists ? "not created"
-                       : pak.valid ? "ready"
-                                   : "needs recovery"),
-                  width, 18, kSetText);
-        if (SavesRaceButton("BACK UP PAK", 0, SavesTone::Plain, SharedSaveBusy() || !pak.valid))
+        const std::string label = "Controller " + std::to_string(port + 1) + ": " +
+                                  (!pak.exists ? "not created"
+                                   : pak.valid ? "ready"
+                                               : "needs recovery");
+        const float actions_width = SettingsButtonWidth("Back up Pak") + SettingsButtonWidth("Export Pak") +
+                                    SettingsButtonWidth("Import Pak") + 16.0F;
+        constexpr float label_width = 192.0F;
+        const bool inline_actions = width >= label_width + gap + actions_width;
+        const ImVec2 row = ImGui::GetCursorScreenPos();
+        SavesNote(label, inline_actions ? label_width : width, 16.0F, kSetText);
+        if (inline_actions)
+            ImGui::SetCursorScreenPos({row.x + label_width + gap, row.y});
+        ImGui::BeginGroup();
+        SavesFileActions pak_actions{inline_actions ? width - label_width - gap : width};
+        if (pak_actions.Button("Back up Pak", busy || !pak.valid))
             BeginSharedSaveJob(
                 [port](std::string& error) {
                     std::filesystem::path created;
                     return backup_controller_pak(port, created, error);
                 },
                 "Controller Pak backed up.");
-        PaddockGap(8);
-        if (SavesRaceButton("EXPORT PAK", 0, SavesTone::Plain, SharedSaveBusy() || !pak.valid))
+        if (pak_actions.Button("Export Pak", busy || !pak.valid))
             SharedPakDialog(port, false);
-        PaddockGap(8);
-        if (SavesRaceButton("IMPORT PAK", 0, SavesTone::Plain, SharedSaveBusy()))
+        if (pak_actions.Button("Import Pak", busy))
             SharedPakDialog(port, true);
-        PaddockGap(18);
+        ImGui::EndGroup();
+        ImGui::SetCursorScreenPos({row.x, ImGui::GetItemRectMax().y + 9.0F});
+        ImGui::Dummy({width, 0.0F});
         ImGui::PopID();
     }
-    (void)panel;
+
+    SavesSeparator("Recovery and development", width, false);
+    SavesNote("Dev Menu uses a separate copy. Refreshing it keeps a backup of its previous progress.", width);
+    SavesFileActions recovery_actions{width};
+    if (recovery_actions.Button("Open Backups & Recovery", busy)) {
+        state.scope = 3;
+        state.ask = SavesPageState::Ask::None;
+    }
+    if (recovery_actions.Button("Copy personal save to development", busy || !valid))
+        state.ask = SavesPageState::Ask::DevelopmentCopy;
+    if (adventure.info.exists) {
+        SavesSeparator("Reset Adventure", width, false);
+        if (SavesRaceButton("RESET ADVENTURE", 0.0F, SavesTone::Danger, busy))
+            state.ask = SavesPageState::Ask::Reset;
+    }
 }
+
 void DrawSavesConfirmations(SavesPageState& state) {
     using namespace dkr::runtime::saves;
     using Ask = SavesPageState::Ask;
     static Ask shown = Ask::None;
-    if (state.ask == Ask::None)
+    if (state.ask == Ask::None) {
+        shown = Ask::None;
         return;
+    }
     if (shown != state.ask) {
         shown = state.ask;
         ImGui::OpenPopup("##saves-confirm");
     }
     std::string heading = "Confirm save change", detail, confirm = "CONFIRM";
+    const bool modded =
+        state.ask == Ask::Import || state.ask == Ask::Bundle ? state.import_modded : state.personal_modded;
+    auto& draft = g_adventure_drafts[modded];
+    const std::string adventure = modded ? "Modded Adventure" : "Vanilla Adventure";
     bool replace = true;
     static std::filesystem::path preview_source;
     static std::string preview_text;
@@ -762,18 +676,19 @@ void DrawSavesConfirmations(SavesPageState& state) {
     }
     switch (state.ask) {
     case Ask::Repair:
-        heading = "Repair personal save?";
+        heading = "Repair " + adventure + "?";
         detail =
             "Only checksums can be repaired. Damaged progress cannot be reconstructed. An unchanged original is preserved.";
         confirm = "REPAIR & KEEP ORIGINAL";
         break;
     case Ask::Reset:
-        heading = "Reset personal save?";
-        detail = "Reset all three slots, unlocks and records. Your current Adventure is backed up first.";
+        heading = "Reset " + adventure + "?";
+        detail =
+            "Reset all three slots, unlocks and built-in records in this Adventure. The current Adventure is backed up first.";
         confirm = "BACK UP & RESET";
         break;
     case Ask::Restore:
-        heading = "Use this as your personal save?";
+        heading = "Restore into " + adventure + "?";
         detail = preview_text;
         confirm = "BACK UP & USE THIS SAVE";
         break;
@@ -792,24 +707,25 @@ void DrawSavesConfirmations(SavesPageState& state) {
         break;
     case Ask::Discard:
         heading = "Discard editor changes?";
-        detail = "Reload your current personal save. Nothing on disk will be replaced.";
+        detail = "Reload " + adventure + " from disk.";
         confirm = "DISCARD DRAFT";
         replace = false;
         break;
     case Ask::Apply:
         heading = "Apply editor changes?";
-        detail = "Save the draft to your personal Adventure. A backup is created first.";
+        detail = "Save the draft to " + adventure + ". A backup is created first.";
         confirm = "BACK UP & APPLY";
         break;
     case Ask::Import:
-        heading = "Import personal save?";
+        heading = "Import into " + adventure + "?";
         detail = preview_text;
         confirm = "BACK UP & IMPORT";
         break;
     case Ask::Bundle:
-        heading = "Import save bundle?";
+        heading = "Import bundle into " + adventure + "?";
         detail =
-            "Replace the personal Adventure and Controller Paks included in this bundle. Originals are preserved in a recoverable transaction.";
+            "Import the Adventure into " + adventure +
+            " and replace any shared records and Controller Paks included in the bundle. Originals are kept in Recovery.";
         confirm = "BACK UP & IMPORT BUNDLE";
         break;
     case Ask::Pak:
@@ -850,56 +766,60 @@ void DrawSavesConfirmations(SavesPageState& state) {
     if (!state.restore.empty() && (state.ask == Ask::Import || state.ask == Ask::Restore ||
                                    state.ask == Ask::RepairUse || state.ask == Ask::Host))
         SavesNote(PathUtf8(state.restore), inner, 14);
-    if (replace && state.ask != Ask::Host)
-        SavesNote("Normal play and mods use this personal save. Online and development saves stay separate.", inner);
-    if (SavesDraftDirty() && state.ask != Ask::Apply && state.ask != Ask::MaxOut && state.ask != Ask::UnlockAll)
+    if (replace && state.ask != Ask::Host && state.ask != Ask::Pak)
+        SavesNote("Selected save: " + adventure, inner);
+    if (replace && state.ask != Ask::Host && state.ask != Ask::Pak && SavesDraftDirty(draft) &&
+        state.ask != Ask::Apply && state.ask != Ask::MaxOut && state.ask != Ask::UnlockAll)
         SavesNote("Your unapplied editor draft will be discarded after this succeeds.", inner);
-    const float height = 44;
-    const bool stack = PaddockRaceButtonWidth(confirm.c_str()) + PaddockRaceButtonWidth("CANCEL") + 12 > inner;
-    const float cell = stack ? inner : (inner - 12) * 0.5f;
-    bool close = false;
-    if (SavesRaceButton("CANCEL", cell))
-        close = true;
-    if (!stack)
-        ImGui::SameLine(0, 12);
+    constexpr float gap = 12.0F;
+    const float cancel_width = PaddockRaceButtonWidth("CANCEL");
+    const float confirm_width = PaddockRaceButtonWidth(confirm.c_str());
+    const float actions_width = cancel_width + gap + confirm_width;
+    const bool stack = actions_width > inner;
+    if (!stack) {
+        const ImVec2 at = ImGui::GetCursorScreenPos();
+        ImGui::SetCursorScreenPos({at.x + inner - actions_width, at.y});
+    }
+    bool close = SavesRaceButton("CANCEL", std::min(inner, cancel_width));
+    if (stack)
+        PaddockGap(8.0F);
     else
-        PaddockGap(10);
-    if (SavesRaceButton(confirm.c_str(), cell, SavesTone::Primary, SharedSaveBusy())) {
+        ImGui::SameLine(0.0F, gap);
+    const bool confirmed = confirm_width > inner
+                               ? SettingsButton(confirm.c_str(), inner, SharedSaveBusy(), SettingsButtonTone::Selected)
+                               : SavesRaceButton(confirm.c_str(), confirm_width, SavesTone::Primary, SharedSaveBusy());
+    if (confirmed) {
         const auto source = state.restore;
         const auto port = state.slot;
         if (state.ask == Ask::Discard) {
-            SavesForgetDraft();
-            g_shared_draft_revision.clear();
+            draft = {};
         } else if (state.ask == Ask::MaxOut || state.ask == Ask::UnlockAll || state.ask == Ask::Apply) {
             codec::SaveImage image;
             std::string error;
-            std::string expected = g_shared_draft_revision;
+            std::string expected = draft.revision;
             bool ready = false;
-            if (g_save_builder_image) {
-                image = *g_save_builder_image;
+            if (draft.image) {
+                image = *draft.image;
                 ready = true;
             } else {
-                expected = shared::revision();
-                ready = load_adventure(image, error);
+                ready = shared::load_draft(image, expected, error, modded);
             }
             if (ready) {
                 if (state.ask == Ask::MaxOut)
                     shared::complete(image, state.slot);
                 if (state.ask == Ask::UnlockAll)
                     shared::unlock(image);
-                BeginSharedSaveJob(
-                    [image = std::move(image), expected](std::string& error) {
-                        return shared::apply(image, expected, error);
-                    },
-                    "Personal save updated and read-back verified. Existing Dev Menu copies are separate; use Copy Personal Save to Development to refresh one.");
+                BeginSharedSaveJob([image = std::move(image), expected, modded](
+                                       std::string& error) { return shared::apply(image, expected, error, modded); },
+                                   adventure + " saved and verified.", modded);
             } else
                 g_save_manager_status = error;
         } else if (state.ask == Ask::Reset)
-            BeginSharedSaveJob([](std::string& error) { return shared::reset(error); },
-                               "Personal save reset. Previous progress and custom records are kept in Recovery.");
+            BeginSharedSaveJob([modded](std::string& error) { return shared::reset(error, modded); },
+                               adventure + " reset. Its previous progress is kept in Recovery.", modded);
         else if (state.ask == Ask::Bundle)
-            BeginSharedSaveJob([source](std::string& error) { return import_bundle(source, error); },
-                               "Save bundle imported. Original images are kept in the transaction archive.");
+            BeginSharedSaveJob([source, modded](std::string& error) { return import_bundle(source, error, modded); },
+                               "Save bundle imported. Original images are kept in the transaction archive.", modded);
         else if (state.ask == Ask::Pak)
             BeginSharedSaveJob(
                 [source, port](std::string& error) {
@@ -911,22 +831,22 @@ void DrawSavesConfirmations(SavesPageState& state) {
                                "Online Adventure selected. Personal progress was not changed.");
         else if (state.ask == Ask::DevelopmentCopy)
             BeginSharedSaveJob(
-                [](std::string& error) { return shared::queue_development_copy(error); },
+                [modded](std::string& error) { return shared::queue_development_copy(error, modded); },
                 "Personal save snapshot queued for the next offline development launch. Existing development progress will be preserved.");
         else if (state.ask == Ask::Repair)
             BeginSharedSaveJob(
-                [](std::string& error) {
+                [modded](std::string& error) {
                     bool changed;
                     std::filesystem::path original;
                     return shared::prepare(g_config_directory, error) &&
-                           repair_adventure_checksums(changed, original, error);
+                           repair_adventure_checksums(changed, original, error, modded);
                 },
-                "Checksum repair complete. Check your progress; the original was retained.");
+                "Checksum repair complete. The original was retained.", modded);
         else {
             const bool repair = state.ask == Ask::RepairUse;
             BeginSharedSaveJob(
-                [source, repair](std::string& error) { return shared::adopt(source, repair, error); },
-                "Personal save replaced. Both the selected original and previous progress were retained.");
+                [source, repair, modded](std::string& error) { return shared::adopt(source, repair, error, modded); },
+                adventure + " replaced. Both the selected original and previous progress were retained.", modded);
         }
         close = true;
     }
@@ -936,7 +856,6 @@ void DrawSavesConfirmations(SavesPageState& state) {
         state.restore.clear();
     }
     EndSettingsDialog();
-    (void)height;
 }
 
 struct SharedSaveInventory {
@@ -967,7 +886,7 @@ void DrawStoredSaves(SavesPageState& state, float width, bool locked) {
             std::map<std::tuple<int, int, std::string>, std::size_t> groups;
             std::vector<StoredAdventure> compact;
             for (auto& record : inventory.records) {
-                const auto bucket = record.scope == 0 ? 0 : record.scope == 1 ? 1 : 3;
+                const auto bucket = record.scope;
                 const auto key = std::tuple{bucket, int(record.kind), record.content_hash};
                 const auto [it, added] = groups.emplace(key, compact.size());
                 if (added)
@@ -982,14 +901,18 @@ void DrawStoredSaves(SavesPageState& state, float width, bool locked) {
     }
     if (pending.valid())
         SavesNote("Reading saved progress...", width);
-    SavesNote(
-        state.scope == 1
-            ? "Online Adventures are separate. The host can continue with different mods without switching saves."
-            : "Choose an older save to use as your personal Adventure. Original mod-set copies and backups are never removed automatically.",
-        width);
+    if (state.scope == 1) {
+        SavesNote("The host can continue the same Online Adventure with different mods.", width);
+    } else {
+        SavesNote("Choose which Adventure should receive the backup.", width);
+        const int target =
+            SettingsSectionSigns({"RESTORE TO VANILLA", "RESTORE TO MODDED"}, state.personal_modded, width);
+        if (target >= 0)
+            state.personal_modded = target == 1;
+    }
     bool found = false;
     for (const auto& record : inventory.records) {
-        if (state.scope == 1 ? (record.scope != 1) : (record.scope == 0 || record.scope == 1))
+        if (record.scope != state.scope)
             continue;
         found = true;
         ImGui::PushID(PathUtf8(record.info.path).c_str());
@@ -999,7 +922,6 @@ void DrawStoredSaves(SavesPageState& state, float width, bool locked) {
                            : record.kind == StoredSaveKind::ControllerPak    ? "Controller Pak backup"
                            : record.kind == StoredSaveKind::ExperimentalPaks ? "Online Controller Paks"
                            : state.scope == 1                                ? "Online Adventure"
-                           : record.scope == 2                               ? "Older mod-set Adventure"
                                                                              : "Adventure backup";
         SavesNote(label, inner, 17, kSetText);
         SavesNote(record.preview, inner);
@@ -1012,10 +934,9 @@ void DrawStoredSaves(SavesPageState& state, float width, bool locked) {
         if (development)
             SavesNote("Development image - contains tool-session progress, not ordinary play.", inner, 14, kSetWarm);
         if (adventure && !locked) {
-            if (SavesRaceButton(record.info.valid ? (state.scope == 1 ? "USE FOR HOSTING" : "USE AS PERSONAL SAVE")
-                                                  : "REPAIR & USE COPY",
-                                0, SavesTone::Primary,
-                                SharedSaveBusy() || (!record.info.valid && record.info.size != 512))) {
+            if (SavesRaceButton(
+                    record.info.valid ? (state.scope == 1 ? "USE FOR HOSTING" : "RESTORE BACKUP") : "REPAIR & USE COPY",
+                    0, SavesTone::Primary, SharedSaveBusy() || (!record.info.valid && record.info.size != 512))) {
                 state.restore = record.info.path;
                 state.ask = !record.info.valid ? SavesPageState::Ask::RepairUse
                             : state.scope == 1 ? SavesPageState::Ask::Host
@@ -1050,6 +971,172 @@ void DrawStoredSaves(SavesPageState& state, float width, bool locked) {
     }
 }
 
+#include "cloud_saves/ui.inl"
+
+void PaintSaveWorkspacePanel(ImDrawList* draw, ImVec2 min, ImVec2 max) {
+    PaddockPanel(draw, min, max, {PaddockRound(14), PaddockRgb(0x0B2B3B), PaddockRgb(kSetBorder), 1.0F});
+}
+
+float DrawSavesSlotList(SavesPageState& state, float width, float height, bool stacked,
+                        const dkr::runtime::saves::codec::SaveImage* image) {
+    constexpr float gap = 8.0F, pad = 12.0F;
+    PaddockBox box(width, {pad, pad}, stacked ? 0.0F : height);
+    PaddockText(PaddockReading(17.0F, true, 1.25F), PaddockRgb(kSetText), "Adventure slots", box.Inner());
+    PaddockGap(gap);
+    constexpr int count = static_cast<int>(dkr::runtime::saves::codec::kAdventureSlotCount);
+    const float item_width = stacked ? (box.Inner() - gap * (count - 1)) / count : box.Inner();
+    const auto row = ImGui::GetCursorScreenPos();
+    const float heading_height = row.y - box.Origin().y;
+    const float row_height =
+        stacked ? 68.0F : std::clamp((height - heading_height - pad - gap * (count - 1)) / count, 60.0F, 72.0F);
+    for (int index = 0; index < count; ++index) {
+        if (stacked)
+            ImGui::SetCursorScreenPos({row.x + static_cast<float>(index) * (item_width + gap), row.y});
+        ImGui::PushID(index);
+        const auto press = PaddockBeginPress("##adventure-slot", {item_width, row_height});
+        const bool active = index == state.selected_slot;
+        PaddockPanel(ImGui::GetWindowDrawList(), press.min, press.max,
+                     {PaddockRound(9),
+                      PaddockRgb(active          ? 0xA33620
+                                 : press.hovered ? 0x1C4F65
+                                                 : 0x12394B),
+                      PaddockRgb(active ? kSetWarm : kSetBorder), 1.0F});
+        const auto* slot = image ? &image->slots[static_cast<std::size_t>(index)] : nullptr;
+        const bool named = slot && slot->name.find_first_not_of(' ') != std::string::npos;
+        const bool occupied = slot && (named || slot->balloons[0] || slot->trophies);
+        const std::string name =
+            named ? slot->name : std::string(dkr::localisation::source(occupied ? "Unnamed" : "Empty"));
+        const std::string progress =
+            occupied ? std::to_string(slot->balloons[0]) + " " + std::string(dkr::localisation::source("balloons"))
+                     : std::string{};
+        const auto slot_label = std::string(dkr::localisation::source("Slot")) + " " + std::to_string(index + 1);
+        const auto small_text = PaddockReading(13.0F, false, 1.2F);
+        const auto large = PaddockReading(16.0F, true, 1.15F);
+        auto* draw = ImGui::GetWindowDrawList();
+        const float text_width = item_width - 18.0F;
+        const float x = press.min.x + 9.0F;
+        const PaddockTextStyle muted{PaddockCol(active ? 0xFFE1C5 : kSetMuted)};
+        const PaddockTextStyle ink{PaddockCol(kSetText)};
+        PaddockTextAt(draw, small_text, {x, press.min.y + 6.0F}, text_width, slot_label, muted);
+        PaddockTextAt(draw, large, {x, press.min.y + 25.0F}, text_width, name, ink);
+        PaddockTextAt(draw, small_text, {x, press.max.y - 20.0F}, text_width, progress, muted);
+        PaddockEndPress(press, 9.0F, 1.0F, true);
+        if (press.pressed) {
+            state.selected_slot = index;
+            state.section = SaveEditorSection::Progress;
+            state.scroll_editor_to_top = true;
+        }
+        ImGui::PopID();
+        if (!stacked && index + 1 < count)
+            PaddockGap(gap);
+    }
+    return box.End(PaintSaveWorkspacePanel);
+}
+
+void DrawSavesWorkspace(SavesPageState& state, float width, const SaveManagerViewCache& view,
+                        const AdventureView& adventure, bool locked) {
+    constexpr float pad = 12.0F, gap = 12.0F;
+    const bool valid = adventure.info.valid;
+    const bool loaded = LoadSavesEditorDraft(state, valid);
+    const auto& draft = g_adventure_drafts[state.personal_modded];
+    const auto* image = loaded ? &*draft.image : nullptr;
+    const auto footer = MeasureSavesFooter(width);
+    const auto start = ImGui::GetCursorScreenPos();
+    const float bottom = PanelFooterBounds(ImGui::GetCurrentWindow()).Max.y;
+    const float footer_top = bottom - footer.height;
+    const bool stacked = width < 530.0F;
+    const float list_width = stacked ? width : std::clamp(width * 0.28F, 154.0F, 292.0F);
+    const float right_width = stacked ? width : width - list_width - gap;
+    const float workspace_height = std::max(180.0F, footer_top - start.y - gap);
+
+    ImGui::PushID(state.personal_modded ? "modded-adventure" : "vanilla-adventure");
+    const float list_height = DrawSavesSlotList(state, list_width, workspace_height, stacked, image);
+    const ImVec2 editor = {stacked ? start.x : start.x + list_width + gap,
+                           stacked ? start.y + list_height + gap : start.y};
+    const float editor_height = std::max(100.0F, start.y + workspace_height - editor.y);
+    PaintSaveWorkspacePanel(ImGui::GetWindowDrawList(), editor, {editor.x + right_width, editor.y + editor_height});
+    ImGui::SetCursorScreenPos({editor.x + pad, editor.y + pad});
+    const float inner = right_width - pad * 2.0F;
+    const int section = SettingsSectionSigns({"PROGRESS", "UNLOCKS", "FILES"}, int(state.section), inner, true);
+    if (section >= 0 && section != int(state.section)) {
+        state.section = static_cast<SaveEditorSection>(section);
+        state.scroll_editor_to_top = true;
+    }
+    if (SaveDraftLayoutCheck()) {
+        g_save_draft_geometry.slots = {start, {start.x + list_width, start.y + list_height}};
+        g_save_draft_geometry.editor = {editor, {editor.x + right_width, editor.y + editor_height}};
+        g_save_draft_geometry.selected_slot = state.selected_slot;
+        g_save_draft_geometry.modded = state.personal_modded;
+    }
+    PaddockGap(8.0F);
+    if (state.section == SaveEditorSection::Progress && valid && loaded) {
+        constexpr const char* all_label = "MAX OUT THIS SAVE";
+        constexpr const char* slot_label = "Max out this slot";
+        const float all_width = PaddockRaceButtonWidth(all_label);
+        const float slot_width = SettingsButtonWidth(slot_label);
+        const auto summary_type = PaddockReading(15.0F, true, 1.25F);
+        const std::string summary =
+            std::string(dkr::localisation::source(state.personal_modded ? "Modded Adventure" : "Vanilla Adventure")) +
+            " / Slot " + std::to_string(state.selected_slot + 1);
+        const float summary_width = PaddockMeasure(summary_type, summary) + 2.0F;
+        const float action_width = all_width + slot_width + gap;
+        const ImVec2 header = {editor.x + pad, ImGui::GetCursorScreenPos().y};
+        const bool inline_summary = summary_width + action_width + gap <= inner;
+        ImGui::SetCursorScreenPos({header.x, header.y + (inline_summary ? 11.0F : 0.0F)});
+        PaddockText(summary_type, PaddockRgb(kSetText), summary, inner);
+        const ImVec2 actions = {header.x + (inline_summary ? inner - action_width : 0.0F),
+                                inline_summary ? header.y : ImGui::GetItemRectMax().y + 5.0F};
+        ImGui::SetCursorScreenPos(actions);
+        if (SavesRaceButton(all_label, std::min(inner, all_width), SavesTone::Featured, locked)) {
+            state.slot = -1;
+            state.ask = SavesPageState::Ask::MaxOut;
+        }
+        if (action_width <= inner)
+            ImGui::SameLine(0.0F, gap);
+        else
+            ImGui::SetCursorScreenPos({actions.x, actions.y + 50.0F});
+        if (SettingsButton(slot_label, std::min(inner, slot_width), locked)) {
+            state.slot = state.selected_slot;
+            state.ask = SavesPageState::Ask::MaxOut;
+        }
+        PaddockGap(10.0F);
+    }
+    const float body_top = ImGui::GetCursorScreenPos().y;
+    const float height = std::max(24.0F, editor.y + editor_height - pad - body_top);
+    ImGui::SetCursorScreenPos({editor.x + pad, body_top});
+    const bool visible = ImGui::BeginChild("##adventure-editor", {inner, height}, false,
+                                           ImGuiWindowFlags_NavFlattened | ImGuiWindowFlags_NoBackground);
+    LibraryNavigationScrollWindow(ImGui::GetCurrentWindow());
+    if (std::exchange(state.scroll_editor_to_top, false) || (SaveDraftLayoutCheck() && g_launcher_layout_step == 0))
+        ImGui::SetScrollY(0.0F);
+    if (SaveDraftLayoutCheck()) {
+        g_save_draft_geometry.editor_scroll = ImGui::GetScrollY();
+        g_save_draft_geometry.editor_body = ImGui::GetCurrentWindow()->OuterRectClipped;
+    }
+    if (visible) {
+        const float content_width = ImGui::GetContentRegionAvail().x - 4.0F;
+        ImGui::BeginDisabled(locked);
+        if (state.section == SaveEditorSection::Files) {
+            DrawSavesFiles(state, content_width, adventure, view);
+        } else if (!valid || !loaded) {
+            SavesNote(adventure.info.exists ? "This Adventure needs recovery." : "No Adventure save yet.",
+                      content_width, 17.0F, kSetWarm);
+            if (SavesRaceButton("OPEN FILES"))
+                state.section = SaveEditorSection::Files;
+        } else if (state.section == SaveEditorSection::Progress) {
+            DrawSavesSlotEditor(state, content_width, state.selected_slot);
+        } else if (state.section == SaveEditorSection::Unlocks) {
+            DrawSavesUnlocks(state, content_width, content_width);
+        }
+        ImGui::EndDisabled();
+        PaddockGap(8.0F);
+    }
+    ImGui::EndChild();
+    ImGui::PopID();
+    ImGui::SetCursorScreenPos({start.x, editor.y + editor_height});
+    DrawSavesDraftBar(state, width, footer_top, footer, SavesDraftDirty(draft), locked, state.ask);
+}
+
 void DrawSaveManagerPage(float available_width, bool live) {
     using namespace dkr::runtime::saves;
     auto& state = g_saves_page;
@@ -1058,79 +1145,63 @@ void DrawSaveManagerPage(float available_width, bool live) {
     const auto frame = ImGui::GetFrameCount();
     const bool entered = state.context != ImGui::GetCurrentContext() || state.last_frame != frame - 1;
     if (entered || generation != g_shared_save_generation) {
-        state.summary.reset();
         InvalidateSaveManagerViewCache();
         ++g_shared_save_generation;
         generation = g_shared_save_generation;
-        // Preserve a dirty draft, but compare its revision at commit time.
-        // A clean draft can be safely reloaded after gameplay/return.
-        if (!SavesDraftDirty())
-            SavesForgetDraft();
+        for (auto& draft : g_adventure_drafts)
+            if (!SavesDraftDirty(draft))
+                draft = {};
     }
     state.context = ImGui::GetCurrentContext();
     state.last_frame = frame;
     PumpSharedSaveJob();
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, {0, 0});
+    const auto heading = ImGui::GetCursorScreenPos();
     DrawPageHeading("SAVE MANAGER");
-    PaddockGap(14);
+    const auto after_heading = ImGui::GetCursorScreenPos();
+    ImGui::SetCursorScreenPos({heading.x + width - 116.0F, heading.y + 12.0F});
+    if (PaddockTextLink("Back to Play"))
+        g_page_navigation_request = kPagePlay;
+    ImGui::SetCursorScreenPos(after_heading);
+    PaddockGap(8);
     if (!g_save_manager_status.empty())
         DrawFriendlyStatus(g_save_manager_status, width, dkr::runtime::copy::Area::Saves);
     const bool lobby = dkr::runtime::netplay::session().active();
     const bool locked = live || lobby || SharedSaveBusy();
-    const int current = state.scope == 0 ? 0 : state.scope == 1 ? 2 : 1;
-    const int picked = SettingsSectionSigns({"YOUR SAVE", "BACKUPS & RECOVERY", "ONLINE SAVES"}, current, width);
-    if (picked >= 0) {
-        state.scope = picked == 0 ? 0 : picked == 2 ? 1 : 3;
+    constexpr std::array scopes{0, 2, 1, 3, 4};
+    const int current = static_cast<int>(std::ranges::find(scopes, state.scope) - scopes.begin());
+    const int picked = SettingsSectionSigns(
+        {"VANILLA SAVE", "MODDED SAVE", "ONLINE SAVES", "BACKUPS & RECOVERY", "CLOUD SAVES"}, current, width, true);
+    if (picked >= 0 && picked != current) {
+        state.scope = scopes[static_cast<std::size_t>(picked)];
         state.ask = SavesPageState::Ask::None;
         state.restore.clear();
+        state.scroll_editor_to_top = true;
+        ImGui::SetScrollY(0.0F);
     }
-    PaddockGap(20);
-    SavesNote("Return to the launcher and leave your lobby before changing saves.", width);
-    if (state.scope != 0)
+    if (state.scope == 0 || state.scope == 2)
+        state.personal_modded = state.scope == 2;
+    PaddockGap(8);
+    if (live || lobby)
+        SavesNote("Return to the launcher and leave your lobby before changing saves.", width);
+    if (state.scope == 4)
+        DrawCloudSaves(width, locked);
+    else if (state.scope != 0 && state.scope != 2)
         DrawStoredSaves(state, width, locked);
     else {
         const auto& view = CachedSaveManagerView();
-        const auto& info = view.adventure;
+        const auto& adventure = view.adventures[state.personal_modded];
         if (!view.valid) {
-            SavesNote("Reading your personal save...", width);
+            SavesNote("Reading your Adventure save...", width);
             ImGui::PopStyleVar();
             return;
         }
-        const bool valid = info.exists && info.valid;
-        SavesNote(valid         ? "YOUR PERSONAL ADVENTURE"
-                  : info.exists ? "YOUR SAVE NEEDS RECOVERY"
-                                : "NO PERSONAL SAVE YET",
-                  width, 19, valid ? kSavesAccent : kSetWarm);
-        if (lobby)
-            SavesNote("Leave the lobby before changing saves. You can export your personal save.", width);
-        if (SharedSaveBusy())
-            SavesNote("Finishing the save operation. Launch is temporarily held until it is safe.", width);
-        {
-            ImGui::BeginDisabled(locked);
-            if (!info.valid && info.exists && info.size == 512) {
-                if (SavesRaceButton("BACK UP & REPAIR CHECKSUMS", 0, SavesTone::Primary))
-                    state.ask = SavesPageState::Ask::Repair;
-                PaddockGap(12);
-            }
-            ImGui::EndDisabled();
-            const auto section =
-                SettingsSectionSigns({"OVERVIEW", "EDIT PROGRESS", "TRANSFER & PAKS"}, state.section, width);
-            if (section >= 0)
-                state.section = section;
-            PaddockGap(18);
-            ImGui::BeginDisabled(locked);
-            if (state.section == 1)
-                DrawSavesEditor(state, width, width, valid, info.exists);
-            else if (state.section == 2)
-                DrawSavesTransfer(width, width, view);
-            else
-                DrawSavesOverview(state, width, width, view, valid);
-            ImGui::EndDisabled();
-        }
+        DrawSavesWorkspace(state, width, view, adventure, locked);
     }
     if (!g_shared_save_import.path.empty() && !locked) {
         state.restore = std::move(g_shared_save_import.path);
         state.slot = g_shared_save_import.port;
+        state.import_modded = g_shared_save_import.modded;
         state.ask = g_shared_save_import.kind == 1   ? SavesPageState::Ask::Bundle
                     : g_shared_save_import.kind == 2 ? SavesPageState::Ask::Pak
                                                      : SavesPageState::Ask::Import;

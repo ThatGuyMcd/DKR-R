@@ -9,6 +9,8 @@
 namespace dkr::runtime::saves::records {
 void install(legacy::ModWorld&, std::uint8_t*);
 }
+#include "netplay/session_links/menu_control.hpp"
+#include "session_log.hpp"
 #include "probe_driver.hpp"
 #include "owned_game.hpp"
 #include "rom_revision.hpp"
@@ -325,7 +327,9 @@ class Component final : public SceneSimulation {
         independent_restore_ = independent_restore;
     }
     bool before_restore(std::uint64_t epoch, std::uint32_t first_frame, std::string& error) override {
-        if (presentation_ && !presentation_->retire_for_restore(epoch, first_frame)) {
+        if (presentation_ && !(independent_restore_ && !native_.pending_scene_site
+                                   ? presentation_->retire_for_correction(epoch, first_frame)
+                                   : presentation_->retire_for_restore(epoch, first_frame))) {
             error = "Owned render generation refused retirement.";
             return false;
         }
@@ -366,7 +370,7 @@ class Component final : public SceneSimulation {
             menu_tick_active() && host_control_ != unsigned(HostControlPolicy::EveryAssignedPort) &&
             (!native_.assigned_ports_released ||
              (host_control_ == unsigned(HostControlPolicy::HostSharedMenus) && menu_for_test() != 3));
-        return std::uint8_t(host_only ? 1 : owner_mask_ ? owner_mask_ : 15);
+        return std::uint8_t(host_only ? (1U << menu_owner_port_) : owner_mask_ ? owner_mask_ : 15);
     }
     RestoreStep prepare_tick(std::uint64_t epoch, std::uint32_t frame, bool agreed, std::string& error) override {
 #if DKR_PROBE_HAS_MOD_SERVICES
@@ -677,15 +681,15 @@ class Component final : public SceneSimulation {
         std::array<dkr_probe_pad, 4> pads;
         for (unsigned p = 0; p < 4; ++p) {
             const bool host_only =
-                menu_tick && p > 0 && host_control_ != unsigned(HostControlPolicy::EveryAssignedPort) &&
+                menu_tick && host_control_ != unsigned(HostControlPolicy::EveryAssignedPort) &&
                 (!native_.assigned_ports_released ||
                  (host_control_ == unsigned(HostControlPolicy::HostSharedMenus) && menu_for_test() != 3));
             // Filter at the logical simulation frame, never during hardware
             // sampling. Replay uses the SAME captured menu/release state and
             // immutable owner-final inputs; no local clock/input reinterpretation.
-            pads[p] = host_only || (owner_mask_ && !(owner_mask_ & (1U << p)))
-                          ? dkr_probe_pad{}
-                          : dkr_probe_pad{inputs[p].buttons, inputs[p].stick_x, inputs[p].stick_y};
+            const auto routed =
+                dkr::runtime::netplay::links::menu_control::input(inputs, menu_owner_port_, p, host_only, owner_mask_);
+            pads[p] = {routed.buttons, routed.stick_x, routed.stick_y};
         }
         dkr_probe_component_inputs(pads.data());
         dkr_probe_native_restore(native_);
@@ -1245,20 +1249,31 @@ class Component final : public SceneSimulation {
         return true;
     }
     bool publish_cpu_frame_for_test(PresentationMailbox& box, std::uint64_t epoch, std::uint32_t frame) {
-        if (!authored_cpu_ || native_.pending_scene_site)
+        if (!authored_cpu_ || native_.pending_scene_site) {
+            dkr::runtime::session_log::write(
+                "[online][picture-reject] epoch=%llu frame=%u authored=%u pending-scene=%u\n",
+                static_cast<unsigned long long>(epoch), frame, unsigned(authored_cpu_),
+                unsigned(native_.pending_scene_site));
             return false;
+        }
         const auto word = [&](unsigned offset) {
             std::uint32_t v;
             std::memcpy(&v, ram_.data() + offset, 4);
             return v;
         };
         const auto next_slot = word(DKR_PROBE_REVISION == 77 ? 0x1234E8 : 0x123A68);
-        if (next_slot > 1)
+        if (next_slot > 1) {
+            dkr::runtime::session_log::write("[online][picture-reject] epoch=%llu frame=%u next-slot=%u\n",
+                                             static_cast<unsigned long long>(epoch), frame, next_slot);
             return false;
+        }
         const auto slot = 1 - next_slot;
         const auto base = DKR_PROBE_REVISION == 77 ? 0x1211F0 : 0x121770;
-        if (published_preview_loads_ != native_.preview_loads && !box.retire_for_restore(epoch, frame))
+        if (published_preview_loads_ != native_.preview_loads && !box.retire_for_restore(epoch, frame)) {
+            dkr::runtime::session_log::write("[online][picture-reject] epoch=%llu frame=%u retirement=0\n",
+                                             static_cast<unsigned long long>(epoch), frame);
             return false;
+        }
         // Outside tick/commit/checkpoint: presentation ownership never rewinds
         // with guest RAM and never publishes a historical correction tick.
         const auto local_scene = scenery_.freeze(native_.presentation.scene);
@@ -1274,6 +1289,14 @@ class Component final : public SceneSimulation {
                                            ram_, draw_events_, local_scene);
         if (published)
             published_preview_loads_ = native_.preview_loads;
+        else {
+            const auto buffers = box.buffer_statistics();
+            dkr::runtime::session_log::write(
+                "[online][picture-reject] epoch=%llu frame=%u images=%zu reuses=%zu display=%08x-%08x framebuffer=%08x depth=%08x black=%u events=%zu\n",
+                static_cast<unsigned long long>(epoch), frame, buffers.image_allocations, buffers.image_reuses,
+                word(base + slot * 4), word(base + 8), native_.video_framebuffer, native_.video_depthbuffer,
+                unsigned(native_.video_black), draw_events_.size());
+        }
         return published;
     }
     unsigned pending_scene() const {
@@ -1923,6 +1946,7 @@ class Component final : public SceneSimulation {
     dkr_probe_native_state native_{};
     std::uint32_t owner_mask_ = 0;
     std::uint32_t host_control_ = 0;
+    unsigned menu_owner_port_ = dkr::runtime::netplay::links::menu_control::creating_port();
     std::vector<std::vector<std::uint8_t>> commits_;
     std::vector<dkr_owned_draw_event> draw_events_; // Derived anew by each completed tick, never a live registry.
     LocalSceneryCapture scenery_;                   // Immutable visuals; NEVER checkpoint/network state.

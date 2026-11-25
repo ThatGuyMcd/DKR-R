@@ -1,7 +1,6 @@
 """Patch Pipeline contracts for the 1050022 and 1050023 startup regressions."""
 
 from pathlib import Path
-import shutil
 import subprocess
 import tempfile
 import unittest
@@ -11,13 +10,18 @@ from source_text import Source
 ROOT = Path(__file__).resolve().parents[2]
 
 
+def copy_patch_input(source: Path, target: Path) -> None:
+    # The checked patches use LF; Windows dependency checkouts can use CRLF.
+    target.write_text(source.read_text(encoding="utf-8"), encoding="utf-8", newline="\n")
+
+
 class AndroidStartupContractTests(unittest.TestCase):
     def test_session_gate_reset_precedes_workers(self):
         relative = Path("librecomp/src/recomp.cpp")
         with tempfile.TemporaryDirectory(prefix="dkr-session-bootstrap-") as directory:
             stage = Path(directory)
             (stage / relative).parent.mkdir(parents=True)
-            shutil.copyfile(ROOT / "extern/n64-modern-runtime" / relative, stage / relative)
+            copy_patch_input(ROOT / "extern/n64-modern-runtime" / relative, stage / relative)
             subprocess.run(["git", "init", "--quiet", str(stage)], check=True)
             patch = str(ROOT / "patches/performance/runtime-session-bootstrap.patch")
             subprocess.run(["git", "-C", str(stage), "apply", "--recount", "--whitespace=error", patch], check=True)
@@ -44,7 +48,7 @@ class AndroidStartupContractTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="dkr-copy-contract-") as directory:
             stage = Path(directory)
             (stage / relative).parent.mkdir(parents=True)
-            shutil.copyfile(ROOT / "extern/rt64" / relative, stage / relative)
+            copy_patch_input(ROOT / "extern/rt64" / relative, stage / relative)
             subprocess.run(["git", "init", "--quiet", str(stage)], check=True)
             patch = str(ROOT / "patches/android/vulkan-copy-contract.patch")
             for extra in (["--check"], []):

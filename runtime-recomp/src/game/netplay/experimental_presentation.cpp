@@ -1,6 +1,7 @@
 #include "experimental_presentation.hpp"
 #include "experimental_checkpoint_hash.hpp"
 #include "experimental_performance.hpp"
+#include "online_presentation/correction_lifetime.hpp"
 #include <cstring>
 #include <array>
 #include <new>
@@ -11,6 +12,7 @@ struct SubmissionDomain {
     std::uint64_t epoch = 0, generation = 0;
     std::size_t in_flight = 0, consumers = 0;
     bool alive = true;
+    CorrectionLifetime<RenderSnapshot> corrections;
     // Two queued immutable images + latest pending + publication candidate,
     // one decoder, INCLUDING cached capacity: 80 MiB vanilla / 120 MiB
     // with portable code storage. Slot count never grows into a FIFO.
@@ -125,7 +127,7 @@ std::unique_ptr<SubmissionPermit> SubmissionPermit::acquire(std::shared_ptr<cons
     }
     auto& domain = *snapshot->domain_;
     std::scoped_lock lock(domain.mutex);
-    if (!domain.alive || domain.epoch != snapshot->epoch() || domain.generation != snapshot->generation()) {
+    if (!domain.alive || domain.epoch != snapshot->epoch() || !domain.corrections.eligible(snapshot.get())) {
         // An unclaimed candidate must not run the counted-release destructor.
         permit->snapshot_.reset();
         return {};
@@ -183,6 +185,7 @@ bool PresentationMailbox::begin_epoch(std::uint64_t epoch) {
         std::scoped_lock domain_lock(domain_->mutex);
         domain_->epoch = epoch_;
         domain_->generation = generation_;
+        domain_->corrections.reset();
     }
     return true;
 }
@@ -213,6 +216,11 @@ bool PresentationMailbox::publish(std::uint64_t epoch, RenderDescriptor descript
         // the race while its immutable image was being copied.
         if (epoch != epoch_ || generation != generation_ || (last_frame_ && descriptor.frame <= *last_frame_))
             return false;
+        {
+            std::scoped_lock domain_lock(domain_->mutex);
+            if (!domain_->corrections.publish(candidate))
+                return false;
+        }
         pending_ = std::move(candidate);
         last_frame_ = descriptor.frame;
         return true;
@@ -259,15 +267,23 @@ bool PresentationMailbox::retire_for_restore(std::uint64_t epoch, std::uint32_t 
     retire_locked(first);
     return true;
 }
-void PresentationMailbox::retire_locked(std::uint32_t first) {
-    // Even a previously valid older lease is conservatively retired. A real
-    // renderer must recheck this generation before presentation and retain
-    // its last completed image while a replacement is being produced.
+bool PresentationMailbox::retire_for_correction(std::uint64_t epoch, std::uint32_t first) {
+    std::scoped_lock lock(mutex_);
+    if (!epoch_ || epoch != epoch_ || generation_ == UINT64_MAX || first == UINT32_MAX)
+        return false;
+    retire_locked(first, true);
+    return true;
+}
+void PresentationMailbox::retire_locked(std::uint32_t first, bool correction) {
+    // An immutable picture survives only when it precedes every correction
+    // affecting its lease. Scene/resource retirement remains unconditional.
     ++generation_;
-    pending_.reset();
+    if (!correction || (pending_ && pending_->descriptor().frame >= first))
+        pending_.reset();
     {
         std::scoped_lock domain_lock(domain_->mutex);
         domain_->generation = generation_;
+        domain_->corrections.retire(first, correction);
     }
     if (last_frame_ && first <= *last_frame_)
         last_frame_ = first ? std::optional<std::uint32_t>(first - 1) : std::nullopt;
@@ -275,7 +291,9 @@ void PresentationMailbox::retire_locked(std::uint32_t first) {
 bool PresentationMailbox::is_current(const std::shared_ptr<const RenderSnapshot>& snapshot) const {
     std::scoped_lock lock(mutex_);
     const auto active = active_.lock();
-    return snapshot && active == snapshot && snapshot->epoch() == epoch_ && snapshot->generation() == generation_;
+    std::scoped_lock domain_lock(domain_->mutex);
+    return snapshot && active == snapshot && snapshot->epoch() == epoch_ &&
+           domain_->corrections.eligible(snapshot.get());
 }
 bool PresentationMailbox::quiescent() const {
     std::scoped_lock lock(mutex_);

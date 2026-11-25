@@ -403,55 +403,84 @@ void DrawLanguageSetting(float);
 #include "library_ui/automatic_ui.inl"
 #include "library_ui/handoff_ui.inl"
 
-void DrawPlayLaunchOptions(float width, bool entered, bool live) {
+void DrawPlayPortableSetting(float width, bool entered, bool live) {
+    if (!dkr::runtime::portable::supported())
+        return;
+    // Inspect only on page entry or an explicit click, never per-frame I/O.
+    static bool portable_enabled = false;
+    static std::string portable_status;
+    if (entered)
+        portable_enabled = dkr::runtime::portable::enabled();
     ImGui::BeginDisabled(live);
-    if (PaddockCheckbox("##skip-intro", "Skip intro", &g_skip_intro, width)) {
-        SaveSettings();
-    }
-    if (g_skip_intro) {
-        PaddockGap(12.0F);
-        if (SettingsDropdown("skip-intro-destination", "Start at", &g_skip_intro_destination,
-                             {"Start menu", "Character select"}, width, false, {}))
-            SaveSettings();
-    }
-    PaddockGap(8.0F);
-    if (g_skip_intro)
-        PaddockText(PaddockReading(14.0F, false, 1.5F), PaddockRgb(0xB0C9CC), "Offline launches only.", width);
-    PaddockGap(16.0F);
-    if (dkr::runtime::portable::supported()) {
-        // Inspect only on page entry or an explicit click, never per-frame I/O.
-        static bool portable_enabled = false;
-        static std::string portable_status;
-        if (entered)
+    if (PaddockCheckbox("##portable-mode", "Portable mode", &portable_enabled, width)) {
+        if (!dkr::runtime::portable::set_enabled(portable_enabled, portable_status))
             portable_enabled = dkr::runtime::portable::enabled();
-        if (PaddockCheckbox("##portable-mode", "Portable mode", &portable_enabled, width)) {
-            std::string error;
-            if (!dkr::runtime::portable::set_enabled(portable_enabled, error)) {
-                portable_enabled = dkr::runtime::portable::enabled();
-                portable_status = std::move(error);
-            } else {
-                portable_status = "Restart DKR-R to apply. Existing saves aren't moved automatically.";
-            }
-        }
-        PaddockGap(8.0F);
-        PaddockText(PaddockReading(14.0F, false, 1.5F), PaddockRgb(0xB0C9CC), "Keep saves and settings beside DKR-R.",
-                    width);
-        if (portable_enabled != dkr::runtime::portable::enabled_at_startup()) {
-            PaddockText(PaddockReading(14.0F, true, 1.5F), PaddockRgb(0xFFAB14), "Restart DKR-R to apply.", width);
-        }
-        if (!portable_status.empty()) {
-            if (dkr::runtime::copy::looks_like_error(portable_status))
-                DrawIssue(portable_status, dkr::runtime::copy::Area::Portable);
-            else
-                PaddockText(PaddockReading(14.0F, false, 1.5F), PaddockRgb(0xB0C9CC),
-                            "Existing saves aren't moved automatically.", width);
-        }
-        PaddockGap(16.0F);
+        else
+            portable_status.clear();
     }
     ImGui::EndDisabled();
-    DrawSkipLauncherSetting(width);
-    DrawLanguageSetting(width);
-    DrawPlaySaveSummary(width, live);
+    const auto help = PaddockReading(13.F, false, 1.4F);
+    PaddockText(help, PaddockRgb(0xB0C9CC), "Keep saves and settings beside DKR-R.", width);
+    if (!portable_status.empty())
+        DrawIssue(portable_status, dkr::runtime::copy::Area::Portable);
+    if (portable_enabled != dkr::runtime::portable::enabled_at_startup()) {
+        PaddockGap(4.F);
+        PaddockText(help, PaddockRgb(0xFFAB14), "Restart DKR-R to apply.", width);
+        PaddockText(help, PaddockRgb(0xB0C9CC), "Existing saves aren't moved automatically.", width);
+    }
+    PaddockGap(6.F);
+}
+
+void SettingsLabel(std::string_view label, float width);
+
+void DrawPlayLaunchOptions(float width, bool entered, bool live) {
+    constexpr float gap = 14.F;
+    const bool paired = width >= 318.F;
+    const float column = paired ? (width - gap) * .5F : width;
+    const auto at = ImGui::GetCursorScreenPos();
+    const float fields_x = paired ? at.x + column + gap : at.x;
+    const auto draw_skip_intro = [&] {
+        ImGui::BeginDisabled(live);
+        if (PaddockCheckbox("##skip-intro", "Skip intro", &g_skip_intro, column))
+            SaveSettings();
+        ImGui::EndDisabled();
+    };
+
+    ImGui::BeginGroup();
+    DrawPlayPortableSetting(column, entered, live);
+    DrawSkipLauncherSetting(column);
+    ImGui::EndGroup();
+    const float startup_bottom = ImGui::GetItemRectMax().y;
+
+    if (paired) {
+        ImGui::SetCursorScreenPos({fields_x, at.y});
+    } else {
+        PaddockGap(6.F);
+        draw_skip_intro();
+        PaddockGap(10.F);
+    }
+
+    ImGui::BeginGroup();
+    DrawLanguageSetting(column);
+    const float pair_top = std::max(startup_bottom, ImGui::GetCursorScreenPos().y) + 8.F;
+    float skip_y = pair_top;
+    if (g_skip_intro) {
+        ImGui::SetCursorScreenPos({fields_x, pair_top});
+        SettingsLabel("Start at", column);
+        // Match the centres of the 42 px checkbox row and the 52 px field.
+        skip_y = ImGui::GetCursorScreenPos().y + 5.F;
+        if (SettingsDropdown("skip-intro-destination", {}, &g_skip_intro_destination,
+                             {"Start menu", "Character select"}, column, live, {}))
+            SaveSettings();
+        PaddockGap(5.F);
+        PaddockText(PaddockReading(13.F, false, 1.4F), PaddockRgb(0xB0C9CC), "Offline launches only.", column);
+    }
+    ImGui::EndGroup();
+
+    if (paired) {
+        ImGui::SetCursorScreenPos({at.x, skip_y});
+        draw_skip_intro();
+    }
 }
 
 #include "library_ui/play_launch_bar.inl"
@@ -525,19 +554,21 @@ void DrawPlayPage(float available_width, const PlayPageContext& play, bool live 
         const std::size_t count = play.rom_catalog.size();
         const ImVec2 at = ImGui::GetCursorScreenPos();
         ImDrawList* draw = ImGui::GetWindowDrawList();
-        // The pass fills the panel, but its lights and ROM controls remain a
-        // readable, centred group. Narrow panels retain their existing layout.
-        constexpr float pass_chrome = 2.0F * 2.0F + 24.0F * 2.0F + 42.0F + 20.0F;
+        constexpr float panel_padding = 20.F, column_gap = 24.F;
+        constexpr float light_width = 42.F, light_gap = 16.F;
+        constexpr float pass_chrome = 2.F * panel_padding + light_width + light_gap;
         constexpr float rom_picker_width = 560.0F;
-        const bool side = width >= 780.F;
-        const float options_width = side ? std::clamp(width * .36F, 330.F, 640.F) : std::max(1.F, width - 52.F);
-        const float slot_width = side ? width - options_width - 32.F : width;
+        const bool side = width >= 720.F;
+        const float inner = std::max(1.F, width - 2.F * panel_padding);
+        const float options_width = side ? std::clamp(inner * .48F, 318.F, 690.F) : inner;
+        const float slot_width = side ? width - options_width - panel_padding - column_gap : width;
         const float content_width = std::min(slot_width, rom_picker_width + pass_chrome);
         const float content_x = at.x + std::floor((slot_width - content_width) * .5F);
         ImDrawListSplitter pass_layers;
         pass_layers.Split(draw, 2);
         pass_layers.SetCurrentChannel(draw, 1);
-        const float body_x = content_x + 2.0F + 24.0F + 42.0F + 20.0F;
+        const float content_left = content_x + panel_padding;
+        const float body_x = content_left + light_width + light_gap;
         const float body_width = std::max(content_width - pass_chrome, 1.0F);
         const PaddockType heading = PaddockSign(19.0F, 1.0F, 0.0F);
         const PaddockType file_type = PaddockReading(15.0F, true, 1.5F);
@@ -566,19 +597,20 @@ void DrawPlayPage(float available_width, const PlayPageContext& play, bool live 
         const char* secondary = !state.removed.empty() ? "Undo##rom"
                                 : count > 0U && ready  ? "Remove from list##rom"
                                                        : nullptr;
-        const float primary_width = std::max(240.0F, PaddockRaceButtonWidth(primary, 19.0F, 0.12F));
-        const float secondary_width = secondary != nullptr ? PlayTextButtonWidth(secondary) : 0.0F;
-        const bool actions_row = secondary == nullptr || primary_width + 16.0F + secondary_width <= body_width;
-        const float actions_height = actions_row ? 46.0F : 46.0F + 8.0F + 44.0F;
+        const float primary_width = std::max(168.F, PaddockRaceButtonWidth(primary, 19.F, .12F));
+        const float secondary_width = secondary != nullptr ? PlayTextButtonWidth(secondary) : 0.F;
+        constexpr float action_gap = 12.F;
+        const float content_inner = std::max(1.F, content_width - 2.F * panel_padding);
+        const float actions_width = primary_width + (secondary ? action_gap + secondary_width : 0.F);
+        const bool actions_row = actions_width <= content_inner;
+        const float action_x =
+            actions_row ? std::max(content_left, body_x - std::max(0.F, actions_width - body_width)) : body_x;
+        const float actions_height = actions_row || !secondary ? 46.F : 46.F + 6.F + 44.F;
         const float pick_width = std::min(body_width, rom_picker_width);
         const float pick_height = 4.0F + pick_label.line + 6.0F + 60.0F + 8.0F;
         const auto no_rom = dkr::localisation::source("Choose a Diddy Kong Racing ROM to start.");
         const float detail_height = count > 0U ? pick_height : PaddockTextHeight(file_type, no_rom, body_width);
         const float meta_height = PaddockTextHeight(meta_type, meta, body_width);
-        const float body_height =
-            6.0F + heading.line + 8.0F + detail_height + 2.0F + meta_height + 16.0F + actions_height;
-        const float height = 2.0F + 20.0F + std::max(112.0F, body_height) + 20.0F + 2.0F;
-
         // The border turns green with the last light.
         const float since = static_cast<float>(PaddockClock() - state.arrived_at);
         ImU32 border = PaddockRgb(ready ? 0x1AC2A3U : 0xE82E21U);
@@ -590,7 +622,7 @@ void DrawPlayPage(float available_width, const PlayPageContext& play, bool live 
         panel.fill = PaddockRgb(0x0B2E40, 245U);
         panel.border = border;
         panel.border_width = 2.0F;
-        DrawPlayLights(draw, {content_x + 2.0F + 24.0F, at.y + 2.0F + 20.0F}, ready, state.arrived_at);
+        DrawPlayLights(draw, {content_left, at.y + panel_padding}, ready, state.arrived_at);
 
         float y = at.y + 2.0F + 20.0F + 6.0F;
         const auto title = dkr::localisation::source(ready ? "Ready to race" : "ROM not loaded");
@@ -629,9 +661,9 @@ void DrawPlayPage(float available_width, const PlayPageContext& play, bool live 
         PaddockTextStyle meta_style;
         meta_style.colour = PaddockCol(meta_colour);
         PaddockTextAt(draw, meta_type, {body_x, y}, body_width, meta, meta_style);
-        y += meta_height + 16.0F;
+        y += meta_height + 10.F;
 
-        ImGui::SetCursorScreenPos({body_x, y});
+        ImGui::SetCursorScreenPos({action_x, y});
         if (state.focus == PlayPageState::Focus::Browse && !ready) {
             if (nav)
                 ImGui::SetKeyboardFocusHere();
@@ -642,12 +674,13 @@ void DrawPlayPage(float available_width, const PlayPageContext& play, bool live 
         look.hover_in = 0.12F;
         look.ellipsis_spread = 0.12F;
         ImGui::BeginDisabled(live || lobby || launch_modal);
-        if (PaddockRaceButton(primary, {std::min(body_width, primary_width), 46.0F}, look)) {
+        const float action_width = std::clamp(content_left + content_inner - action_x, 1.F, primary_width);
+        if (PaddockRaceButton(primary, {action_width, 46.F}, look)) {
             OpenRomBrowser(play.selected_rom);
         }
         if (secondary != nullptr) {
-            ImGui::SetCursorScreenPos(actions_row ? ImVec2{body_x + primary_width + 16.0F, y + 1.0F}
-                                                  : ImVec2{body_x - 8.0F, y + 46.0F + 8.0F});
+            ImGui::SetCursorScreenPos(actions_row ? ImVec2{action_x + primary_width + action_gap, y + 1.F}
+                                                  : ImVec2{body_x, y + 46.F + 6.F});
             if (state.removed.empty()) {
                 ImGui::BeginDisabled(lobby || launch_modal);
                 if (PlayTextButton(secondary, true)) {
@@ -664,23 +697,27 @@ void DrawPlayPage(float available_width, const PlayPageContext& play, bool live 
         }
         ImGui::EndDisabled();
         ImGui::PopStyleColor();
-        const float options_x = side ? at.x + width - options_width - 26.F : at.x + 26.F;
-        const float tools_width = side ? options_x - at.x - 58.F : width - 52.F;
-        const float tools_height = PlayToolsHeight(tools_width);
-        const float left_height = height + tools_height + 16.F;
-        const float options_y = side ? at.y + 26.F : at.y + left_height + 8.F;
+        ImGui::SetCursorScreenPos({content_left, y + actions_height + 14.F});
+        ImGui::BeginGroup();
+        DrawPlaySaveSummary(content_inner, live, launch_modal);
+        ImGui::EndGroup();
+        const float resume_bottom = ImGui::GetItemRectMax().y;
+
+        const float options_x = side ? at.x + width - panel_padding - options_width : at.x + panel_padding;
+        const float options_y = side ? at.y + panel_padding : resume_bottom + 6.F;
         ImGui::SetCursorScreenPos({options_x, options_y});
         ImGui::BeginGroup();
         DrawPlayLaunchOptions(options_width, entered, live);
         ImGui::EndGroup();
-        const float options_height = ImGui::GetItemRectSize().y;
-        const float final_height =
-            side ? std::max(left_height, options_height + 52.F) : left_height + options_height + 34.F;
-        ImGui::SetCursorScreenPos({at.x + 26.F, at.y + (side ? final_height : left_height) - 26.F - tools_height});
-        DrawPlayTools(tools_width);
+        const float tools_y = std::max(resume_bottom, ImGui::GetItemRectMax().y) + 8.F;
+        const float tools_width = std::max(1.F, width - 36.F);
+        ImGui::SetCursorScreenPos({at.x + 18.F, tools_y + 10.F});
+        DrawPlayTools(tools_width, live);
+        const float final_height = ImGui::GetItemRectMax().y + 18.F - at.y;
+        draw->AddLine({at.x + 18.F, tools_y}, {at.x + width - 18.F, tools_y}, PaddockCol(0x325365));
         if (side)
-            draw->AddLine({options_x - 16.F, at.y + 26.F}, {options_x - 16.F, at.y + final_height - 26.F},
-                          PaddockCol(0x325365));
+            draw->AddLine({options_x - column_gap * .5F, at.y + panel_padding},
+                          {options_x - column_gap * .5F, tools_y - 8.F}, PaddockCol(0x325365));
         pass_layers.SetCurrentChannel(draw, 0);
         PaddockPanel(draw, at, {at.x + width, at.y + final_height}, panel);
         pass_layers.Merge(draw);

@@ -46,7 +46,9 @@ class PreparedInputs(unittest.TestCase):
             name, separator, value = line.partition("=")
             if separator and not line.startswith(("#", "//")):
                 cache[name.split(":")[0]] = value
-        return cache, done.stderr
+        # CMake wraps diagnostics according to the lengths of the checkout and
+        # temporary paths. Check the warning text independently of those wraps.
+        return cache, " ".join(done.stderr.split())
 
     def test_defaults_come_from_the_prepared_directory(self):
         cache, _ = self.configure()

@@ -1,0 +1,5 @@
+DKR-R v1.0.16 playtest 1
+
+Testing build with the latest contributor changes, direct racer input links,
+host handover and further online frame pacing work. Keep your runtime logs if
+you run into a problem. This build has not been published to the updater.

@@ -85,7 +85,8 @@ void DrawSdk2Tools() {
     ImGui::PushStyleVar(ImGuiStyleVar_ButtonTextAlign, {0.5F, 0.5F});
     ImGui::SetNextWindowSize({std::max(320.F, display.x - 48.F), std::max(240.F, display.y - 48.F)},
                              ImGuiCond_Appearing);
-    if (!ImGui::Begin("CUSTOM MAGIC CODE TOOLS", &open, ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoScrollbar)) {
+    if (!dkr::runtime::ui::begin_dialog_window("CUSTOM MAGIC CODE TOOLS", &open,
+                                               ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoScrollbar)) {
         ImGui::End();
         ImGui::PopStyleVar();
         if (!open) {

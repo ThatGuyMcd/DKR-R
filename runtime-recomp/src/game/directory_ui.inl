@@ -1,5 +1,6 @@
 // Uses the retained launcher's native controls, cards, fonts and focus handling.
 bool g_directory_friends_view = false;
+std::string g_directory_website_lobby;
 const char* DirectoryPhase(const std::string& phase) {
     if (phase == "starting")
         return "Starting";
@@ -103,12 +104,38 @@ void DrawOlPublicLobbies(float width, const OnlineFrame& frame) {
             OlParagraph(snapshot->status, 15.F, kOlSoft, inner);
             return;
         }
+        if (OlButton("Find lobby from website")) {
+            constexpr std::string_view prefix = "https://positron-portal.com/dkr-r/#lobby=";
+            const char* clipboard = ImGui::GetClipboardText();
+            const std::string_view link = clipboard != nullptr ? clipboard : "";
+            const auto id = link.starts_with(prefix) ? link.substr(prefix.size()) : std::string_view{};
+            const bool valid = id.size() == 32 && std::all_of(id.begin(), id.end(), [](char ch) {
+                                   return (ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'f');
+                               });
+            if (valid)
+                g_directory_website_lobby = id;
+            else
+                OlNotify("Copy a public lobby link from the DKR-R website first.");
+        }
+        if (!g_directory_website_lobby.empty()) {
+            if (OlButton("Show all public lobbies"))
+                g_directory_website_lobby.clear();
+            const bool found = std::any_of(snapshot->rooms.begin(), snapshot->rooms.end(),
+                                           [](const auto& room) { return room.id == g_directory_website_lobby; });
+            if (!g_directory_website_lobby.empty() && !found) {
+                PaddockGap(8.F);
+                OlParagraph("This lobby is no longer public or available.", 15.F, kOlSoft, inner);
+                return;
+            }
+        }
         if (snapshot->rooms.empty()) {
             OlParagraph("No public lobbies are available. Create a lobby and choose Public to host one.", 15.F, kOlSoft,
                         inner);
             return;
         }
         for (const auto& lobby : snapshot->rooms) {
+            if (!g_directory_website_lobby.empty() && lobby.id != g_directory_website_lobby)
+                continue;
             const bool compatible = lobby.compatibility == dkr::online::compatibility();
             const bool can_join =
                 frame.launcher && frame.rom_ready && !frame.active && !snapshot->joining && compatible;

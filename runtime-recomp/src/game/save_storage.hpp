@@ -1,4 +1,6 @@
 #pragma once
+#include "cloud_saves/progress.hpp"
+#include "personal_adventure_paths.hpp"
 
 // Authored save-storage policy. Never use this for renderer/configuration files.
 #include <algorithm>
@@ -73,8 +75,8 @@ inline bool writable_path(const std::filesystem::path& path, std::string& error)
                  {key(target).lexically_relative(key(protected_root)).generic_string(),
                   key(canonical_target).lexically_relative(key(protected_canonical_root)).generic_string()}) {
                 if (relative == "saves/dkr.us.v77.bin" || relative.starts_with("saves/dkr.us.v77.bin.") ||
-                    relative.starts_with("controller-pak-") || relative.starts_with("save-backups/") ||
-                    relative.starts_with("save-history/")) {
+                    relative.starts_with(kModdedAdventureDirectory) || relative.starts_with("controller-pak-") ||
+                    relative.starts_with("save-backups/") || relative.starts_with("save-history/")) {
                     error = "Offline saves are protected while an online session is active.";
                     return false;
                 }
@@ -274,14 +276,23 @@ inline bool durable_replace(const std::filesystem::path& path, std::span<const s
     }
     return good;
 }
-inline bool write_atomic(const std::filesystem::path& path, const Bytes& bytes, Validator validator,
-                         std::string& error) {
+inline bool write_atomic(const std::filesystem::path& path, const Bytes& bytes, Validator validator, std::string& error,
+                         const Bytes* expected = nullptr, bool progress = false) {
     auto lease = acquire(path, error);
     if (!lease)
         return false;
     std::scoped_lock lock(lease->transaction);
     Bytes previous;
-    if (validator && validator(path, previous)) {
+    const bool previous_valid = validator && validator(path, previous);
+    if (expected) {
+        std::error_code ec;
+        const bool exists = std::filesystem::exists(path, ec);
+        if (ec || (exists && !previous_valid) || *expected != previous) {
+            error = "This device's save changed during sync. Sync again before replacing it.";
+            return false;
+        }
+    }
+    if (previous_valid) {
         if (previous == bytes) {
             error.clear();
             return true;
@@ -340,6 +351,20 @@ inline bool write_atomic(const std::filesystem::path& path, const Bytes& bytes, 
                 return false;
         }
     }
-    return durable_replace(path, bytes, validator, error);
+    if (!durable_replace(path, bytes, validator, error))
+        return false;
+    if (progress) {
+        try {
+            cloud_saves::progress_writes.committed(key(path));
+        } catch (const std::exception&) {
+            // An optional upload signal cannot turn a committed save into a failure.
+        }
+    }
+    return true;
+}
+
+inline bool write_progress(const std::filesystem::path& path, const Bytes& bytes, Validator validator,
+                           std::string& error) {
+    return write_atomic(path, bytes, validator, error, nullptr, true);
 }
 } // namespace dkr::runtime::saves::storage

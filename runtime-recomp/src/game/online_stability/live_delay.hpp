@@ -2,6 +2,7 @@
 
 #include "control.hpp"
 #include "live_prediction.hpp"
+#include "replay_cost.hpp"
 #include <array>
 #include <functional>
 #include <optional>
@@ -132,6 +133,7 @@ class LiveDelay final {
     struct Report {
         DelayMessage message;
         Clock::time_point at{};
+        ReplayCost cost;
     };
     struct Proposal {
         DelayMessage message;
@@ -139,6 +141,7 @@ class LiveDelay final {
     };
     void send(Member target, DelayMessage message);
     void receive(const Identity&, Member source, const DelayMessage&, Clock::time_point now);
+    void record_report(Member source, const DelayMessage&, Clock::time_point now);
     void apply(unsigned delay, Clock::time_point now);
     std::shared_ptr<Control> control_;
     unsigned fixed_ = 0, current_ = 0, window_ = 0, fill_ = 0, late_ = 0, waits_ = 0, samples_ = 0, local_owner_ = 4;

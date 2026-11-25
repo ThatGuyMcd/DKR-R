@@ -4,6 +4,7 @@ import argparse
 import hashlib
 import json
 from pathlib import Path
+import platform
 import shutil
 import subprocess
 import sys
@@ -50,6 +51,10 @@ def compose(output, esbuild, rollback_api=None, rollback_directory=None):
     )
     shutil.copy2(API / "discord_schema.sql", output / "PRIVATE-API/001-launcher-discord-profiles.sql")
     shutil.copy2(API / "profile_schema.sql", output / "PRIVATE-API/002-launcher-profiles.sql")
+    shutil.copy2(API / "speedrun_schema.sql", output / "PRIVATE-API/003-speedruns.sql")
+    shutil.copy2(API / "notification_schema.sql", output / "PRIVATE-API/004-notifications.sql")
+    shutil.copy2(API / "cloud_saves_schema.sql", output / "PRIVATE-API/005-cloud-saves.sql")
+    shutil.copy2(API / "modded_adventure_schema.sql", output / "PRIVATE-API/006-modded-adventure.sql")
     for name in ("directory.mjs", "wrangler-online.jsonc"):
         shutil.copy2(AUTH / name, output / "ONLINE-WORKER" / name)
     for source, name in ((rollback_api, "worker-single-file.mjs"), (rollback_directory, "directory.mjs")):
@@ -92,6 +97,7 @@ and feature settings. A new installation still needs the existing directory setu
         shutil.copy2(path, output / path.name)
     sources = [
         *sorted(API.glob("*")),
+        ROOT / "runtime-recomp/src/game/mod_library/website/assets/replay-format.js",
         AUTH / "directory.mjs",
         AUTH / "wrangler-online.jsonc",
         *docs,
@@ -124,7 +130,11 @@ def verify(output):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--esbuild", type=Path, default=AUTH.parent / "test-tools/node_modules/.bin/esbuild")
+    bundler = AUTH.parent / "test-tools/node_modules/.bin/esbuild"
+    if sys.platform == "win32":
+        architecture = "arm64" if platform.machine().lower() in ("aarch64", "arm64") else "x64"
+        bundler = AUTH.parent / f"test-tools/node_modules/@esbuild/win32-{architecture}/esbuild.exe"
+    parser.add_argument("--esbuild", type=Path, default=bundler)
     parser.add_argument("--rollback-api", type=Path)
     parser.add_argument("--rollback-directory", type=Path)
     parser.add_argument("--archive", type=Path)

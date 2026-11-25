@@ -65,6 +65,7 @@ class Party final {
         return state_;
     }
     bool replace_verified(PartySnapshot value, std::string& error);
+    bool transfer_host(MemberId authenticated, MemberId successor, std::uint64_t generation, std::string& error);
     static bool valid(const PartySnapshot& value, std::string& error);
 
   private:

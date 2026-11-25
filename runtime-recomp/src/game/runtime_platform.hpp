@@ -1,5 +1,6 @@
 #pragma once
 
+#include <span>
 #include "ultramodern/input.hpp"
 #include "ultramodern/renderer_context.hpp"
 #include "controller_assignment_policy.hpp"
@@ -27,6 +28,9 @@ bool input_backend_switch_pending();
 #if DKR_RUNTIME_HAS_RT64
 ultramodern::renderer::WindowHandle create_window();
 ultramodern::renderer::WindowHandle prepare_window_for_game();
+void show_startup_cover(void* surface, bool returning = false);
+void finish_run_return_cover();
+void startup_frame_presented();
 void* prepare_window_for_launcher(bool retire_game_surface = false);
 void pump_window_events(void*);
 void* sdl_window();
@@ -38,6 +42,8 @@ void pump_input_backend_events();
 #endif
 
 void queue_audio(std::int16_t* samples, std::size_t sample_count);
+void queue_theatre_audio(std::span<const std::int16_t> samples, unsigned speed, unsigned previous, unsigned frame);
+void clear_theatre_audio();
 // Requests a short, presentation-only synthesized UI cue. Launcher cues use a
 // host-only audio path; in-game cues are mixed into the next host audio block.
 // Neither path advances or mutates DKR's emulated audio state.

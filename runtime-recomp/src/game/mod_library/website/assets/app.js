@@ -295,7 +295,7 @@
   function listingOptions(value) { return options([['','Choose an existing listing']].concat(managedItems().filter(m=>!m.archived).map(m=>[m.id,m.title+' · '+category(m.category).short])),value); }
   function pagehead(title,subtitle,backAction,id) {
     const back=backAction||'store';
-    const label={moderation:'Back to moderation',account:'Back to my account',admin:'Back to admin','review-request':'Back to request'}[back]||'Back to library';
+    const label={moderation:'Back to moderation',account:'Back to my account',speedruns:'Back to leaderboards',admin:'Back to admin','review-request':'Back to request'}[back]||'Back to library';
     const refresh=['account','request-status','moderation','review-request','admin','detail','editor','metadata-editor','publication-preview'].includes(s.view)?button('refresh-page',icon('refresh-cw')+'Refresh','quiet small'):'';
     return '<div class="dkr-pagehead"><div class="dkr-row dkr-between">'+button(back,icon('arrow-left')+label,'quiet small',id,'data-page-focus')+refresh+'</div><h1 class="dkr-heading">'+esc(title)+'</h1>'+(subtitle?'<p>'+subtitle+'</p>':'')+'</div>';
   }
@@ -354,7 +354,7 @@
 
   function header() {
     const u=user();
-    return '<button type="button" class="dkr-brand" data-action="store" aria-label="DKR-R Mod Library home">'+image('logo','Diddy Kong Racing Recompiled','dkr-logo')+'<span class="dkr-brand-copy"><strong>Mod Library</strong><span>Made by the community</span></span></button><nav class="dkr-header-nav" aria-label="Main navigation"><button type="button" class="dkr-navlink" data-action="store"'+(s.view==='store'?' aria-current="page"':'')+'>Library</button><button type="button" class="dkr-navlink" data-action="request">Request a mod</button>'+externalLink(INVITE,icon('messages-square')+'Join Discord','quiet')+(isStaff()?button('moderation',icon('shield-check')+'Moderation','quiet'):'')+(u?button('account',icon('user-round')+esc(u.displayName||'My account'),'gold'):button('login',icon('user-round')+'Sign in','gold'))+'</nav>';
+    return '<button type="button" class="dkr-brand" data-action="store" aria-label="DKR-R Mod Library home">'+image('logo','Diddy Kong Racing Recompiled','dkr-logo')+'<span class="dkr-brand-copy"><strong>Mod Library</strong><span>Made by the community</span></span></button><nav class="dkr-header-nav" aria-label="Main navigation"><button type="button" class="dkr-navlink" data-action="store"'+(s.view==='store'?' aria-current="page"':'')+'>Library</button><button type="button" class="dkr-navlink" data-action="online"'+(s.view==='online'?' aria-current="page"':'')+'>Online</button><button type="button" class="dkr-navlink" data-action="speedruns"'+(s.view==='speedruns'?' aria-current="page"':'')+'>Leaderboards</button><button type="button" class="dkr-navlink" data-action="request">Request a mod</button>'+externalLink(INVITE,icon('messages-square')+'Join Discord','quiet')+(isStaff()?button('moderation',icon('shield-check')+'Moderation','quiet'):'')+'<span class="dkr-notification-slot" data-notification-slot>'+Notifications.markup()+'</span>'+(u?button('account',icon('user-round')+esc(u.displayName||'My account'),'gold'):button('login',icon('user-round')+'Sign in','gold'))+'</nav>';
   }
   function footer() { return '<span>DKR-R Mod Library <span class="dkr-muted">· Community creations, one starting grid.</span></span><div class="dkr-row"><a href="'+REPO+'" target="_blank" rel="noopener noreferrer">DKR-R project</a>'+textButton('help','Install help')+textButton('staff-login','Moderator login')+'<a href="privacy.html">Privacy</a></div>'; }
   function modcard(item) {
@@ -471,6 +471,16 @@
   function reportsPage() {
     return banner('Reports stay visible until a moderator acts. Negative feedback alone is not a reason to hide a review.')+'<div class="dkr-list">'+(list(D.reports).length?D.reports.map(report=>{const review=report.review||list(D.reviews).find(v=>v.id===report.reviewId);if(!review)return '<article class="dkr-panel"><h2 class="dkr-subtitle">Reported review unavailable</h2><p class="dkr-muted">Refresh the moderation queue to load this report’s content.</p></article>';const m=D.item(review.itemId);return '<article class="dkr-panel dkr-stack"><div class="dkr-row dkr-between"><h2 class="dkr-subtitle">'+esc(m?m.title:report.itemTitle||'Mod review')+'</h2><span class="dkr-status '+(report.status==='open'?'pending':'published')+'">'+(report.status==='open'?'Open report':'Resolved')+'</span></div><div class="dkr-row">'+stars(review.score)+'<span class="dkr-small dkr-muted">by '+esc(authorName(review))+' · '+esc(review.version||'Version not specified')+'</span></div><p class="dkr-safe-wrap">'+esc(review.text||'Rating only')+'</p><p class="dkr-small dkr-muted"><strong>Report reason:</strong> '+esc(report.reason)+'</p>'+(report.status==='open'?'<form class="dkr-form" data-form="report-decision" data-report-id="'+esc(report.id)+'" data-revision="'+esc(report.revision)+'" data-review-revision="'+esc(review.revision)+'">'+area('Moderation reason','reason','','maxlength="1000" placeholder="Required if hiding the review."')+'<div class="dkr-row">'+submit('Dismiss report','keep','quiet')+submit('Hide review','hide','red')+'</div></form>':'<p class="dkr-small dkr-muted">Decision: '+esc(report.action||'Resolved')+' · '+esc(report.resolution||'')+'</p>'+(review.hidden?button('restore-review','Restore review','quiet small',report.id,'data-revision="'+esc(report.revision)+'" data-review-revision="'+esc(review.revision)+'"'):'<span class="dkr-small dkr-muted">Review is visible.</span>'))+(m?button('reviews','View mod reviews','quiet small',review.itemId):'')+'</article>';}).join(''):empty('No reported reviews','Reported content will appear here for staff to assess.'))+'</div>';
   }
+
+  const Racing = window.DKRRacingUI.create({root, config, Auth, view:()=>s.view, user, isStaff, esc, icon, button, pagehead, requireSignedIn, go, renderIcons});
+  const Notifications = window.DKRNotificationsUI.create({
+    root, user, esc, icon, button, renderIcons,
+    read:cursor=>D.getNotifications(cursor),
+    mark:(operation,body)=>D.markNotifications(operation,body),
+    signIn:()=>go('login',{loginMode:'player',returnTo:{view:s.view}}),
+    navigate:event=>event.type === 'run' ? Racing.openRunList(event.staff ? 'review' : 'mine',event.itemId) :
+      go(event.staff ? 'review-request' : 'request-status',{requestId:event.itemId}),
+  });
 
   const Community = window.DKRCommunityUI.create({root,state:()=>s,store:()=>D,esc,icon,button,banner,empty,categories:C.categories,category,image,dateText,user,isStaff,render,go,flash,perform});
 
@@ -751,12 +761,12 @@
         main.innerHTML=D&&D.loading?progress('Loading your account'):pagehead('Your account could not be loaded','')+banner(esc(D&&D.error||'The connection was interrupted. Refresh this page to reconnect to your account.')+'<div class="dkr-spaced">'+button('refresh-page','Reconnect','quiet')+'</div>','error');
       } else {
         if(needsUser&&!user()){s.returnTo={view:s.view,requestId:s.requestId};s.loginMode=['moderation','review-request','editor','metadata-editor','publication-preview','admin','batch'].includes(s.view)?'staff':'player';s.view='login';}
-        const pages={batch:batchPage,store:storePage,detail:detailPage,login:loginPage,denied:()=>deniedPage(false),request:requestPage,account:accountPage,'request-status':requestStatusPage,moderation:moderationPage,'review-request':reviewRequestPage,editor:editorPage,'metadata-editor':metadataPage,'publication-preview':publicationPreviewPage,admin:adminPage,help:helpPage};
+        const pages={online:Racing.onlinePage,speedruns:Racing.speedrunsPage,'post-run':Racing.postPage,batch:batchPage,store:storePage,detail:detailPage,login:loginPage,denied:()=>deniedPage(false),request:requestPage,account:accountPage,'request-status':requestStatusPage,moderation:moderationPage,'review-request':reviewRequestPage,editor:editorPage,'metadata-editor':metadataPage,'publication-preview':publicationPreviewPage,admin:adminPage,help:helpPage};
         main.innerHTML=(pages[s.view]||storePage)();
       }
     }
     if(Auth&&Auth.signoutPending&&!Auth.completionWindow){main.insertAdjacentHTML('afterbegin',banner(esc(Auth.signoutWarning||'Sign-out could not be confirmed. Reconnect and finish signing out to remove remembered access from this device.')+'<div class="dkr-spaced">'+button('retry-signout','Finish signing out','quiet')+'</div>','error'));}
-    renderIcons();applyBusy();if(focus)focusPage();Community.mounted();
+    renderIcons();applyBusy();if(focus)focusPage();Community.mounted();Racing.mounted();Notifications.mounted();
   }
   async function go(view,data,refresh) {
     if(view!==s.view){captureListingForm();if(Uploads&&Uploads.state.running&&uploadMatchesContext(uploadTarget,false))Uploads.pause();s.uploadOpenKind='';s.uploadJobsShown=false;s.uploadError='';s.uploadConnection='';}
@@ -808,6 +818,8 @@
     if(pendingWrite)return;
     try {
       if(await workflowAction(action,id,target))return;
+      if(await Racing.action(action,id,target))return;
+      if(await Notifications.action(action,id))return;
       if(action==='store'){await go('store');return;}
       if(action==='category'){s.category=id;s.tag='all';s.limit=6;s.view='store';clearFlash();render();restoreFocus(action,id);return;}
       if(action==='tag'){s.tag=id;s.limit=6;clearFlash();render();restoreFocus(action,id);return;}
@@ -1015,5 +1027,7 @@
     } catch(error){bootError=errorMessage(error);}
     finally {started=true;bootLoading=false;render();}
   }
+  const publicPage = {'#online':'online','#leaderboards':'speedruns','#post-run':'post-run'}[location.hash];
+  if(publicPage||/^#lobby=[a-f0-9]{32}$/.test(location.hash))s.view=publicPage||'online';
   initialise();
 }());

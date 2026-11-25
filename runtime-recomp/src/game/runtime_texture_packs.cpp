@@ -1,3 +1,4 @@
+#include "time_trial/session.hpp"
 #include "storage/maintenance.hpp"
 #include "session_content/policy.hpp"
 #include "mod_store_install.hpp"
@@ -1461,7 +1462,8 @@ void renderer_started() {
 }
 
 void apply_pending(RT64::Application& application, bool modern_profile) {
-    modern_profile = modern_profile && dkr::session_content::textures_allowed();
+    // Recording restricts gameplay content. RT64 replacements only affect the picture.
+    modern_profile = modern_profile && (dkr::session_content::textures_allowed() || time_trial::recording());
     std::vector<RT64::ReplacementDirectory> replacements;
     std::vector<RT64::ReplacementDirectory> previous_replacements;
     std::set<std::string> replacement_ids;
@@ -1492,6 +1494,12 @@ void apply_pending(RT64::Application& application, bool modern_profile) {
             directory = dkr::runtime::layout::windows_application_directory(directory / "DKR-R-Runtime.exe");
 #endif
             const auto builtin = directory / "assets/ui/CustomTrackBackgrounds";
+            if (time_trial::exporting_video()) {
+                const auto video_pack = directory / "assets/ui/RankedVideoTextures";
+                std::error_code video_error;
+                if (std::filesystem::is_regular_file(video_pack / "rt64.json", video_error))
+                    replacements.emplace_back(video_pack);
+            }
             SDL_free(base);
             std::error_code error;
             if (std::filesystem::is_regular_file(builtin / "rt64.json", error))

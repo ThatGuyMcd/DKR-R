@@ -1,0 +1,42 @@
+schema = 1
+header = "time_trial_symbols.hpp"
+table = "sdk"
+hex = "lower"
+symbols = [
+  "gControllerCurrData",
+  "gControllerPrevData",
+  "gControllerButtonsPressed",
+  "gControllerButtonsReleased",
+  "gButtonMask",
+  "gPlayableMapId",
+  "gTimeTrialEnabled",
+  "gVideoDeltaTime",
+  "gVideoCurrFramebuffer",
+  "gGhostMapID",
+  "gTimeTrialVehicle",
+  "gTimeTrialCharacter",
+  "gTimeTrialTime",
+  "gGhostObjPlayer",
+  "gMenuOptionText",
+  "gMenuOptionCap",
+  "gMenuOption",
+  "gMenuSubOption",
+  "gMenuDelay",
+  "gIgnorePlayerInputTime",
+  "gFFLUnlocked",
+  "sEepromSettings",
+]
+template = '''#pragma once
+#include <cstdint>
+namespace dkr::runtime::time_trial::symbols {
+struct Addresses {
+    std::uint32_t current, previous, pressed, released, button_mask, map, enabled, video_delta, framebuffer;
+    std::uint32_t ghost_map, ghost_vehicle, ghost_character, ghost_time, player_ghost;
+    std::uint32_t menu_text, menu_count, menu_option, menu_suboption, menu_delay, menu_ignore_input;
+    std::uint32_t future_fun_land, eeprom_settings;
+};
+inline constexpr Addresses us77{@ALL:77@};
+inline constexpr Addresses us80{@ALL:80@};
+inline constexpr const Addresses& for_revision(unsigned revision) { return revision == 80 ? us80 : us77; }
+}
+'''

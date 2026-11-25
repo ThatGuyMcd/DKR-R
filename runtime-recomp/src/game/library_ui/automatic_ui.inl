@@ -1,10 +1,8 @@
 void DrawSkipLauncherSetting(float width) {
     if (PaddockCheckbox("##skip-launcher", "Skip launcher", &dkr::library_ui::skip_launcher, width))
         SaveSettings();
-    PaddockGap(6.F);
-    PaddockText(PaddockReading(13.F, false, 1.5F), PaddockRgb(0xABC0CC),
+    PaddockText(PaddockReading(13.F, false, 1.4F), PaddockRgb(0xABC0CC),
                 dkr::localisation::text("play.skip_launcher_help"), width);
-    PaddockGap(8.F);
 }
 
 bool AutomaticStartHasMods() {
@@ -31,13 +29,15 @@ bool AutomaticStartHasMods() {
     return dkr::runtime::magic_codes::selected_mask() != 0;
 }
 
-bool DrawStartingContent(const dkr::mods::ModLaunchView& state, bool mods, bool syncing, double seconds) {
+bool DrawStartingContent(const dkr::mods::ModLaunchView& state, bool mods, bool syncing, double seconds,
+                         bool returning = false) {
     auto* draw = ImGui::GetWindowDrawList();
     const auto at = ImGui::GetWindowPos();
     const auto size = ImGui::GetWindowSize();
     auto layout = dkr::library_ui::startup_layout(size.x, size.y, 0);
     const float scale = layout.scale, padding = 26.F * scale, inner = std::max(1.F, layout.panel - 2.F * padding);
-    const auto title = dkr::localisation::text(syncing ? "play.syncing_game" : "play.starting_game");
+    const auto title = returning ? dkr::localisation::source("Returning to Launcher...")
+                                 : dkr::localisation::text(syncing ? "play.syncing_game" : "play.starting_game");
     const auto loading = dkr::localisation::text(syncing ? "play.syncing_status" : "play.loading_mods");
     const auto button = dkr::localisation::text("play.open_launcher");
     const auto stage =
@@ -54,7 +54,7 @@ bool DrawStartingContent(const dkr::mods::ModLaunchView& state, bool mods, bool 
     const float mod_height = mods ? 14.F * scale + loading_height + 11.F * scale + 10.F * scale +
                                         (stage_height > 0 ? 11.F * scale + stage_height : 0)
                                   : 0;
-    const float caption = 20.F * scale + title_height + mod_height + 14.F * scale + button_height + 18.F * scale;
+    const float caption = 38.F * scale + title_height + mod_height + (returning ? 0.F : 14.F * scale + button_height);
     layout = dkr::library_ui::startup_layout(size.x, size.y, caption);
     ImGui::SetCursorPos({(size.x - layout.logo) * .5F, layout.top});
     BrandBlock(layout.logo, layout.logo, false);
@@ -71,6 +71,8 @@ bool DrawStartingContent(const dkr::mods::ModLaunchView& state, bool mods, bool 
         y += height;
     };
     line(heading, title, title_height);
+    if (returning)
+        return false;
     if (mods) {
         y += 14.F * scale;
         line(subheading, loading, loading_height);
@@ -117,7 +119,8 @@ bool DrawStartingContent(const dkr::mods::ModLaunchView& state, bool mods, bool 
 
 bool DrawAutomaticStart(dkr::library_ui::AutomaticStart& automatic, LauncherBackgroundTexture& background,
                         SDL_Renderer* renderer, double scroll, bool software, dkr::launcher_themes::Theme theme,
-                        double seconds, const dkr::mods::ModLaunchView* preview = nullptr, bool syncing = false) {
+                        double seconds, const dkr::mods::ModLaunchView* preview = nullptr, bool syncing = false,
+                        bool returning = false) {
     BeginMainWindow("DKR-R Starting", ImGuiWindowFlags_NoBackground);
     DrawLauncherBackdrop(background, renderer, scroll, software);
     dkr::launcher_themes::weather(ImGui::GetWindowDrawList(), ImGui::GetWindowPos(), ImGui::GetWindowSize(), theme,
@@ -125,7 +128,8 @@ bool DrawAutomaticStart(dkr::library_ui::AutomaticStart& automatic, LauncherBack
     auto state = preview ? *preview : g_mod_launch.snapshot();
     if (syncing)
         state.stage = "Getting everyone ready...";
-    const bool pressed = DrawStartingContent(state, automatic.loading_mods() || syncing, syncing, seconds);
+    const bool pressed =
+        DrawStartingContent(state, !returning && (automatic.loading_mods() || syncing), syncing, seconds, returning);
     if (pressed && !syncing) {
         automatic.cancel();
         g_mod_launch.cancel();

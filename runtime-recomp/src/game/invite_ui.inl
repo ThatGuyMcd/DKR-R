@@ -389,9 +389,10 @@ void DrawInviteUi() {
     if (g_invite_intent.step == InviteStep::Stopping || g_invite_intent.step == InviteStep::Queued) {
         ImGui::SetNextWindowPos({ImGui::GetIO().DisplaySize.x * .5F, 20}, ImGuiCond_Always, {.5F, 0});
         ImGui::SetNextWindowBgAlpha(.94F);
-        if (ImGui::Begin("##invite-progress", nullptr,
-                         ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoDecoration |
-                             ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing)) {
+        if (dkr::runtime::ui::begin_dialog_window("##invite-progress", nullptr,
+                                                  ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoDecoration |
+                                                      ImGuiWindowFlags_NoSavedSettings |
+                                                      ImGuiWindowFlags_NoFocusOnAppearing)) {
             ImGui::TextUnformatted(g_invite_intent.step == InviteStep::Stopping
                                        ? "Returning safely to the launcher..."
                                        : "Preparing to join your friend's lobby...");

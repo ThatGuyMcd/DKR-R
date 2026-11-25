@@ -103,7 +103,8 @@ bool CreateOnlineLobby() {
         g_online_mod_notice.clear();
         if (g_online_mod_sync)
             g_online_mod_sync->cancel();
-        return FinishOnlineLobby(request, {}, 0);
+        g_online_mod_host_request = std::move(request);
+        return true;
     }
     std::vector<std::filesystem::path> labs;
     for (const auto& track : dkr::runtime::custom_tracks::tracks())
@@ -135,6 +136,9 @@ void PumpOnlineMods() {
     auto view = g_online_mod_sync->snapshot();
     g_online_mod_notice.progress(view.stage);
     const auto network = session().view();
+// Cached, verified content is promoted by the existing worker, outside
+// the network locks. Host transfer never enables local offline selections.
+#include "netplay/session_links/mod_owner_ui.inl"
     if (g_stability_retry_requested && !dkr::lobby_stability::snapshot(g_online_mod_sync.get()).running) {
         g_stability_retry_requested = false;
         std::string error;
@@ -170,15 +174,25 @@ void PumpOnlineMods() {
     if (view.phase == SyncPhase::Failed && !network.compatibility_sync_offer)
         ReportOnlinePreparationFailure(view.error);
     if (g_online_mod_host_request) {
-        if (network.state != ConnectionState::Offline ||
-            g_online_mod_host_request->manifest.canonical_rom_hash != g_online_mod_identity.canonical_xxh3 ||
-            g_online_mod_host_request->manifest.magic_codes_hash != dkr::runtime::magic_codes::selected_mask()) {
+        auto& pending = *g_online_mod_host_request;
+        if (session().active() || pending.manifest.canonical_rom_hash != g_online_mod_identity.canonical_xxh3 ||
+            (pending.content_enabled &&
+             pending.manifest.magic_codes_hash != dkr::runtime::magic_codes::selected_mask())) {
             g_online_mod_sync->cancel();
             g_online_mod_host_request.reset();
             g_online_action_status = "Preparation cancelled because the lobby, ROM or Magic Codes changed.";
-        } else if (view.phase == SyncPhase::HostReady) {
-            const bool modded = view.manifest && has_mods(*view.manifest);
-            const auto request = *g_online_mod_host_request;
+        } else if (!pending.content_enabled || view.phase == SyncPhase::HostReady) {
+            if (SharedSaveBusy())
+                return;
+            if (!pending.cloud_account) {
+                pending.cloud_account = EnabledCloudSaveAccount();
+                if (!pending.cloud_account->empty() && RunCloudSaveSync(*pending.cloud_account)) {
+                    g_online_action_status = "Syncing Cloud Saves before creating the lobby...";
+                    return;
+                }
+            }
+            const bool modded = pending.content_enabled && view.manifest && has_mods(*view.manifest);
+            const auto request = std::move(pending);
             g_online_mod_host_request.reset();
             if (modded && (!view.profile || !view.runtime)) {
                 g_online_action_status = "Couldn't prepare the host's mods.";
@@ -188,6 +202,9 @@ void PumpOnlineMods() {
                                           modded ? static_cast<std::uint32_t>(encode(*view.manifest).size()) : 0)) {
                 ReportOnlinePreparationFailure(g_online_action_status);
                 g_online_mod_sync->cancel();
+            } else if (!request.cloud_account->empty() &&
+                       dkr::store::service().view()->cloud_sync != dkr::cloud_saves::SyncStatus::Synced) {
+                g_online_action_status = "Cloud Saves could not finish. The lobby is using the local save.";
             }
         } else if (view.phase == SyncPhase::Failed) {
             g_online_action_status = view.error;

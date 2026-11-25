@@ -15,6 +15,7 @@
 #include "hud_layout_config.hpp"
 #include "hud_basic_settings.hpp"
 #include "hud_reference_layout.hpp"
+#include "time_trial/session.hpp"
 
 #include <algorithm>
 #include <array>
@@ -295,9 +296,11 @@ bool BeginHudPassForHolder(std::uint8_t* rdram, std::uint32_t holder) {
     const auto& state = g_frame_state;
     if (!g_group_frame || !state)
         return false;
-    const float host_aspect = state->viewport_height > 0 ? static_cast<float>(state->viewport_width) /
-                                                               static_cast<float>(state->viewport_height)
-                                                         : 4.0F / 3.0F;
+    // Keep the replay's sprite projection at its authored clip ratio.
+    // The texture-rectangle decoder widens the clip for repositioned text.
+    const float host_aspect = dkr::runtime::time_trial::watching() || state->viewport_height <= 0
+                                  ? 4.0F / 3.0F
+                                  : static_cast<float>(state->viewport_width) / state->viewport_height;
     return RecordHudMarker(rdram, holder, kHudPassMarkerBeginMode,
                            dkr::runtime::hud::encode_hud_viewport_cover(host_aspect),
                            dkr::runtime::hud::reference::kPassVariant);
@@ -382,19 +385,29 @@ bool BeginWidget(std::uint8_t* rdram, std::uint32_t holder, dkr::runtime::hud::W
                              : 4.0F / 3.0F;
     const bool v80 =
         dkr::runtime::revision_addresses::current().CurrentHud == dkr::runtime::revision_addresses::kUsV80.CurrentHud;
+    const auto mode = aspect > 4.0F / 3.0F && dkr::runtime::time_trial::watching()
+                          ? dkr::runtime::hud::LayoutMode::FitToViewport
+                          : state.mode;
     const auto transform = dkr::runtime::hud::reference::transform(
-        state.mode, aspect,
+        mode, aspect,
         dkr::runtime::hud::reference::anchor(element, widget, g_scenario, g_frame_layout == 1, g_general_pass_active,
                                              authored_x),
         static_cast<float>(MEM_W(0, RdramAddress(dkr::runtime::hud_layout_symbols::for_revision(v80).hud_offset_x))),
         slides);
-    if (transform.identity())
+    // The face model and its hands have separate fixed topology. Give
+    // each an identity for interpolation in sequential video playback.
+    const std::uint16_t stopwatch_token =
+        widget == dkr::runtime::hud::Widget::Stopwatch && element < dkr::runtime::hud::kElements.size() &&
+                dkr::runtime::time_trial::exporting_video()
+            ? static_cast<std::uint16_t>(1 + element + owner * dkr::runtime::hud::kElements.size())
+            : 0;
+    if (transform.identity() && stopwatch_token == 0)
         return false;
     const auto command = static_cast<std::uint32_t>(MEM_W(0, RdramAddress(holder)));
     if (!IsRdramPointer(command, 8))
         return false;
     return dkr::runtime::presentation::record_presentation_marker(
-        command, 1, 0, 0, dkr::runtime::presentation::PresentationMarkerKind::HudWidget, transform);
+        command, 1, stopwatch_token, 0, dkr::runtime::presentation::PresentationMarkerKind::HudWidget, transform);
 }
 void EndWidget(std::uint8_t* rdram, std::uint32_t holder, bool& active) {
     if (active && rdram && IsRdramPointer(holder, 4)) {

@@ -14,7 +14,8 @@
     let apiBase = '';
     try {
       const configured = new URL((root.DKR_CONFIG || {}).apiBase);
-      if (configured.protocol !== 'https:' || configured.username || configured.password || configured.search || configured.hash) throw new Error();
+      const loopback = configured.origin === root.location.origin && ['127.0.0.1','localhost'].includes(configured.hostname);
+      if ((!loopback && configured.protocol !== 'https:') || configured.username || configured.password || configured.search || configured.hash) throw new Error();
       apiBase = configured.href.replace(/\/+$/, ''); D.configured = true;
     } catch (_) { D.error = 'The website library service address is missing or invalid. Reload this page or contact the site owner.'; }
     function notify() { listeners.forEach(function (callback) { try { callback(D); } catch (_) { /* UI failures do not affect store state. */ } }); }
@@ -91,6 +92,16 @@
     D.visibleReviews = function (id) { return (publicReviews.get(id) || []).slice(); };
     D.ownReview = function (id) { return self ? ownReviews.find(function (review) { return review.itemId === id; }) || null : null; };
     D.onChange = function (callback) { if (typeof callback !== 'function') throw new TypeError('Expected a listener.'); listeners.add(callback); return function () { listeners.delete(callback); }; };
+    async function notificationRequest(path,body) {
+      const epoch = generation;
+      await ensureAuth();
+      const token = auth && auth.getToken();
+      if (invalidated(epoch)) throw staleError();
+      if (!token || !self) throw new Error('Sign in to see your notifications.');
+      return requestJSON('/v1/notifications' + path,token,body,epoch);
+    }
+    D.getNotifications = cursor => notificationRequest(cursor ? '?before=' + encodeURIComponent(cursor) : '');
+    D.markNotifications = (operation,body) => notificationRequest('/' + operation,body);
     D.refresh = async function () {
       // Start loading synchronously: a login listener can immediately wait for
       // this refresh, even while its session-validation promise is pending.

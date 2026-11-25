@@ -1,4 +1,5 @@
 #include "hud_layout_editor.hpp"
+#include "dialog_style.hpp"
 #include "runtime_hud_layout.hpp"
 #include "imgui.h"
 #include "imgui_internal.h"
@@ -359,10 +360,9 @@ void modal(void (*request_name)(), void (*draw_keyboard)()) {
     ImGui::SetNextWindowPos(
         {viewport->WorkPos.x + viewport->WorkSize.x * .5F, viewport->WorkPos.y + viewport->WorkSize.y * .5F},
         ImGuiCond_Always, {.5F, .5F});
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, {16, 12});
-    if (ImGui::BeginPopupModal("HUD WORKSHOP", nullptr,
-                               ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
-                                   ImGuiWindowFlags_NoSavedSettings)) {
+    if (ui::begin_dialog_modal("HUD WORKSHOP", nullptr,
+                               ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings,
+                               {16.0F, 12.0F})) {
         ImGui::TextWrapped(
             "Single / two-player HUD. This is a schematic preview; native visibility and animations stay controlled by the game.");
         ImGui::BeginDisabled(e.moving);
@@ -461,7 +461,7 @@ void modal(void (*request_name)(), void (*draw_keyboard)()) {
                       [&] { e.draft.scale = hg::safe_scale(std::round(global) / 100); });
         if (button("SIZE ALL GROUPS", -1))
             ImGui::OpenPopup("Use global size everywhere?");
-        if (ImGui::BeginPopupModal("Use global size everywhere?", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+        if (ui::begin_dialog_modal("Use global size everywhere?", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
             ImGui::TextUnformatted("Clear every group size override? Positions stay unchanged.");
             if (button("CONFIRM")) {
                 change([&] {
@@ -531,7 +531,7 @@ void modal(void (*request_name)(), void (*draw_keyboard)()) {
                 });
             if (button("COPY TO OTHER SCENARIOS", -1))
                 ImGui::OpenPopup("Copy this group?");
-            if (ImGui::BeginPopupModal("Copy this group?", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+            if (ui::begin_dialog_modal("Copy this group?", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
                 ImGui::TextUnformatted("Copy this group's placement to compatible scenarios only?");
                 if (button("COPY")) {
                     change([&] {
@@ -560,7 +560,7 @@ void modal(void (*request_name)(), void (*draw_keyboard)()) {
         ImGui::EndDisabled();
         if (button("RESET GROUP", -1))
             ImGui::OpenPopup("Reset this group?");
-        if (ImGui::BeginPopupModal("Reset this group?", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+        if (ui::begin_dialog_modal("Reset this group?", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
             ImGui::TextUnformatted("Restore native placement and inherited size for this group?");
             if (button("RESET")) {
                 change([&] { selected() = {}; });
@@ -573,7 +573,7 @@ void modal(void (*request_name)(), void (*draw_keyboard)()) {
         }
         if (button("RESET SCENARIO", -1))
             ImGui::OpenPopup("Reset this scenario?");
-        if (ImGui::BeginPopupModal("Reset this scenario?", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+        if (ui::begin_dialog_modal("Reset this scenario?", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
             ImGui::TextUnformatted("Reset all groups for the selected scenario, player and screen profile?");
             if (button("RESET")) {
                 change([&] { hg::reset_scenario(e.draft, aspect(), scenario(), target()); });
@@ -608,7 +608,7 @@ void modal(void (*request_name)(), void (*draw_keyboard)()) {
         if (button("DELETE PRESET", -1))
             ImGui::OpenPopup("Delete this preset?");
         ImGui::EndDisabled();
-        if (ImGui::BeginPopupModal("Delete this preset?", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+        if (ui::begin_dialog_modal("Delete this preset?", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
             ImGui::TextUnformatted("Delete the selected saved preset? Applied settings stay unchanged.");
             if (button("DELETE") && !names.empty()) {
                 delete_preset(names[e.preset]);
@@ -626,7 +626,7 @@ void modal(void (*request_name)(), void (*draw_keyboard)()) {
             draw_keyboard();
         if (!e.pending_preset.empty())
             ImGui::OpenPopup("Replace saved preset?");
-        if (ImGui::BeginPopupModal("Replace saved preset?", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+        if (ui::begin_dialog_modal("Replace saved preset?", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
             ImGui::TextWrapped("Replace the saved preset %s?", e.pending_preset.c_str());
             if (button("REPLACE")) {
                 e.message = save_preset(e.pending_preset, e.draft) ? "Preset saved." : "Could not write preset.";
@@ -668,7 +668,7 @@ void modal(void (*request_name)(), void (*draw_keyboard)()) {
             ImGui::OpenPopup("Custom layout starting point");
             e.select_base = false;
         }
-        if (ImGui::BeginPopupModal("Custom layout starting point", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+        if (ui::begin_dialog_modal("Custom layout starting point", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
             ImGui::TextUnformatted("Choose a starting area. Existing group edits are retained.");
             if (button("START FROM ORIGINAL")) {
                 change([] { e.draft.custom_fill = false; });
@@ -695,7 +695,7 @@ void modal(void (*request_name)(), void (*draw_keyboard)()) {
             ImGui::OpenPopup("HUD changes");
             e.close_prompt = false;
         }
-        if (ImGui::BeginPopupModal("HUD changes", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+        if (ui::begin_dialog_modal("HUD changes", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
             ImGui::TextUnformatted("Apply the preview, discard changes, or keep editing?");
             if (button("APPLY")) {
                 if (apply_layout(e.draft)) {
@@ -723,7 +723,6 @@ void modal(void (*request_name)(), void (*draw_keyboard)()) {
     } else if (!ImGui::IsPopupOpen("HUD WORKSHOP")) {
         cancel();
     }
-    ImGui::PopStyleVar();
 }
 } // namespace
 
@@ -858,7 +857,7 @@ bool draw_settings(bool modern, float width, void (*request_name)(), void (*draw
     }
     if (button("RESET HUD SETTINGS", std::min(width, ImGui::GetContentRegionAvail().x)))
         ImGui::OpenPopup("Reset HUD settings?");
-    if (ImGui::BeginPopupModal("Reset HUD settings?", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+    if (ui::begin_dialog_modal("Reset HUD settings?", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
         ImGui::TextUnformatted("Restore Original layout and 100% group size? Saved presets are retained.");
         if (button("RESET")) {
             changed = apply_settings({});

@@ -1,41 +1,42 @@
 const char* SessionModsCaption(bool enabled) {
     return enabled ? "Session mods: ON" : "Session mods: OFF";
 }
-float SessionModsWidth() {
-    return std::max(PaddockImportButtonWidth(SessionModsCaption(true)),
-                    PaddockImportButtonWidth(SessionModsCaption(false)));
-}
-float PlayToolsHeight(float width) {
-    return PaddockImportButtonWidth("Achievements") + SessionModsWidth() + PaddockImportButtonWidth("Save Manager") +
-                       32.F <=
-                   width
-               ? 56.F
-               : 192.F;
-}
-void DrawPlayTools(float width) {
-    const float achievements = PaddockImportButtonWidth("Achievements");
-    const float saves = PaddockImportButtonWidth("Save Manager");
-    const bool row = PlayToolsHeight(width) == 56.F;
+constexpr float kPlayToolHeight = 40.F, kPlayToolGap = 8.F;
+void DrawPlayTools(float width, bool live) {
+    const char* speedrun_label = live ? "Leaderboards###play-leaderboards" : "Speedrunning###play-leaderboards";
+    const std::array widths{PaddockImportButtonWidth("Achievements", true),
+                            PaddockImportButtonWidth(speedrun_label, true),
+                            std::max(PaddockImportButtonWidth(SessionModsCaption(true), true),
+                                     PaddockImportButtonWidth(SessionModsCaption(false), true)),
+                            PaddockImportButtonWidth("Save Manager", true)};
+    const float widest = *std::max_element(widths.begin(), widths.end());
+    const float full = widths[0] + widths[1] + widths[2] + widths[3] + 3.F * kPlayToolGap;
+    const int columns = width >= full ? 4 : width >= 2.F * widest + kPlayToolGap ? 2 : 1;
+    const int rows = 4 / columns;
+    const float fallback_width = std::min(widest, width);
+    const float row_width = columns == 4 ? full : float(columns) * fallback_width + float(columns - 1) * kPlayToolGap;
     const auto at = ImGui::GetCursorScreenPos();
-    if (PaddockImportButton("Achievements###play-achievements", row ? achievements : width, false, false, 1))
+    const float left = at.x + (width - row_width) * .5F;
+    float next = left;
+    const auto draw = [&](int i, const char* label, int icon) {
+        const float button_width = columns == 4 ? widths[std::size_t(i)] : fallback_width;
+        const float x = columns == 4 ? next : left + float(i % columns) * (fallback_width + kPlayToolGap);
+        next += button_width + kPlayToolGap;
+        ImGui::SetCursorScreenPos({x, at.y + float(i / columns) * (kPlayToolHeight + kPlayToolGap)});
+        return PaddockImportButton(label, button_width, false, false, icon, true);
+    };
+    if (draw(0, "Achievements###play-achievements", 1))
         g_page_navigation_request = kPageAchievements;
-    ImGui::SetCursorScreenPos(
-        row ? ImVec2{at.x + achievements + (width - achievements - saves - SessionModsWidth()) * .5F, at.y}
-            : ImVec2{at.x, at.y + 68.F});
+    if (draw(1, speedrun_label, 4))
+        g_page_navigation_request = dkr::library_ui::LeaderboardsPage;
     const bool enabled = dkr::session_content::next_enabled.load();
     const auto caption = std::string(SessionModsCaption(enabled)) + "###play-session-mods";
-    if (PaddockImportButton(caption.c_str(), row ? SessionModsWidth() : width, false, false, 3)) {
+    if (draw(2, caption.c_str(), 3)) {
         dkr::session_content::next_enabled = !enabled;
         SaveSettings();
     }
-    ImGui::SetCursorScreenPos(row ? ImVec2{at.x + width - saves, at.y} : ImVec2{at.x, at.y + 136.F});
-    if (PaddockImportButton("Save Manager###play-saves", row ? saves : width, false, false, 2))
+    if (draw(3, "Save Manager###play-saves", 2))
         g_page_navigation_request = kPageSaveManager;
     ImGui::SetCursorScreenPos(at);
-    ImGui::Dummy({width, PlayToolsHeight(width)});
-}
-void DrawPlayToolBack(float) {
-    if (PaddockTextLink("Back to Play"))
-        g_page_navigation_request = kPagePlay;
-    PaddockGap(16.F);
+    ImGui::Dummy({width, float(rows) * kPlayToolHeight + float(rows - 1) * kPlayToolGap});
 }

@@ -9,6 +9,8 @@ std::filesystem::path g_launcher_layout_root;
 int g_launcher_layout_step = 0;
 bool g_launcher_layout_sized = false;
 bool g_localisation_cycle_check = false;
+bool g_leaderboard_layout_check = false;
+bool g_leaderboard_navigation_requested = false;
 double g_launcher_layout_at = 0;
 constexpr std::array<int, 44> kLauncherLayoutPages{0,  6,  6,  6,  6,  6,  10, 1,  2, 3, 4, 5,  8,  9, 7,
                                                    10, 10, 10, 10, 10, 10, 10, 10, 3, 3, 3, 3,  6,  6, 6,
@@ -19,15 +21,24 @@ bool g_surface_scroll_bottom = false;
 #include "handoff_check.inl"
 bool PlayLaunchLayoutCheck();
 bool SaveDraftLayoutCheck();
+bool ModdedSaveDraftLayoutCheck();
 void PlayLaunchCaptureCheck();
 void SaveDraftCaptureCheck();
 
 void LibrarySelectCheckView(int step, int& page) {
+    if (g_leaderboard_layout_check) {
+        if (step == 1 && !g_leaderboard_navigation_requested) {
+            g_page_navigation_request = dkr::library_ui::LeaderboardsPage;
+            g_leaderboard_navigation_requested = true;
+        }
+        return;
+    }
     if (SaveDraftLayoutCheck()) {
         page = kPageSaveManager;
-        g_saves_page.scope = 0;
-        g_saves_page.section = 1;
-        g_surface_scroll_bottom = true;
+        g_saves_page.scope = ModdedSaveDraftLayoutCheck() ? 2 : 0;
+        g_saves_page.section = SaveEditorSection::Progress;
+        g_saves_page.selected_slot = std::min(g_launcher_layout_step / 2, 2);
+        g_surface_scroll_bottom = false;
         return;
     }
     if (PlayLaunchLayoutCheck()) {
@@ -51,7 +62,7 @@ void LibrarySelectCheckView(int step, int& page) {
         g_mods_page.section = g_mods_page.entry_section = step - 26;
     if (page == kPageSaveManager) {
         g_saves_page.scope = step == 32 ? 3 : step == 33 ? 1 : 0;
-        g_saves_page.section = step == 30 ? 1 : step == 31 ? 2 : 0;
+        g_saves_page.section = step == 31 ? SaveEditorSection::Files : SaveEditorSection::Progress;
     }
     if (page == kPageOnlineMp) {
         const std::array<OlSection, 5> sections{OlSection::Play, OlSection::Settings, OlSection::Profile,
@@ -93,7 +104,7 @@ bool LauncherLayoutCheckRoute(int& page) {
 
 // Captures only an explicitly authenticated, disposable launcher test profile.
 // Ordinary startup performs no pixel readback, window resize or image writes.
-void LauncherLayoutCheckCapture(SDL_Renderer* renderer) {
+void LauncherLayoutCheckCapture(SDL_Renderer* renderer, int current_page) {
     if (g_launcher_layout_root.empty() || g_launcher_layout_step >= int(kLauncherLayoutPages.size()))
         return;
     if (!g_launcher_layout_sized) {
@@ -134,8 +145,10 @@ void LauncherLayoutCheckCapture(SDL_Renderer* renderer) {
     SDL_FreeSurface(surface);
     if (!saved)
         return;
+    const int page =
+        g_leaderboard_layout_check ? current_page : kLauncherLayoutPages[std::size_t(g_launcher_layout_step)];
     std::fprintf(stderr, "[launcher-layout][isolated-check] step=%d page=%d width=%d height=%d captured\n",
-                 g_launcher_layout_step, kLauncherLayoutPages[std::size_t(g_launcher_layout_step)], width, height);
+                 g_launcher_layout_step, page, width, height);
     std::fprintf(stderr, "[localisation][isolated-check] step=%d language=%s atlas=%dx%d texture=%p\n",
                  g_launcher_layout_step, dkr::localisation::active().data(), ImGui::GetIO().Fonts->TexWidth,
                  ImGui::GetIO().Fonts->TexHeight, ImGui::GetIO().Fonts->TexID);
@@ -147,7 +160,8 @@ void LauncherLayoutCheckCapture(SDL_Renderer* renderer) {
         PlayLaunchCaptureCheck();
     ++g_launcher_layout_step;
     g_launcher_layout_at = PaddockClock();
-    if (PlayLaunchLayoutCheck() && g_launcher_layout_step == 6) {
+    if ((PlayLaunchLayoutCheck() && g_launcher_layout_step == 6) ||
+        (g_leaderboard_layout_check && g_launcher_layout_step == 5)) {
         SDL_Event quit{};
         quit.type = SDL_QUIT;
         SDL_PushEvent(&quit);
@@ -221,6 +235,8 @@ void LibraryNavigationCheckLauncherInit(const std::filesystem::path& root) {
                        std::string_view(layout) == "wide" || std::string_view(layout) == "small" ||
                        std::string_view(layout) == "short"))
             g_launcher_layout_root = root;
+        const char* racing = std::getenv("DKR_OWNED_CHECK_LEADERBOARD_LAYOUT");
+        g_leaderboard_layout_check = !g_launcher_layout_root.empty() && racing && std::string_view(racing) == "1";
         const char* controls = std::getenv("DKR_LIBRARY_CONTROLS_CHECK");
         g_library_controls_check = !g_launcher_layout_root.empty() && controls && std::string_view(controls) == "1";
     }

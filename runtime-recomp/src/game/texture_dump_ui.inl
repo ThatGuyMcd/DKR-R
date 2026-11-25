@@ -198,8 +198,7 @@ void DrawDumpPreviewCard(const dumping::Thumbnail& item, float width) {
          166.F, kSetMuted);
     line(detail, item.preview_error.empty() ? item.status : "Preview unavailable", 190.F,
          item.preview_error.empty() ? kSetMuted : kSetWarm);
-    if (ImGui::IsWindowHovered() && ImGui::IsMouseHoveringRect(at, end)) {
-        ImGui::BeginTooltip();
+    if (ImGui::IsWindowHovered() && ImGui::IsMouseHoveringRect(at, end) && dkr::runtime::ui::begin_dialog_tooltip()) {
         ImGui::PushTextWrapPos(320.F);
         ImGui::TextUnformatted(item.name.c_str());
         if (!item.preview_error.empty())
@@ -492,8 +491,8 @@ void DrawTextureDumping(float width) {
         ImGui::SetNextWindowSize({std::min(850.F, display.x - 32.F), std::min(display.y - 32.F, display.y * .75F)},
                                  ImGuiCond_Always);
         ImGui::SetNextWindowPos({display.x * .5F, display.y * .5F}, ImGuiCond_Always, {.5F, .5F});
-        if (ImGui::BeginPopupModal("Choose texture sources##dump", nullptr,
-                                   ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoSavedSettings)) {
+        if (BeginPaddockModalWindow("Choose texture sources##dump",
+                                    ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoSavedSettings)) {
             const float inner = ImGui::GetContentRegionAvail().x;
             DetailText(state->busy ? "Loading installed sources..." : "Choose the sources to export.", inner, kSetMuted,
                        8.F);

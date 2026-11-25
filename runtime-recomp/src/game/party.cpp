@@ -264,6 +264,20 @@ bool Party::valid(const PartySnapshot& value, std::string& error) {
     error.clear();
     return true;
 }
+bool Party::transfer_host(MemberId authenticated, MemberId successor, std::uint64_t generation, std::string& error) {
+    if (authenticated != state_.host || successor == authenticated || !find(successor) || state_.handover ||
+        state_.generation == UINT64_MAX || generation != state_.generation + 1)
+        return no(error, "The prepared host transfer no longer matches this lobby.");
+    auto next = state_;
+    next.host = successor;
+    next.generation = generation;
+    for (auto& m : next.members)
+        m.host = m.id == successor;
+    if (!valid(next, error))
+        return false;
+    state_ = std::move(next);
+    return true;
+}
 bool Party::replace_verified(PartySnapshot value, std::string& error) {
     if (!valid(value, error))
         return false;

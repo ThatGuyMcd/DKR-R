@@ -6,6 +6,9 @@ namespace RT64 {
 struct State;
 struct RSP;
 } // namespace RT64
+namespace dkr::runtime::time_trial {
+struct GhostNameplate;
+}
 namespace dkr::runtime::online_view {
 inline constexpr std::uint32_t kLabelTextureBegin = 0x00D00000U, kLabelTextureEnd = 0x00E00000U;
 class Nameplates final {
@@ -14,8 +17,10 @@ class Nameplates final {
     Nameplates();
     ~Nameplates();
     void prepare(const Session&, const Plan&, std::span<std::uint8_t>, std::uint32_t scene) noexcept;
+    void prepare_ghost(std::string_view, bool outline, std::span<std::uint8_t>, std::uint32_t scene) noexcept;
     void begin_view(unsigned view);
     void draw(RT64::State&, const dkr_owned_draw_event&, const hlslpp::float4x4& camera, IdentitySelector);
+    void draw_ghost(RT64::State&, const time_trial::GhostNameplate&, const hlslpp::float4x4& camera, IdentitySelector);
 
   private:
     struct Impl;

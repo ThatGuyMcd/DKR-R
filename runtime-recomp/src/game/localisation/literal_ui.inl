@@ -56,14 +56,14 @@ template <class T> bool UiPaddockTextLink(T&& label) {
     const auto shown = LocalisedUi::widget(std::forward<T>(label));
     return PaddockTextLink(shown.c_str());
 }
-template <class T> float UiPaddockSectionTabWidth(T&& label) {
+template <class T> float UiPaddockSectionTabWidth(T&& label, bool compact = false) {
     // Section tabs are owned registry captions, including counted headings.
     const auto shown = dkr::localisation::label(std::string_view(label));
-    return PaddockSectionTabWidth(shown.c_str());
+    return PaddockSectionTabWidth(shown.c_str(), compact);
 }
-template <class T> bool UiPaddockSectionTab(T&& label, bool open, float width = 0.F) {
+template <class T> bool UiPaddockSectionTab(T&& label, bool open, float width = 0.F, bool compact = false) {
     const auto shown = dkr::localisation::label(std::string_view(label));
-    return PaddockSectionTab(shown.c_str(), open, width);
+    return PaddockSectionTab(shown.c_str(), open, width, compact);
 }
 template <class T>
 bool UiPaddockCheckbox(const char* id, T&& label, bool* value, float width,

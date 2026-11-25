@@ -29,7 +29,7 @@ constexpr int kControllerPakCount = 4;
 void configure(const std::filesystem::path& config_directory);
 // Explicit, known profile/portable locations only; never a whole-drive scan.
 void configure_recovery_locations(std::vector<std::filesystem::path> roots);
-SaveInfo adventure_info();
+SaveInfo adventure_info(bool modded = false);
 void set_online_save_protection(bool enabled);
 enum class StoredSaveKind { Adventure, ControllerPak, ExperimentalPaks, CustomRecords };
 struct StoredAdventure {
@@ -46,14 +46,15 @@ bool export_stored_adventure(const std::filesystem::path& source, const std::fil
 bool export_stored_save(const std::filesystem::path& source, const std::filesystem::path& destination,
                         StoredSaveKind kind, std::string& error);
 std::filesystem::path backup_directory();
-std::vector<std::filesystem::path> adventure_backups();
-bool backup_adventure(std::filesystem::path& created, std::string& error);
+std::vector<std::filesystem::path> adventure_backups(bool modded = false);
+bool backup_adventure(std::filesystem::path& created, std::string& error, bool modded = false);
 bool export_adventure(const std::filesystem::path& destination, std::string& error);
-bool import_adventure(const std::filesystem::path& source, std::string& error);
-bool reset_adventure(std::string& error);
-bool load_adventure(codec::SaveImage& image, std::string& error);
+bool import_adventure(const std::filesystem::path& source, std::string& error, bool modded = false);
+bool reset_adventure(std::string& error, bool modded = false);
+bool load_adventure(codec::SaveImage& image, std::string& error, bool modded = false);
 bool commit_adventure(const codec::SaveImage& image, std::string& error);
-bool repair_adventure_checksums(bool& changed, std::filesystem::path& original_backup, std::string& error);
+bool repair_adventure_checksums(bool& changed, std::filesystem::path& original_backup, std::string& error,
+                                bool modded = false);
 bool canonical_adventure_bytes(std::vector<std::uint8_t>& bytes, std::string& error);
 SaveInfo previous_online_adventure_info(std::string_view mod_profile = {});
 // Stages validated bytes without touching previous online progress. The host's
@@ -85,7 +86,16 @@ bool import_controller_pak(int channel, const std::filesystem::path& source, std
 // filenames or extraction paths, so importing cannot traverse outside the
 // configured save directory. Adventure EEPROM and all present Controller Paks
 // are validated before any live file is replaced.
-bool export_bundle(const std::filesystem::path& destination, std::string& error);
-bool import_bundle(const std::filesystem::path& source, std::string& error);
+bool export_bundle(const std::filesystem::path& destination, std::string& error, bool modded = false);
+bool import_bundle(const std::filesystem::path& source, std::string& error, bool modded = false);
+
+struct CloudSaveSlot {
+    std::string_view key, label;
+    std::size_t limit;
+};
+std::span<const CloudSaveSlot> cloud_save_slots();
+bool read_cloud_save(std::string_view key, std::vector<std::uint8_t>& bytes, std::string& error);
+bool replace_cloud_save(std::string_view key, const std::vector<std::uint8_t>& expected,
+                        const std::vector<std::uint8_t>& replacement, std::string& error);
 
 } // namespace dkr::runtime::saves

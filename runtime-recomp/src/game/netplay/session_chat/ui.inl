@@ -59,7 +59,7 @@ void SessionChatKeyboard() {
 void SessionChatOptions(const dkr::chat::View& view) {
     if (OlButton("...##chat-options", OlTone::Plain, 38.F, "Chat options"))
         ImGui::OpenPopup("session-chat-options");
-    if (ImGui::BeginPopup("session-chat-options")) {
+    if (dkr::runtime::ui::begin_dialog_popup("session-chat-options")) {
         if (view.host) {
             bool allow = dkr::chat::host_enabled.load();
             if (ImGui::Checkbox("Allow lobby chat", &allow)) {

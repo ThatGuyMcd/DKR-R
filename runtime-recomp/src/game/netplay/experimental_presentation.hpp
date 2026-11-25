@@ -147,6 +147,7 @@ class PresentationMailbox final {
     // image or after a slow renderer's last publication. Retires any in-flight
     // candidate/lease without claiming that the GPU has finished consuming it.
     bool retire_for_restore(std::uint64_t epoch, std::uint32_t first_changed_frame);
+    bool retire_for_correction(std::uint64_t epoch, std::uint32_t first_changed_frame);
     bool is_current(const std::shared_ptr<const RenderSnapshot>& snapshot) const;
     // Nonblocking status for an asynchronous restore/preparation owner. An
     // adapter requiring fully retired presentation MUST await this, keeping
@@ -156,7 +157,7 @@ class PresentationMailbox final {
     BufferStatistics buffer_statistics() const;
 
   private:
-    void retire_locked(std::uint32_t first_changed_frame);
+    void retire_locked(std::uint32_t first_changed_frame, bool correction = false);
     // Serialize producers without holding the small consumer-state lock while
     // copying/hashing RAM. A correction may retire a candidate during that work.
     std::mutex producer_mutex_;

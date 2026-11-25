@@ -84,6 +84,11 @@ bool g_auto_boot_consumed = false;
 
 std::mutex g_mutex;
 std::vector<Track> g_tracks;
+std::vector<Track> g_replay_tracks;
+
+const std::vector<Track>& active_tracks_locked() {
+    return g_replay_tracks.empty() ? g_tracks : g_replay_tracks;
+}
 std::array<SectionState, kSectionCount> g_sections{};
 std::unordered_map<std::string, std::int32_t> g_resolved_level_ids;
 std::filesystem::path g_directory;
@@ -383,6 +388,62 @@ std::vector<Track> tracks() {
     return g_tracks;
 }
 
+namespace {
+const Entry* replay_header(const Track& track) {
+    if (!track.level_links.empty())
+        return nullptr;
+    const auto header = std::find_if(track.entries.begin(), track.entries.end(),
+                                     [](const auto& entry) { return entry.section == Section::LevelHeaders; });
+    if (header == track.entries.end() || header->bytes.size() < 0xC8 || header->bytes[0] != kCustomTrackWorld ||
+        header->bytes[0x4B] < 1 || header->bytes[0x4B] > 5 || header->bytes[0x4C] != 0)
+        return nullptr;
+    return &*header;
+}
+} // namespace
+
+unsigned replay_vehicles(const Track& track) {
+    const auto* header = replay_header(track);
+    return header ? header->bytes[0x4E] & 7U : 0;
+}
+
+unsigned replay_laps(const Track& track) {
+    const auto* header = replay_header(track);
+    return header ? header->bytes[0x4B] : 0;
+}
+
+std::vector<ReplayTrack> installed_replay_tracks() {
+    std::scoped_lock lock(g_mutex);
+    std::vector<ReplayTrack> choices;
+    for (const auto& track : g_tracks)
+        if (const auto vehicles = replay_vehicles(track))
+            choices.push_back({track.id, track.name, vehicles});
+    return choices;
+}
+
+std::filesystem::path installed_replay_source(const std::string& id) {
+    std::scoped_lock lock(g_mutex);
+    const auto track =
+        std::find_if(g_tracks.begin(), g_tracks.end(), [&](const Track& candidate) { return candidate.id == id; });
+    return track == g_tracks.end() ? std::filesystem::path{} : track->source;
+}
+
+void begin_replay_track(Track track) {
+    std::scoped_lock lock(g_mutex);
+    g_replay_tracks.clear();
+    g_replay_tracks.push_back(std::move(track));
+    g_sections = {};
+    g_resolved_level_ids.clear();
+}
+
+void retire_replay_track() {
+    std::scoped_lock lock(g_mutex);
+    if (g_replay_tracks.empty())
+        return;
+    g_replay_tracks.clear();
+    g_sections = {};
+    g_resolved_level_ids.clear();
+}
+
 std::size_t enabled_count() {
     std::scoped_lock lock(g_mutex);
     return static_cast<std::size_t>(
@@ -409,7 +470,7 @@ std::optional<MusicInfo> music_for_level(std::int32_t level_id) {
     if (level_id < 0) {
         return std::nullopt;
     }
-    for (const Track& track : g_tracks) {
+    for (const Track& track : active_tracks_locked()) {
         const auto resolved = g_resolved_level_ids.find(track.id);
         if (track.enabled && track.music && resolved != g_resolved_level_ids.end() && resolved->second == level_id) {
             return track.music;
@@ -420,7 +481,7 @@ std::optional<MusicInfo> music_for_level(std::int32_t level_id) {
 
 std::optional<water::enhanced::Metadata> water_for_level(std::int32_t level_id) {
     std::scoped_lock lock(g_mutex);
-    for (const auto& track : g_tracks) {
+    for (const auto& track : active_tracks_locked()) {
         const auto resolved = g_resolved_level_ids.find(track.id);
         if (track.enabled && track.water && resolved != g_resolved_level_ids.end() && resolved->second == level_id)
             return track.water;
@@ -627,7 +688,7 @@ bool minimap_hidden(std::uint32_t header_offset) {
         return false; // Retail, or not a track's header.
     }
     const Track* track = nullptr;
-    for (const Track& candidate : g_tracks) {
+    for (const Track& candidate : active_tracks_locked()) {
         if (candidate.id == header->track_id) {
             track = &candidate;
         }
@@ -749,9 +810,9 @@ std::int32_t track_override() {
 }
 
 bool owns_level_id(std::int32_t level_id) {
-    if (!dkr::session_content::local_assets_allowed())
-        return false;
     std::scoped_lock lock(g_mutex);
+    if (g_replay_tracks.empty() && !dkr::session_content::local_assets_allowed())
+        return false;
     return std::any_of(g_resolved_level_ids.begin(), g_resolved_level_ids.end(),
                        [level_id](const auto& entry) { return entry.second == level_id; });
 }
@@ -874,7 +935,7 @@ std::vector<ResolvedLevelLink> level_links_for_object_map(std::uint32_t offset) 
         if (entry.offset != offset || entry.track_id.empty()) {
             continue;
         }
-        for (const Track& track : g_tracks) {
+        for (const Track& track : active_tracks_locked()) {
             if (track.id != entry.track_id || !track.enabled) {
                 continue;
             }
@@ -901,7 +962,7 @@ std::int32_t level_race_type(std::int32_t level_id) {
         if (resolved != level_id) {
             continue;
         }
-        for (const Track& track : g_tracks) {
+        for (const Track& track : active_tracks_locked()) {
             if (track.id != track_id || !track.enabled) {
                 continue;
             }
@@ -1074,7 +1135,7 @@ std::int32_t level_model_arena_bytes(std::int32_t level_id) {
         if (resolved != level_id) {
             continue;
         }
-        for (const Track& track : g_tracks) {
+        for (const Track& track : active_tracks_locked()) {
             if (track.id != track_id) {
                 continue;
             }
@@ -1199,11 +1260,11 @@ std::vector<std::int32_t> build_extended_table(Section section, const std::int32
         std::fprintf(stderr, "[custom-tracks] applying deferred rescan\n");
         scan_locked(g_directory);
     }
-    if (!dkr::session_content::local_assets_allowed()) {
+    if (g_replay_tracks.empty() && !dkr::session_content::local_assets_allowed()) {
         const std::vector<Track> vanilla;
         return assemble_table(section, retail_table, vanilla, g_sections, g_resolved_level_ids, table_words);
     }
-    return assemble_table(section, retail_table, g_tracks, g_sections, g_resolved_level_ids, table_words);
+    return assemble_table(section, retail_table, active_tracks_locked(), g_sections, g_resolved_level_ids, table_words);
 }
 
 PreparedTracks prepare_tracks(std::vector<Track> tracks, const std::array<std::vector<std::int32_t>, 7>& tables) {
@@ -1301,7 +1362,7 @@ PreparedTracks prepare_tracks(std::vector<Track> tracks, const std::array<std::v
 
 const std::uint8_t* payload_for(Section section, std::uint32_t offset, std::int32_t size) {
     std::scoped_lock lock(g_mutex);
-    if (!dkr::session_content::local_assets_allowed())
+    if (g_replay_tracks.empty() && !dkr::session_content::local_assets_allowed())
         return nullptr;
     const SectionState& state = g_sections[section_slot(section)];
     if (!state.built || size <= 0 || offset < state.end_offset) {
@@ -1317,7 +1378,7 @@ const std::uint8_t* payload_for(Section section, std::uint32_t offset, std::int3
 
 std::int32_t sibling_index(Section from, std::uint32_t offset, Section to, MapSlot slot) {
     std::scoped_lock lock(g_mutex);
-    if (!dkr::session_content::local_assets_allowed())
+    if (g_replay_tracks.empty() && !dkr::session_content::local_assets_allowed())
         return -1;
     const SectionState& source = g_sections[section_slot(from)];
     const SectionState& target = g_sections[section_slot(to)];

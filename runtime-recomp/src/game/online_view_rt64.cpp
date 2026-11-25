@@ -4,6 +4,7 @@
 #include "hud_projection_rt64.hpp"
 #include "hud_reference_layout.hpp"
 #include "presentation_identity.hpp"
+#include "time_trial/session.hpp"
 #include "hle/rt64_state.h"
 #include <bit>
 #include <cmath>
@@ -25,6 +26,7 @@ struct Pass::Impl {
     hud::LayoutMode hud_mode = hud::LayoutMode::Original;
     hlslpp::float4x4 camera{};
     Nameplates names;
+    std::optional<time_trial::GhostNameplate> ghost;
     IdentitySelector select = nullptr;
     std::array<hud::groups::Transform, 4> widgets{};
     std::array<unsigned, 4> widget_elements{};
@@ -67,6 +69,7 @@ void Pass::prepare(const Session& session, std::span<const dkr_owned_draw_event>
                    std::span<std::uint8_t> decoder, std::uint32_t scene, float aspect, std::uint32_t framebuffer,
                    hud::LayoutMode hud_mode) noexcept {
     auto& p = *impl_;
+    p.ghost.reset();
     const auto eligibility = dkr::online_stability::view_eligibility(session.owner, session.players, events);
     p.race_type = eligibility.race_type;
     p.plan = dkr::online_stability::focus_plan(online_view::plan(session, events), eligibility, session.owner,
@@ -101,6 +104,31 @@ void Pass::prepare(const Session& session, std::span<const dkr_owned_draw_event>
     });
     p.names.prepare(session, p.plan, decoder,
                     p.plan.focus ? presentation::normalise_identity(scene ^ 0x46554C4CU ^ session.owner) : scene);
+}
+void Pass::prepare_ghost(time_trial::GhostNameplate ghost, std::span<std::uint8_t> decoder,
+                         std::uint32_t scene) noexcept {
+    auto& p = *impl_;
+    p.plan = {};
+    p.phase = Impl::Phase::Shared;
+    p.camera_valid = false;
+    p.framebuffer = ghost.framebuffer;
+    p.names.prepare_ghost(ghost.name ? std::string_view(*ghost.name) : std::string_view{}, ghost.outline, decoder,
+                          scene);
+    p.ghost = std::move(ghost);
+}
+void Pass::ghost_world_boundary(RT64::State& s, unsigned view, bool end) {
+    auto& p = *impl_;
+    if (!p.ghost || view != 0)
+        return;
+    if (!end) {
+        p.phase = Impl::Phase::World;
+        p.camera_valid = false;
+        p.names.begin_view(view);
+        return;
+    }
+    if (p.phase == Impl::Phase::World && p.camera_valid && p.main_image(s))
+        p.names.draw_ghost(s, *p.ghost, p.camera, p.select);
+    p.phase = Impl::Phase::Shared;
 }
 void Pass::selector(IdentitySelector value) noexcept {
     impl_->select = value;
@@ -240,7 +268,7 @@ void Pass::after_command(RT64::State& s, bool scissor, bool viewport) {
 }
 void Pass::camera_root(RT64::RSP& rsp, unsigned matrix) {
     auto& p = *impl_;
-    if (!p.plan.eligible || p.phase != Impl::Phase::World || matrix > 2)
+    if ((!p.plan.eligible && !p.ghost) || p.phase != Impl::Phase::World || matrix > 2)
         return;
     p.camera = rsp.modelMatrixStack[matrix];
     p.camera_valid = true;

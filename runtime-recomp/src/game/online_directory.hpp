@@ -49,6 +49,7 @@ struct View {
     std::vector<Room> rooms;
     std::vector<SocialMember> members;
     bool social_profiles = false;
+    bool host_handover = false;
 };
 std::shared_ptr<const View> view();
 void connect(bool enabled);

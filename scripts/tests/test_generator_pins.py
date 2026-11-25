@@ -37,6 +37,16 @@ def matches(data, pin):
 
 
 class GeneratorPins(unittest.TestCase):
+    def test_newline_variants_reconstruct_only_the_exact_pinned_bytes(self):
+        lf = b"int reviewed = 1;\nint other = 2;\n"
+        crlf = lf.replace(b"\n", b"\r\n")
+        for pinned in (lf, crlf):
+            digest = hashlib.sha256(pinned).hexdigest()
+            for checkout in (lf, crlf):
+                self.assertEqual(probe.reviewed_bytes(checkout, digest), pinned)
+                self.assertIsNone(probe.reviewed_bytes(checkout + b"// changed\n", digest))
+                self.assertIsNone(probe.reviewed_bytes(checkout.replace(b"= 1", b"= 3"), digest))
+
     def assert_pinned(self, path, *pins):
         data = (ROOT / path).read_bytes()
         self.assertTrue(

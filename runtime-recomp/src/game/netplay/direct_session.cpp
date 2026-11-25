@@ -4,6 +4,8 @@
 #include "netplay/session_chat/settings.hpp"
 #include "netplay/peer_relay/owner_glue.hpp"
 #include "netplay/peer_relay/transport.hpp"
+#include "netplay/session_links/registry.hpp"
+#include "netplay/session_links/transport.hpp"
 #include "start_cancel_message.hpp"
 #include "online_stability/qualification_delivery.hpp"
 #include "../policy.hpp"
@@ -301,6 +303,7 @@ void DirectSession::configure_session_save(std::vector<std::uint8_t> canonical_s
 }
 
 void DirectSession::retire_transport_locked() {
+    links::forget(this);
     pending_invitation_.reset();
     if (!transport_->quick_join()) {
         transport_->close();
@@ -5806,6 +5809,13 @@ void DirectSession::flush_outbound_locked() {
 }
 
 std::uint64_t& DirectSession::outbound_sequence(const PeerAddress& address, const secure::Key& key) {
+    // Pair-key counters survive a role change and optional direct-input routes.
+    {
+        auto party = dkr::runtime::spectators::party_link(this);
+        std::scoped_lock party_lock(party->mutex);
+        if (auto* p = party->peer(address); p && p->key == key)
+            return p->sequence;
+    }
     if (!is_host_)
         return next_sequence_;
     for (PeerRecord& peer : peers_) {
@@ -5864,6 +5874,8 @@ void DirectSession::broadcast(protocol::MessageType type, std::span<const std::u
 // and routing decisions are relay::build_context and relay::route
 // (peer_relay/owner_glue.hpp); this reads session and party state into their
 // inputs, resolves addresses and keys, and performs the sends.
+#include "netplay/session_links/owner_service.inl"
+
 void DirectSession::service_peer_relay_locked(dkr::runtime::spectators::PartyLink& party,
                                               std::chrono::steady_clock::time_point now) {
     namespace proxy = dkr::relay;
@@ -5933,6 +5945,16 @@ void DirectSession::service_peer_relay_locked(dkr::runtime::spectators::PartyLin
         roster.rows.push_back({host_sender_id_, "Host", {}, true});
         party_port(roster.rows.back());
         addresses.push_back({host_sender_id_, host_address_});
+        if (party.enabled && !party.local_watching())
+            for (const auto& member : party.party.snapshot().members)
+                if (member.id != sender_id_ && member.id != host_sender_id_ && member.role == watch::Role::Racer &&
+                    party.links.introduced.contains(member.id))
+                    if (const auto* peer = party.peer(member.id)) {
+                        proxy::RosterRow row{member.id, member.name, {}, true};
+                        party_port(row);
+                        roster.rows.push_back(std::move(row));
+                        addresses.push_back({member.id, peer->address});
+                    }
     }
     proxy::configure(this, proxy::build_context(roster, now), std::move(addresses));
     proxy::RouteTable table;
@@ -5948,10 +5970,14 @@ void DirectSession::service_peer_relay_locked(dkr::runtime::spectators::PartyLin
                     table.reachable.push_back(peer.sender_id);
         }
     }
+    if (!is_host_ && party.enabled && !party.local_watching())
+        for (const auto& member : party.party.snapshot().members)
+            if (member.role == watch::Role::Racer && party.links.introduced.contains(member.id))
+                table.introduced.push_back(member.id);
     for (auto& command : proxy::route(proxy::controls(this), table)) {
         auto payload = watch::link_encode(watch::LinkKind::Extension, command.bytes);
         const auto type = protocol::MessageType(watch::PartyMessageType);
-        if (!is_host_) {
+        if (!is_host_ && command.target == host_sender_id_) {
             send_with_key(host_address_, key_, type, payload);
         } else if (party.enabled) {
             if (const auto* peer = party.peer(command.target))
@@ -6095,6 +6121,8 @@ void DirectSession::pump_locked() {
 
     PeerAddress departed{};
     while (transport_->take_peer_departure(departed)) {
+        if (!is_host_ && !(departed == host_address_) && links::retire_route(this, match_id_, departed))
+            continue;
         {
             auto party = dkr::runtime::spectators::party_link(this);
             std::scoped_lock party_lock(party->mutex);
@@ -6200,6 +6228,7 @@ void DirectSession::pump_locked() {
         if (!secure::inspect_packet(encrypted, packet_sender, packet_match) || packet_match != match_id_)
             continue;
         const secure::Key* receive_key = &key_;
+        std::optional<secure::Key> introduced_key;
         bool provisional_mod_peer = false;
         if (is_host_) {
             PeerRecord* peer = peer_by_sender(packet_sender);
@@ -6219,7 +6248,10 @@ void DirectSession::pump_locked() {
                 }
             }
         } else if (packet_sender != host_sender_id_) {
-            continue;
+            introduced_key = links::receive_key(this, match_id_, packet_sender, source);
+            if (!introduced_key)
+                continue;
+            receive_key = &*introduced_key;
         }
         std::uint64_t opened_sender = 0U;
         std::uint64_t packet_sequence = 0U;
@@ -6235,6 +6267,8 @@ void DirectSession::pump_locked() {
         // input, save or launch packet must never allocate a racer slot.
         if (provisional_mod_peer && packet.header.type != protocol::MessageType::ModControl &&
             packet.header.type != protocol::MessageType::ModData)
+            continue;
+        if (introduced_key && unsigned(packet.header.type) != dkr::runtime::spectators::PartyMessageType)
             continue;
         // A fragmented authority snapshot must not age a delayed rollback
         // input out of the replay window. Keep authenticated sequence windows
@@ -6310,6 +6344,18 @@ void DirectSession::pump_locked() {
             if (!watch::link_decode(packet.payload, message))
                 continue;
             if (message.kind == watch::LinkKind::Extension) {
+                if (message.body.size() >= 6 && message.body[5] == 7) {
+                    const bool admitted = party->enabled && party->party.find(packet_sender) &&
+                                          (packet_sender == host_sender_id_ || party->peer(packet_sender));
+                    if (admitted) {
+                        if (auto* peer = party->peer(packet_sender))
+                            peer->heard = std::chrono::steady_clock::now();
+                        if (packet_sender == host_sender_id_)
+                            last_admission_response_ = std::chrono::steady_clock::now();
+                        party->links.receive(packet_sender, message.body);
+                    }
+                    continue;
+                }
                 // Authentication/replay checks already ran. A provisional download
                 // route is not an admitted lobby member and cannot publish metadata.
                 const bool admitted = is_host_ ? (party->enabled ? party->peer(packet_sender) != nullptr
@@ -6317,10 +6363,24 @@ void DirectSession::pump_locked() {
                                                : (packet_sender == host_sender_id_ && source == host_address_);
                 if (admitted && message.body.size() >= 6 && message.body[5] == 4)
                     dkr::chat::channel(this)->receive(packet_sender, message.body);
-                else if (admitted && message.body.size() >= 6 && (message.body[5] == 3 || message.body[5] == 6))
+                else if ((admitted || (party->enabled && party->peer(packet_sender) &&
+                                       party->links.introduced.contains(packet_sender))) &&
+                         message.body.size() >= 6 && message.body[5] == 6)
+                    dkr::relay::control(this, packet_sender, message.body);
+                else if (admitted && message.body.size() >= 6 && message.body[5] == 3)
                     dkr::relay::control(this, packet_sender, message.body);
                 else
                     dkr::online_stability::control(this)->receive(packet_sender, admitted, message.body);
+                continue;
+            }
+            if (!is_host_ && packet_sender != host_sender_id_) {
+                // Introductions authorize only immutable racer inputs. Room,
+                // stop, start and checkpoint authority remains with the host.
+                if (message.kind == watch::LinkKind::Runtime && party->links.introduced.contains(packet_sender)) {
+                    if (auto* peer = party->peer(packet_sender);
+                        peer && peer->address == source && party->admit_incoming(packet_sender, message.body))
+                        peer->heard = std::chrono::steady_clock::now();
+                }
                 continue;
             }
             if (is_host_) {
@@ -6387,8 +6447,8 @@ void DirectSession::pump_locked() {
                     break;
                 }
                 case watch::LinkKind::Ready:
-                    if (!party->launch && !party->stopping && message.body.size() == 1 && message.body[0] <= 1 &&
-                        party->participant(packet_sender))
+                    if (!party->launch && !party->stopping && !links::busy(party->links) && message.body.size() == 1 &&
+                        message.body[0] <= 1 && party->participant(packet_sender))
                         party->ready[packet_sender] = message.body[0] != 0;
                     break;
                 case watch::LinkKind::Stop:
@@ -6547,8 +6607,9 @@ void DirectSession::pump_locked() {
                                 if (!party->launch) {
                                     // The roster is part of the receipt. Re-arm when it moves on, or a
                                     // start validated against the previous roster is never acknowledged.
-                                    if (!gate->launch || gate->hash != start.descriptor_hash ||
-                                        gate->roster != roster.generation) {
+                                    if (dkr::runtime::party_start::needs_prepare(
+                                            *gate, start.descriptor_hash, roster.generation, session_save_generation_,
+                                            manifest_.session_save_hash)) {
                                         gate->launch = launch;
                                         gate->hash = start.descriptor_hash;
                                         gate->roster = roster.generation;
@@ -6681,6 +6742,7 @@ void DirectSession::pump_locked() {
                 return;
 #include "../remove_member.inl"
             const auto now = std::chrono::steady_clock::now();
+            service_session_links_locked(*party, now);
             auto queue = [&](watch::MemberId target, watch::LinkKind kind, std::vector<std::uint8_t> body) {
                 const auto traffic = kind == watch::LinkKind::Heartbeat ? TransportTrafficClass::Realtime
                                                                         : TransportTrafficClass::Control;
@@ -6752,7 +6814,8 @@ void DirectSession::pump_locked() {
                     party->ready.clear();
                     party->advertised = {};
                 }
-                if (party->ready_requested && !party->launch && party->participant(sender_id_))
+                if (party->ready_requested && !party->launch && !links::busy(party->links) &&
+                    party->participant(sender_id_))
                     party->ready[sender_id_] = party->ready_value;
                 party->ready_requested = false;
                 // Within the DirectSession and PartyLink owner locks.
@@ -6787,8 +6850,8 @@ void DirectSession::pump_locked() {
                 };
                 if (party->start_requested) {
                     party->start_requested = false;
-                    if (!party->launch && !party->stopping && gate->phase != StartPhase::Countdown &&
-                        gate->phase != StartPhase::Committing) {
+                    if (!party->launch && !party->stopping && !links::busy(party->links) &&
+                        gate->phase != StartPhase::Countdown && gate->phase != StartPhase::Committing) {
                         std::string reason;
                         bool all = true;
                         for (const auto& m : party->party.snapshot().members)
@@ -7065,6 +7128,10 @@ void DirectSession::pump_locked() {
                     auto item = std::move(pending.front());
                     pending.pop_front();
                     party->outgoing_bytes -= item.bytes.size();
+                    if (!is_host_ && item.target && item.target != host_sender_id_ &&
+                        item.kind == watch::LinkKind::Runtime && item.traffic == TransportTrafficClass::Realtime &&
+                        item.bytes.size() > 4 && item.bytes[4] == 19 && !party->links.live_routes.contains(item.target))
+                        continue;
                     auto payload = watch::link_encode(item.kind, item.bytes);
                     bool blocked = false;
                     auto send = [&](const PeerAddress& destination, const secure::Key& key) {
@@ -7113,6 +7180,9 @@ void DirectSession::pump_locked() {
                             send(peer->address, peer->key);
                     } else if (!item.target || item.target == host_sender_id_)
                         send(host_address_, key_);
+                    else if (auto* peer = party->peer(item.target);
+                             peer && party->links.introduced.contains(item.target))
+                        send(peer->address, peer->key);
                     if (blocked)
                         party->enqueue(std::move(item));
                 }
@@ -7501,6 +7571,8 @@ void DirectSession::handle_join_request(const PeerAddress& source, std::span<con
     }
     // The host owns this policy. A racer advertises support for parties, not
     // permission to enable them. A non-spectator lobby uses normal admission.
+    if (party->enabled && links::busy(party->links))
+        return;
     if (party_join && !party->enabled && !watch_join)
         party_join = false;
     if (party_join && watch_join && !party->allow_spectators && !party->peer(packet_sender)) {
@@ -7619,11 +7691,14 @@ void DirectSession::handle_join_request(const PeerAddress& source, std::span<con
             if (record.active)
                 present.insert(record.sender_id);
         prune_other_architecture_senders(other_architecture_senders_, present);
+        std::erase_if(party->links.architectures,
+                      [&](const auto& item) { return item.first != sender_id_ && !present.contains(item.first); });
     }
     if (hello.manifest.architecture == manifest_.architecture)
         other_architecture_senders_.erase(packet_sender);
     else
         other_architecture_senders_.insert(packet_sender);
+    party->links.architectures.insert_or_assign(packet_sender, hello.manifest.architecture);
     PendingRecord* pending = pending_by_sender(packet_sender);
     if (pending && pending->mods_approved &&
         (!(pending->address == source) || pending->key != peer_key || pending->client_public != client_public))

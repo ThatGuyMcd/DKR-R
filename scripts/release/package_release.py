@@ -66,7 +66,9 @@ FEATURES = (
 FIXTURES = (b"DKR_REPLAY_CAPTURE_FILE", b"DKR_UPDATE_TEST_VERIFIER", b"DKR_WATER_TEST_MAP")
 # A pre-release label linked into a release binary: 1.0.7+beta.10,
 # 1.0.10-vehicle-playtest.3 and the like.
-PRERELEASE = re.compile(r"\d+\.\d+\.\d+(?:\+beta\.\d+|-[a-z]+-playtest\.)")
+PRERELEASE = re.compile(
+    r"\d+\.\d+\.\d+(?:\+beta\.\d+|-(?:beta\.\d+(?:-playtest\.\d+(?:-fix\.\d+)?)?|(?:[a-z]+-)?playtest\.\d+))"
+)
 
 
 class Package:
@@ -90,13 +92,13 @@ def tree(source: Path, target: Path) -> None:
     shutil.copytree(source, target, symlinks=True)
 
 
-def prerelease_label(data: bytes) -> str | None:
+def prerelease_label(data: bytes, allowed: str | None = None) -> str | None:
     """A pre-release label in the binary, as narrow or UTF-16LE text."""
     views = (data.decode("latin-1"), data.decode("utf-16-le", "ignore"), data[1:].decode("utf-16-le", "ignore"))
     for text in views:
-        label = PRERELEASE.search(text)
-        if label:
-            return label[0]
+        for label in PRERELEASE.finditer(text):
+            if label[0] != allowed:
+                return label[0]
     return None
 
 
@@ -116,7 +118,7 @@ def image(path: Path, machine: str, release: bool = False) -> bytes:
         v = version()
         if v.encode() not in data and v.encode("utf-16le") not in data:
             raise ValueError("Release version missing: " + str(path))
-        label = prerelease_label(data)
+        label = prerelease_label(data, v if re.fullmatch(r"\d+\.\d+\.\d+-playtest\.[1-9]\d*", v) else None)
         if label:
             raise ValueError(f"Pre-release label linked into {path.name}: {label}")
     return data
@@ -379,7 +381,7 @@ def main(argv: list[str] | None = None) -> int:
         receipt = {
             "schema": 2,
             "version": version(),
-            "label": f"v{version()} Release Build",
+            "label": f"v{version()} {'Playtest Build' if '-playtest.' in version() else 'Release Build'}",
             "platform": a.platform,
             "arch": a.arch,
             "rollback_build_ids": package.ids,

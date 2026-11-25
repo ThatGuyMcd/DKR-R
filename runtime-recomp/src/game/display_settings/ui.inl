@@ -20,7 +20,8 @@ bool DrawDisplayChoices(float width, bool aspect_field) {
     bool changed = false;
     const auto list = choices(preference, w, h);
     std::vector<SettingsChoice> resolutions{
-        {std::string(dkr::localisation::source("Automatic - match window"))},
+        {std::string(dkr::localisation::source("Automatic - match window")) + " (" +
+         std::string(dkr::localisation::source("Recommended")) + ")"},
         {std::string(dkr::localisation::source("Automatic - sharp integer scaling"))}};
     int selected = preference.height == 0 ? 0 : preference.height == -1 ? 1 : -1;
     for (const auto& item : list) {

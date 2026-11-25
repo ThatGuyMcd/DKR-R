@@ -40,7 +40,15 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
 COMMUNITY_SITE = ROOT / "runtime-recomp/src/game/mod_library/website"
 COMMUNITY_API = ROOT / "services/online-directory/api"
-COMMUNITY_API_FILES = ("worker.mjs", "library_api.mjs", "community_api.mjs", "community_schema.sql")
+COMMUNITY_API_FILES = (
+    "worker.mjs",
+    "library_api.mjs",
+    "community_api.mjs",
+    "community_schema.sql",
+    "speedrun_api.mjs",
+    "speedrun_replay.mjs",
+    "speedrun_schema.sql",
+)
 sys.path.insert(0, str(HERE))
 import transforms  # noqa: E402
 
@@ -228,7 +236,17 @@ def community(output: Path, archive: Path | None, baseline: Path | None, esbuild
             ],
             check=True,
         )
-    shutil.copyfile(COMMUNITY_API / "community_schema.sql", private / "community_schema.sql")
+    for schema in ("community_schema.sql", "speedrun_schema.sql", "notification_schema.sql"):
+        shutil.copyfile(COMMUNITY_API / schema, private / schema)
+    directory = ROOT / "services/online-directory"
+    online = output / "ONLINE-WORKER"
+    online.mkdir()
+    for name in ("directory.mjs", "wrangler-online.jsonc"):
+        shutil.copyfile(directory / name, online / name)
+    previous_directory = baseline / "ONLINE-WORKER/directory.mjs"
+    if previous_directory.is_file():
+        (rollback / "ONLINE-WORKER").mkdir()
+        shutil.copyfile(previous_directory, rollback / "ONLINE-WORKER/directory.mjs")
     for name in COMMUNITY_API_FILES:
         review.extend(
             difflib.unified_diff(

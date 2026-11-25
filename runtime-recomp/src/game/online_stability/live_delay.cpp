@@ -189,7 +189,7 @@ void LiveDelay::send(Member target, DelayMessage m) {
     m.room = room_;
     m.epoch = epoch_;
     m.controls = controls_;
-    m.frame = m.kind == DelayKind::Hello ? clock_frontier_ : frame_;
+    m.frame = (m.kind == DelayKind::Hello || m.kind == DelayKind::Report) ? clock_frontier_ : frame_;
     (void)control_->send(target, encode(m));
 }
 void LiveDelay::apply(unsigned value, Clock::time_point now) {
@@ -203,6 +203,14 @@ void LiveDelay::apply(unsigned value, Clock::time_point now) {
         current_, value);
     current_ = value;
     applied_at_ = now;
+}
+void LiveDelay::record_report(Member source, const DelayMessage& message, Clock::time_point now) {
+    auto& report = reports_[source];
+    if (now < report.at || now - report.at > std::chrono::seconds(2))
+        report.cost = {};
+    report.cost.observe(message.frame, message.work_us, message.replay_us, message.interval_us);
+    report.message = message;
+    report.at = now;
 }
 void LiveDelay::receive(const Identity& id, Member source, const DelayMessage& m, Clock::time_point now) {
     if (m.room != room_ || m.epoch != epoch_ || m.controls != controls_ || !id.dynamic)
@@ -231,7 +239,7 @@ void LiveDelay::receive(const Identity& id, Member source, const DelayMessage& m
                 return;
             const auto previous = reports_.find(source);
             if (m.sequence && (previous == reports_.end() || m.sequence > previous->second.message.sequence))
-                reports_[source] = {m, now};
+                record_report(source, m, now);
         }
         return;
     }
@@ -436,8 +444,8 @@ void LiveDelay::pulse(std::uint64_t epoch, std::uint64_t controls, std::uint32_t
                 report.room = room_;
                 report.epoch = epoch_;
                 report.controls = controls_;
-                report.frame = frame_;
-                reports_[id.local] = {report, now};
+                report.frame = clock_frontier_;
+                record_report(id.local, report, now);
             } else
                 send(id.host, report);
             late_ = waits_ = samples_ = 0;
@@ -491,6 +499,8 @@ void LiveDelay::pulse(std::uint64_t epoch, std::uint64_t controls, std::uint32_t
                     if (m.interval_us >= 100000 && std::uint64_t(m.work_us) * 2 > m.interval_us &&
                         std::uint64_t(m.replay_us) * 10 > m.interval_us)
                         busy = true;
+                    pressure |= found->second.cost.pressure(m.owner_late[owner], m.replay_us);
+                    busy |= found->second.cost.busy(m.owner_late[owner], m.replay_us);
                 }
             auto [policy, inserted] = policies_.try_emplace(member);
             if (inserted)
@@ -568,12 +578,13 @@ void LiveDelay::arrival(unsigned owner, std::uint32_t frame, bool repair) {
     if (repair)
         return;
     samples_ = std::min(255U, samples_ + 1);
+    // Replaying old ticks cannot make a fresh late arrival appear on time.
+    const auto late = frame < clock_frontier_ ? std::min(48U, clock_frontier_ - frame) : 0;
     if (owner_samples_[owner] < 255) {
         ++owner_samples_[owner];
-        ++arrival_histogram_[owner][frame < frame_ ? std::min(48U, frame_ - frame) : 0];
+        ++arrival_histogram_[owner][late];
     }
-    if (frame < frame_) {
-        const auto late = std::min(48U, frame_ - frame);
+    if (late) {
         late_ = std::max(late_, late);
         owner_late_[owner] = std::max(owner_late_[owner], late);
     }

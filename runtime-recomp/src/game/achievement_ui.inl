@@ -2,15 +2,16 @@ namespace ach = dkr::runtime::achievements;
 int g_achievement_filter = 0, g_achievement_sort = 0;
 std::string g_achievement_category, g_achievement_detail;
 std::array<char, 161> g_achievement_search{};
+bool g_achievement_reset_scroll = false;
 bool g_achievement_settings = false, g_achievement_reset = false, g_achievement_recognise = false;
-bool g_achievement_focus_detail = false;
 std::string g_achievement_focus_row;
-float g_achievement_return_scroll = 0;
 ach::Toast g_achievement_toast;
 double g_achievement_toast_started = 0;
 SDL_AudioDeviceID g_achievement_audio = 0;
 
-void AchievementChime() {
+void AchievementChime(float gain = 1.F) {
+    if (gain <= 0.F)
+        return;
     if (!g_achievement_audio) {
         SDL_AudioSpec wanted{}, actual{};
         wanted.freq = 48000;
@@ -23,7 +24,7 @@ void AchievementChime() {
         SDL_PauseAudioDevice(g_achievement_audio, 0);
     }
     std::vector<float> samples(48000 * 2 * 3 / 5);
-    const float volume = .10F * dkr::runtime::audio::sound_effects_volume();
+    const float volume = gain * .10F * dkr::runtime::audio::sound_effects_volume();
     for (unsigned i = 0; i < samples.size() / 2; ++i) {
         const float t = float(i) / 48000.F;
         const float envelope = std::min(t * 90.F, 1.F) * std::exp(-6.F * t);
@@ -189,81 +190,145 @@ void DrawAchievementPreferences(float width, const ach::View& state) {
         g_achievement_settings = false;
         return;
     }
-    PaddockGap(18);
-    DetailHeading("Notifications", width);
+    PaddockGap(14.F);
+    constexpr float gap = 12.F;
+    const bool side_by_side = width >= 640.F;
+    const float column = side_by_side ? (width - gap) * .5F : width;
+    const auto top = ImGui::GetCursorScreenPos();
+    const auto paint = [](ImDrawList* draw, ImVec2 min, ImVec2 max) {
+        PaddockPanel(draw, min, max, {PaddockRound(10.F), PaddockRgb(0x0C293A), PaddockRgb(kSetBorder), 1.F});
+    };
+
+    PaddockBox notifications(column, {14.F, 14.F});
+    float inner = notifications.Inner();
+    DetailHeading("Notifications", inner);
     auto p = state.preferences;
     bool changed = false;
-    changed |= SettingsCheck("##achievement-popups", "Show unlock notifications", &p.notifications, width);
-    changed |= SettingsCheck("##achievement-chime", "Play unlock sound", &p.sound, width);
-    changed |= SettingsCheck("##achievement-motion", "Reduce notification motion", &p.reduced_motion, width);
-    SettingsLabel("Position", width);
-    const char* positions[]{"Bottom centre", "Bottom right", "Top right"};
-    ImGui::SetNextItemWidth(std::min(width, 300.F));
-    changed |= ImGui::Combo("##achievement-position", &p.position, positions, 3);
-    SettingsLabel("Size", width);
-    ImGui::SetNextItemWidth(std::min(width, 360.F));
-    changed |= ImGui::SliderFloat("##achievement-size", &p.scale, .7F, 1.6F, "%.1fx");
-    SettingsLabel("Duration", width);
-    ImGui::SetNextItemWidth(std::min(width, 360.F));
-    changed |= ImGui::SliderFloat("##achievement-duration", &p.duration, 2.F, 10.F, "%.0f seconds");
+    changed |= SettingsCheck("##achievement-popups", "Show unlock notifications", &p.notifications, inner);
+    changed |= SettingsCheck("##achievement-chime", "Play unlock sound", &p.sound, inner);
+    changed |= SettingsCheck("##achievement-motion", "Reduce notification motion", &p.reduced_motion, inner);
+    changed |= SettingsDropdown("##achievement-position", "Position", &p.position,
+                                {"Bottom centre", "Bottom right", "Top right"}, inner);
+    PaddockGap(8.F);
+    int scale = static_cast<int>(std::lround(p.scale * 10.F));
+    if (SettingsRange("##achievement-size", "Size", &scale, 7, 16, inner, [](int value) {
+            return SettingsRangeValue{std::to_string(value / 10) + "." + std::to_string(value % 10), "x"};
+        })) {
+        p.scale = float(scale) / 10.F;
+        changed = true;
+    }
+    PaddockGap(8.F);
+    int duration = static_cast<int>(std::lround(p.duration));
+    if (SettingsRange("##achievement-duration", "Duration", &duration, 2, 10, inner,
+                      [](int value) { return SettingsRangeValue{std::to_string(value), " seconds"}; })) {
+        p.duration = float(duration);
+        changed = true;
+    }
     if (changed)
         ach::preferences(p);
+    PaddockGap(8.F);
     if (SettingsButton("Preview notification"))
         ach::preview();
-    PaddockGap(22);
-    DetailHeading("Your collection", width);
+    const float left_height = notifications.End(paint);
+
+    ImGui::SetCursorScreenPos(side_by_side ? ImVec2{top.x + column + gap, top.y}
+                                           : ImVec2{top.x, top.y + left_height + gap});
+    PaddockBox collection(column, {14.F, 14.F});
+    inner = collection.Inner();
+    DetailHeading("Your collection", inner);
     DetailText("Achievements stay separate from your game saves. Starting another adventure will not erase them.",
-               width);
-    DumpActionRow files(width);
+               inner);
+    DumpActionRow files(inner);
     if (files.Button("Export backup"))
         AchievementFileDialog(false);
     if (files.Button("Import backup"))
         AchievementFileDialog(true);
     if (files.Button("Recognise existing progress"))
         g_achievement_recognise = true;
-    PaddockGap(16);
+    PaddockGap(16.F);
     if (SettingsButton("Reset achievement collection"))
         g_achievement_reset = true;
+    collection.End(paint);
+    ImGui::SetCursorScreenPos({top.x, std::max(top.y + left_height, ImGui::GetItemRectMax().y)});
+    ImGui::Dummy({width, 0.F});
     PaddockGap(18);
     DetailText(
         "Challenge objectives inspired by Delmaru's Diddy Kong Racing achievement set. Local DKR-R implementation, wording and badge designs. Not connected to RetroAchievements.",
         width, kSetMuted);
 }
-void DrawAchievementsPage(float width) {
-    const auto state = ach::view();
-    const auto& definitions = ach::catalogue();
-    DrawPageHeading("ACHIEVEMENTS");
-    PaddockGap(8);
-    DetailText("Your challenges. Your collection.", width, kSetMuted, 12);
-    DetailHeading(std::to_string(state->unlocked) + " / 94 unlocked", width);
-    ImGui::ProgressBar(float(state->unlocked) / 94.F, {width, 7.F}, "");
-    PaddockGap(14);
-    if (!state->error.empty())
-        DetailText(state->error, width, 0xFFAB72);
-    else if (state->status != "Saved on this device")
-        DetailText(state->status, width, kSetMuted);
-    if (g_achievement_settings) {
-        DrawAchievementPreferences(width, *state);
-    } else if (!g_achievement_detail.empty()) {
-        const auto found = std::find_if(definitions.begin(), definitions.end(),
-                                        [](const auto& d) { return d.id == g_achievement_detail; });
-        if (found == definitions.end()) {
-            g_achievement_detail.clear();
-            return;
-        }
+void AchievementProgressBar(float width, float progress) {
+    const auto at = ImGui::GetCursorScreenPos();
+    auto* draw = ImGui::GetWindowDrawList();
+    const auto end = ImVec2{at.x + width, at.y + 6.F};
+    PaddockFill(draw, at, end, PaddockRound(3.F), PaddockCol(0x071B28));
+    const float filled = width * std::clamp(progress, 0.F, 1.F);
+    if (filled > 0.F)
+        PaddockFill(draw, at, {at.x + filled, end.y}, PaddockRound(3.F), PaddockCol(kSetWarm));
+    ImGui::Dummy({width, 6.F});
+}
+
+bool AchievementHasProgress(const ach::Definition& badge) {
+    return badge.target > 1 && badge.kind != ach::Kind::TimeTrial && badge.kind != ach::Kind::Developer;
+}
+
+bool DrawAchievementGalleryCard(const ach::Definition& badge, const ach::Entry& entry, float width, float height,
+                                bool pinned) {
+    ImGui::PushID(badge.id.c_str());
+    if (g_achievement_focus_row == badge.id) {
+        ImGui::SetKeyboardFocusHere();
+        g_achievement_focus_row.clear();
+    }
+    const auto press = PaddockBeginPress("##badge", {width, height});
+    auto* draw = ImGui::GetWindowDrawList();
+    const bool active = ImGui::IsItemFocused() || press.hovered;
+    PaddockPanel(draw, press.min, press.max,
+                 {PaddockRound(10.F), PaddockRgb(active ? 0x123C4E : 0x0C293A),
+                  PaddockRgb(active ? kSetWarm : kSetBorder), 1.F});
+    constexpr float pad = 11.F;
+    DrawAchievementBadge({press.min.x + pad, press.min.y + 8.F}, 36.F, AchievementBadge(badge), entry.unlocked);
+    const auto title = PaddockReading(16.F, true, 1.17F);
+    const auto meta = PaddockReading(13.F, false, 1.24F);
+    const float category_width = std::min(PaddockMeasure(meta, badge.category), width - 64.F);
+    PaddockTextAt(draw, meta, {press.max.x - pad - category_width, press.min.y + 14.F}, category_width + 0.5F,
+                  badge.category, {PaddockRgb(kSetMuted)});
+    PaddockTextAt(draw, title, {press.min.x + pad, press.min.y + 50.F}, width - 2.F * pad, badge.title,
+                  {PaddockRgb(kSetText)});
+    const bool progress = AchievementHasProgress(badge) && !entry.unlocked;
+    const std::string status =
+        entry.unlocked ? (entry.restored ? "Recognised" : "Unlocked")
+        : pinned       ? "Pinned"
+        : progress ? std::to_string(std::clamp(entry.progress, 0, badge.target)) + " / " + std::to_string(badge.target)
+                   : "Locked";
+    PaddockTextAt(draw, meta, {press.min.x + 12.F, press.max.y - (progress ? 34.F : 25.F)}, width - 24.F, status,
+                  {PaddockRgb(entry.unlocked ? 0x42D6BC
+                              : pinned       ? kSetWarm
+                                             : kSetMuted)});
+    if (progress) {
+        const float y = press.max.y - 12.F;
+        const float fraction = std::clamp(float(entry.progress) / float(badge.target), 0.F, 1.F);
+        PaddockFill(draw, {press.min.x + 12.F, y}, {press.max.x - 12.F, y + 4.F}, PaddockRound(2.F),
+                    PaddockCol(0x071B28));
+        if (fraction > 0.F)
+            PaddockFill(draw, {press.min.x + 12.F, y}, {press.min.x + 12.F + (width - 24.F) * fraction, y + 4.F},
+                        PaddockRound(2.F), PaddockCol(kSetWarm));
+    }
+    ImGui::PopID();
+    return press.pressed;
+}
+
+void DrawAchievementDetail(const ach::View& state, const std::vector<ach::Definition>& definitions) {
+    const auto found = std::ranges::find(definitions, g_achievement_detail, &ach::Definition::id);
+    if (found == definitions.end())
+        return;
+    if (BeginSettingsDialog("##achievement-detail", found->title, 570.F, 0x0C293A)) {
         const auto index = std::size_t(found - definitions.begin());
-        const auto& entry = state->entries[index];
-        if (g_achievement_focus_detail) {
-            ImGui::SetKeyboardFocusHere();
-            g_achievement_focus_detail = false;
-        }
-        if (SettingsButton("Back to achievements") || ImGui::IsKeyPressed(ImGuiKey_GamepadFaceRight, false)) {
-            g_achievement_focus_row = g_achievement_detail;
-            g_achievement_detail.clear();
-            ImGui::SetScrollY(g_achievement_return_scroll);
-        }
-        PaddockGap(18);
-        DetailHeading(found->title, width);
+        const auto& entry = state.entries[index];
+        const float width = SettingsDialogInner();
+        const auto summary = ImGui::GetCursorScreenPos();
+        DrawAchievementBadge(summary, 44.F, AchievementBadge(*found), entry.unlocked);
+        ImGui::SetCursorScreenPos({summary.x + 56.F, summary.y + 10.F});
+        DetailText(found->category, width - 56.F, kSetWarm);
+        ImGui::SetCursorScreenPos({summary.x, summary.y + 51.F});
         DetailText(found->description, width);
         DetailText(entry.unlocked ? (entry.restored ? "Recognised from existing progress"
                                      : entry.modded ? "Unlocked during modded play"
@@ -291,14 +356,15 @@ void DrawAchievementsPage(float width) {
                 char target[48];
                 std::snprintf(target, sizeof(target), "Target: %d:%02d.%02d", hundredths / 6000,
                               (hundredths / 100) % 60, hundredths % 100);
-                DetailText(target, width);
+                constexpr const char* vehicles[]{"Car", "Hovercraft", "Plane"};
+                DetailText(std::string(target) + "  |  " + vehicles[c->vehicle], width);
             }
         } else if (found->target > 1) {
             DetailText(std::to_string(entry.progress) + " / " + std::to_string(found->target), width);
-            ImGui::ProgressBar(float(entry.progress) / float(found->target), {width, 7.F}, "");
+            AchievementProgressBar(width, float(entry.progress) / float(found->target));
         }
-        if (!entry.unlocked && SettingsButton(state->pinned == found->id ? "Unpin goal" : "Pin goal"))
-            ach::pin(state->pinned == found->id ? "" : found->id);
+        if (!entry.unlocked && SettingsButton(state.pinned == found->id ? "Unpin goal" : "Pin goal"))
+            ach::pin(state.pinned == found->id ? "" : found->id);
         if (!entry.unlocked && found->restorable && entry.progress >= found->target)
             DetailText(
                 "This milestone is already present in your save. Settings lets you recognise existing progress explicitly.",
@@ -310,119 +376,208 @@ void DrawAchievementsPage(float width) {
                                      found->kind == ach::Kind::TimeTrial))
             DetailText("Original course only. Custom courses and custom cups do not count for this goal.", width,
                        kSetMuted);
-    } else {
-        if (ImGui::IsKeyPressed(ImGuiKey_GamepadL1, false))
-            g_achievement_filter = (g_achievement_filter + 2) % 3;
-        if (ImGui::IsKeyPressed(ImGuiKey_GamepadR1, false))
-            g_achievement_filter = (g_achievement_filter + 1) % 3;
-        DumpActionRow actions(width);
-        for (int i = 0; i < 3; ++i) {
-            const char* labels[]{"All", "Locked", "Unlocked"};
-            if (actions.Button(labels[i], false,
-                               i == g_achievement_filter ? SettingsButtonTone::Selected : SettingsButtonTone::Plain))
-                g_achievement_filter = i;
+        PaddockGap(14.F);
+        if (SettingsButton("Back to gallery") || ImGui::IsKeyPressed(ImGuiKey_GamepadFaceRight, false)) {
+            g_achievement_focus_row = g_achievement_detail;
+            ImGui::CloseCurrentPopup();
         }
-        if (actions.Button("Settings"))
+        EndSettingsDialog();
+    }
+}
+
+void DrawAchievementGallery(float width, const ach::View& state, const std::vector<ach::Definition>& definitions) {
+    const auto pinned = std::ranges::find(definitions, state.pinned, &ach::Definition::id);
+    const std::string footer =
+        pinned == definitions.end() ? "Select a badge to see how to unlock it." : "Pinned goal: " + pinned->title;
+    const auto footer_type = PaddockReading(14.F, false, 1.35F);
+    const float footer_height = PaddockTextHeight(footer_type, footer, width);
+    const float height = std::max(112.F, PanelFooterBounds(ImGui::GetCurrentWindow()).Max.y -
+                                             ImGui::GetCursorScreenPos().y - footer_height - 24.F);
+    PaddockGap(10.F);
+    bool opened = false;
+    if (std::exchange(g_achievement_reset_scroll, false))
+        ImGui::SetNextWindowScroll({-1.F, 0.F});
+    if (ImGui::BeginChild("##badge-gallery", {width, height}, false,
+                          ImGuiWindowFlags_NavFlattened | ImGuiWindowFlags_NoBackground)) {
+        LibraryNavigationScrollWindow(ImGui::GetCurrentWindow());
+        std::vector<unsigned> entries;
+        const auto lower = [](std::string text) {
+            std::transform(text.begin(), text.end(), text.begin(),
+                           [](unsigned char c) { return char(std::tolower(c)); });
+            return text;
+        };
+        const auto search = lower(g_achievement_search.data());
+        for (unsigned i = 0; i < definitions.size(); ++i) {
+            const auto& badge = definitions[i];
+            const auto& entry = state.entries[i];
+            if ((g_achievement_filter == 1 && entry.unlocked) || (g_achievement_filter == 2 && !entry.unlocked) ||
+                (!g_achievement_category.empty() && badge.category != g_achievement_category))
+                continue;
+            if (search.empty() ||
+                lower(badge.title + " " + badge.description + " " + badge.category).find(search) != std::string::npos)
+                entries.push_back(i);
+        }
+        if (g_achievement_sort == 1) {
+            std::stable_sort(entries.begin(), entries.end(),
+                             [&](unsigned a, unsigned b) { return state.entries[a].when > state.entries[b].when; });
+        } else if (g_achievement_sort == 2) {
+            const auto completion = [&](unsigned i) {
+                return state.entries[i].unlocked ? 1.F
+                       : AchievementHasProgress(definitions[i])
+                           ? std::clamp(float(state.entries[i].progress) / float(definitions[i].target), 0.F, 1.F)
+                           : 0.F;
+            };
+            std::stable_sort(entries.begin(), entries.end(),
+                             [&](unsigned a, unsigned b) { return completion(a) > completion(b); });
+        }
+        constexpr float gap = 9.F;
+        const float available = ImGui::GetContentRegionAvail().x - 4.F;
+        const std::size_t columns = available >= 660.F ? 3U : available >= 420.F ? 2U : 1U;
+        const float card_width = std::floor((available - gap * float(columns - 1U)) / float(columns));
+        const auto at = ImGui::GetCursorScreenPos();
+        const auto title = PaddockReading(16.F, true, 1.17F);
+        float y = at.y;
+        for (std::size_t row = 0; row < entries.size(); row += columns) {
+            const auto end = std::min(row + columns, entries.size());
+            float card_height = 109.F;
+            for (std::size_t index = row; index < end; ++index) {
+                const auto& badge = definitions[entries[index]];
+                card_height = std::max(card_height, 87.F + PaddockTextHeight(title, badge.title, card_width - 22.F));
+            }
+            for (std::size_t index = row; index < end; ++index) {
+                const unsigned id = entries[index];
+                const auto& badge = definitions[id];
+                ImGui::SetCursorScreenPos({at.x + float(index - row) * (card_width + gap), y});
+                if (DrawAchievementGalleryCard(badge, state.entries[id], card_width, card_height,
+                                               state.pinned == badge.id)) {
+                    g_achievement_detail = badge.id;
+                    opened = true;
+                }
+            }
+            y += card_height + gap;
+        }
+        if (entries.empty())
+            DetailText("No achievements match those filters.", available, kSetMuted);
+    }
+    ImGui::EndChild();
+    PaddockGap(6.F);
+    PaddockText(footer_type, PaddockRgb(kSetMuted), footer, width);
+    if (opened)
+        ImGui::OpenPopup("##achievement-detail");
+    DrawAchievementDetail(state, definitions);
+}
+
+void DrawAchievementsPage(float width) {
+    const auto state = ach::view();
+    const auto& definitions = ach::catalogue();
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, {0, 0});
+    const auto header = ImGui::GetCursorScreenPos();
+    DrawPageHeading("ACHIEVEMENTS");
+    const auto below = ImGui::GetCursorScreenPos();
+    const float back_width = SettingsButtonWidth("Back to Play");
+    if (width >= 440.F)
+        ImGui::SetCursorScreenPos({header.x + width - back_width, header.y + 11.F});
+    if (PaddockTextLink("Back to Play"))
+        g_page_navigation_request = kPagePlay;
+    ImGui::SetCursorScreenPos({header.x, std::max(below.y, ImGui::GetItemRectMax().y) + 10.F});
+    if (g_achievement_settings) {
+        DrawAchievementPreferences(width, *state);
+    } else {
+        {
+            PaddockBox collection(width, {12.F, 10.F});
+            const float inner = collection.Inner();
+            const auto at = ImGui::GetCursorScreenPos();
+            const auto text =
+                std::to_string(state->unlocked) + " / " + std::to_string(definitions.size()) + " unlocked";
+            const auto type = PaddockReading(15.F, true, 1.22F);
+            const float text_width = PaddockMeasure(type, text) + 1.F;
+            PaddockText(type, PaddockRgb(kSetText), text, inner);
+            if (inner >= text_width + 112.F) {
+                ImGui::SetCursorScreenPos({at.x + text_width + 12.F, at.y + (type.line - 6.F) * .5F});
+                AchievementProgressBar(inner - text_width - 12.F, float(state->unlocked) / float(definitions.size()));
+                ImGui::SetCursorScreenPos({at.x, at.y + type.line});
+                ImGui::Dummy({inner, 0.F});
+            } else {
+                PaddockGap(4.F);
+                AchievementProgressBar(inner, float(state->unlocked) / float(definitions.size()));
+            }
+            collection.End([](ImDrawList* draw, ImVec2 min, ImVec2 max) {
+                PaddockPanel(draw, min, max, {PaddockRound(10.F), PaddockRgb(0x0C293A), PaddockRgb(kSetBorder), 1.F});
+            });
+        }
+        if (!state->error.empty())
+            DetailText(state->error, width, 0xFFAB72);
+        else if (state->status != "Saved on this device")
+            DetailText(state->status, width, kSetMuted);
+        PaddockGap(10.F);
+        const int previous_filter = g_achievement_filter;
+        if (!ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId)) {
+            if (ImGui::IsKeyPressed(ImGuiKey_GamepadL1, false))
+                g_achievement_filter = (g_achievement_filter + 2) % 3;
+            if (ImGui::IsKeyPressed(ImGuiKey_GamepadR1, false))
+                g_achievement_filter = (g_achievement_filter + 1) % 3;
+        }
+        const auto tabs = ImGui::GetCursorScreenPos();
+        const float settings_width = SettingsButtonWidth("Settings");
+        const bool inline_settings = width >= 440.F;
+        const int filter = SettingsSectionSigns({"ALL", "LOCKED", "UNLOCKED"}, g_achievement_filter,
+                                                width - (inline_settings ? settings_width + 9.F : 0.F), true);
+        if (filter >= 0)
+            g_achievement_filter = filter;
+        g_achievement_reset_scroll |= previous_filter != g_achievement_filter;
+        const float after_tabs = ImGui::GetCursorScreenPos().y;
+        if (inline_settings)
+            ImGui::SetCursorScreenPos({tabs.x + width - settings_width, tabs.y});
+        if (SettingsButton("Settings", settings_width))
             g_achievement_settings = true;
-        PaddockGap(12);
-        ImGui::SetNextItemWidth(width >= 240.F ? width - 115.F : width);
-        ImGui::InputTextWithHint("##achievement-search", "Find an achievement...", g_achievement_search.data(),
-                                 g_achievement_search.size());
-        if (width >= 240.F)
-            ImGui::SameLine();
-        if (SettingsButton("Keyboard", 100.F))
+        ImGui::SetCursorScreenPos({tabs.x, std::max(after_tabs, ImGui::GetItemRectMax().y) + 9.F});
+        const bool wide = width >= 620.F;
+        constexpr float gap = 9.F;
+        const float field = wide ? std::clamp(width * .25F, 210.F, 240.F) : (width - gap) * .5F;
+        const float search_width = wide ? width - 2.F * (field + gap) : width;
+        const auto toolbar = ImGui::GetCursorScreenPos();
+        SettingsLabel("Search achievements", search_width);
+        const auto search = PaddockSearch("achievements", g_achievement_search.data(), g_achievement_search.size(),
+                                          "Find an achievement...", search_width);
+        g_achievement_reset_scroll |= search == PaddockFieldResult::Edited;
+        if (search == PaddockFieldResult::GamepadActivated) {
             RequestCustomTextKeyboard("Find an achievement", g_achievement_search.data(), g_achievement_search.size(),
                                       [](const std::string& value) {
                                           std::snprintf(g_achievement_search.data(), g_achievement_search.size(), "%s",
                                                         value.c_str());
+                                          g_achievement_reset_scroll = true;
                                       });
-        PaddockGap(10);
-        std::vector<std::string> groups{"All categories"};
-        for (const auto& d : definitions)
-            if (std::find(groups.begin(), groups.end(), d.category) == groups.end())
-                groups.push_back(d.category);
-        ImGui::SetNextItemWidth(std::min(width, 260.F));
-        if (ImGui::BeginCombo("##achievement-category",
-                              g_achievement_category.empty() ? "All categories" : g_achievement_category.c_str())) {
-            for (unsigned i = 0; i < groups.size(); ++i)
-                if (ImGui::Selectable(groups[i].c_str(), g_achievement_category == groups[i]))
-                    g_achievement_category = i ? groups[i] : "";
-            ImGui::EndCombo();
         }
-        const char* sorts[]{"Collection order", "Recently unlocked", "Most progress"};
-        ImGui::SetNextItemWidth(std::min(width, 260.F));
-        ImGui::Combo("##achievement-sort", &g_achievement_sort, sorts, 3);
-        std::vector<unsigned> entries;
-        std::string search = g_achievement_search.data();
-        std::transform(search.begin(), search.end(), search.begin(),
-                       [](unsigned char c) { return char(std::tolower(c)); });
-        for (unsigned i = 0; i < definitions.size(); ++i) {
-            const auto& d = definitions[i];
-            const auto& e = state->entries[i];
-            if ((g_achievement_filter == 1 && e.unlocked) || (g_achievement_filter == 2 && !e.unlocked) ||
-                (!g_achievement_category.empty() && d.category != g_achievement_category))
-                continue;
-            auto text = d.title + " " + d.description;
-            std::transform(text.begin(), text.end(), text.begin(),
-                           [](unsigned char c) { return char(std::tolower(c)); });
-            if (!search.empty() && text.find(search) == std::string::npos)
-                continue;
-            entries.push_back(i);
-        }
-        if (g_achievement_sort)
-            std::stable_sort(entries.begin(), entries.end(), [&](unsigned a, unsigned b) {
-                return g_achievement_sort == 1 ? state->entries[a].when > state->entries[b].when
-                                               : double(state->entries[a].progress) / definitions[a].target >
-                                                     double(state->entries[b].progress) / definitions[b].target;
-            });
-        PaddockGap(12);
-        if (entries.empty())
-            DetailText("No achievements match those filters.", width, kSetMuted);
-        const auto heading = PaddockReading(17.F, true, 1.3F), body = PaddockReading(14.F, false, 1.3F);
-        for (const auto index : entries) {
-            const auto& d = definitions[index];
-            const auto& e = state->entries[index];
-            ImGui::PushID(d.id.c_str());
-            const float badge = 48.F, text_width = std::max(50.F, width - 88.F);
-            const auto wrapped = body.font->CalcTextSizeA(body.size, FLT_MAX, text_width, d.description.c_str());
-            const auto title_size = heading.font->CalcTextSizeA(heading.size, FLT_MAX, text_width, d.title.c_str());
-            const float height = std::max(90.F, title_size.y + wrapped.y + 43.F);
-            if (g_achievement_focus_row == d.id) {
-                ImGui::SetKeyboardFocusHere();
-                g_achievement_focus_row.clear();
+        const float search_bottom = ImGui::GetItemRectMax().y;
+        const float category_x = wide ? toolbar.x + search_width + gap : toolbar.x;
+        const float filters_y = wide ? toolbar.y : search_bottom + gap;
+        std::vector<SettingsChoice> categories{{"All categories", {}, false}};
+        int selected = 0;
+        for (const auto& badge : definitions) {
+            if (std::ranges::find(categories, badge.category, &SettingsChoice::label) == categories.end()) {
+                if (g_achievement_category == badge.category)
+                    selected = static_cast<int>(categories.size());
+                categories.push_back({badge.category, {}, false});
             }
-            const auto at = ImGui::GetCursorScreenPos();
-            if (ImGui::Button("##open", {width, height})) {
-                g_achievement_detail = d.id;
-                g_achievement_return_scroll = ImGui::GetScrollY();
-                g_achievement_focus_detail = true;
-                ImGui::SetScrollY(0);
-            }
-            auto* draw = ImGui::GetWindowDrawList();
-            draw->AddRectFilled(at, {at.x + width, at.y + height}, PaddockRgb(0x10364A), 12);
-            draw->AddRect(at, {at.x + width, at.y + height},
-                          PaddockRgb(ImGui::IsItemFocused() || ImGui::IsItemHovered() ? 0xFFCB66 : 0x296B70), 12);
-            DrawAchievementBadge({at.x + 12, at.y + 14}, badge, AchievementBadge(d), e.unlocked);
-            const ImVec2 text{at.x + 74, at.y + 12};
-            draw->AddText(heading.font, heading.size, text, PaddockRgb(0xFFF6DA), d.title.c_str(), nullptr, text_width);
-            draw->AddText(body.font, body.size, {text.x, text.y + title_size.y + 5}, PaddockRgb(0xB0C9CC),
-                          d.description.c_str(), nullptr, text_width);
-            const std::string status = e.unlocked       ? (e.restored ? "Recognised" : "Unlocked")
-                                       : e.progress > 0 ? std::to_string(e.progress) + " / " + std::to_string(d.target)
-                                                        : "Locked";
-            draw->AddText(body.font, body.size, {text.x, at.y + height - body.line - 8},
-                          PaddockRgb(e.unlocked ? 0x42D6BC : 0xB0C9CC), status.c_str());
-            ImGui::PopID();
-            PaddockGap(8);
         }
-        DetailText("A: Open   B: Back   LB / RB: Filter", width, kSetMuted);
+        ImGui::SetCursorScreenPos({category_x, filters_y});
+        ImGui::BeginGroup();
+        if (SettingsDropdown("##achievement-category", "Category", &selected, categories, field, false, {}, 44.F)) {
+            g_achievement_category = selected ? categories[selected].label : "";
+            g_achievement_reset_scroll = true;
+        }
+        ImGui::EndGroup();
+        ImGui::SetCursorScreenPos({category_x + field + gap, filters_y});
+        ImGui::BeginGroup();
+        g_achievement_reset_scroll |=
+            SettingsDropdown("##achievement-sort", "Sort by", &g_achievement_sort,
+                             {"Collection order", "Recently unlocked", "Most progress"}, field, false, {}, 44.F);
+        ImGui::EndGroup();
+        ImGui::SetCursorScreenPos({toolbar.x, std::max(search_bottom, ImGui::GetItemRectMax().y)});
+        ImGui::Dummy({width, 0.F});
+        DrawAchievementGallery(width, *state, definitions);
     }
-    if (!state->pinned.empty()) {
-        const auto found =
-            std::find_if(definitions.begin(), definitions.end(), [&](auto& d) { return d.id == state->pinned; });
-        if (found != definitions.end())
-            DetailText("Pinned: " + found->title, width, kSetMuted);
-    }
+    ImGui::PopStyleVar();
     if (g_achievement_reset) {
         ImGui::OpenPopup("Reset achievements##confirm");
         g_achievement_reset = false;

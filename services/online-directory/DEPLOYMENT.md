@@ -109,3 +109,180 @@ when rolling back Worker code.
 Distribute a previously accepted Windows/Linux client if client rollback is
 needed. Public discovery requires the new authenticated protocol; old clients
 cannot join directory-backed rooms by bypassing the directory with a raw code.
+
+
+## Ranked replay pilot
+
+The public catalogue covers the 20 vanilla Time Trial courses and lists
+current Custom Tracks releases. Qualification is separate for each track,
+vehicle, ruleset and build. Ancient Lake in the car is the first qualification.
+Pending submissions and raw evidence never appear in the public ranking.
+Only moderators and administrators can open the review queue and publish or
+reject verified runs. Players can see and download their own submissions.
+
+Apply the additive 003-speedruns.sql migration to the existing library D1.
+Use the same mod-host FTPS account to write encrypted replay archives in
+downloads/Replays. The Worker uses the existing FTP_USERNAME and FTP_PASSWORD,
+with SPEEDRUN_FTP=true and a distinct 32-byte hex SPEEDRUN_FTP_KEY. Keep an
+offline backup of that key so old replays remain readable. Access to a stored
+file needs both a valid file authentication tag and the game's API permission.
+SPEEDRUN_TICKET_SECRET signs ranked attempt tickets and is separate from
+SPEEDRUN_VERIFIER_SECRET, which grants access only to verifier routes.
+
+Run `run_public_ranked.py` on Linux with a pinned AppImage, Python, Xvfb and
+unprivileged network namespaces. Pass the private US v1.1 ROM with `--rom`
+and the private US v1.0 ROM with `--rom-v1-0` for both verification queues.
+The revisions share leaderboards, and the verifier uses the exact revision
+recorded in the replay. Store the verifier token in a private file and put the
+AppImage SHA-256 in SPEEDRUN_VERIFIER_RUNTIME.
+The process submits proof only after standalone game replay, and the Worker
+checks the proof against the evidence. The same verification pass exports a
+portable ghost for Time Trials. The Worker checks its replay digest and writes
+it to the same encrypted archive directory. Moderation remains a separate step
+and the launcher can download the ghost when the score is published. Use the
+matching verifier build with ghost export support.
+
+For an existing independently verified Time Trial, run the verifier with `--backfill-run`
+and its run ID. It checks the archived replay again and adds the ghost without
+changing the published time, rank or moderation status. Older downloadable
+replays still work through the launcher's local ghost preparation.
+The script has --probe for a private archive write/read/delete test and --once
+for a single queue poll. The in-game executable does not need FTP or verifier
+credentials. Each verification uses a private, writable home and XDG directories
+under its job directory. This allows ProtectHome on the service. Mesa's software
+rendering thread count is capped so replay jobs stay within the service task limit.
+
+Keep SPEEDRUN_UPLOADS_ENABLED=false while testing. Exercise a known replay and
+an altered-input replay in isolation, check player and staff permissions,
+then check the production archive with --probe. Enable submissions only while
+the verifier is running. A stale heartbeat closes attempts and new uploads
+after 150 seconds. Review, rankings and public replay downloads remain available
+when submissions are paused. Turn off SPEEDRUN_UPLOADS_ENABLED to close intake.
+
+The Launcher can link eligible unticketed recordings through the local-claim
+endpoint when `SPEEDRUN_LOCAL_CLAIMS_ENABLED=true`. Apply the updated
+`003-speedruns.sql` before enabling it. The endpoint stores the original replay,
+locks the claim to the first authenticated submission, and uses the existing
+verification, moderation and quota. Leave the flag unset on the public Worker
+until local testing is complete.
+The verifier renews the replay claim while checking it, so a long verification
+keeps the intake health check current without another verifier claiming that run.
+
+For native custom tracks, give the verifier --track-origin with the HTTPS
+Mod Library download origin. Record each qualified current release in
+speedrun_custom_packages with the published ZIP hash and the native track
+ID and content hash. A qualified board binds a specific vehicle and racer to
+that release. The verifier retrieves that ZIP from the configured origin,
+verifies the published size and digest, and loads the matching .dkrmap in the
+isolated replay process. For each new release, confirm the native runtime can
+start the course and records the expected package fingerprint. Record its
+actual lap count in `speedrun_custom_packages.lap_count`. Three-lap boards
+continue to use `custom-time-trial-us80-1`. Other one-to-five-lap boards use
+`custom-time-trial-us80-2` and attest every lap. On an existing database, add
+the `lap_count` column with `NOT NULL DEFAULT 3 CHECK (lap_count BETWEEN 1 AND 5)`
+before updating the Worker.
+Enable SPEEDRUN_CUSTOM_UPLOADS_ENABLED after a representative submission has
+passed the signed attempt, native verification, moderation and replay download
+end to end. Each submitted replay still needs independent verification and
+staff approval.
+
+Full Game uses `adventure-us80-7`. The vehicle, Trophy and minigame routes
+start in Tracks Mode with one completed save slot. All Bosses uses that same
+slot in Adventure for the six rematches. The runtime creates the slot in
+memory for each run and counts events from that run. The remaining Adventure
+categories start from a missing save with the opening cinematic.
+
+Run the verifier with `--queue adventure` separately from the Time Trial
+process so a long replay cannot block the race queue. Enable
+`SPEEDRUN_ADVENTURE_UPLOADS_ENABLED` when this queue is healthy and the
+matching ranked boards are registered. The native verifier compares every
+submitted replay's checkpoints, finish and splits before staff can approve
+it. Glitchless evidence also needs a moderator to check banned techniques.
+
+### Hosted replay videos
+
+Install the three `speedrun_video_*` tables and the video deletion trigger
+from the ranked schema. Configure `SPEEDRUN_FTP_VIDEO_KEY` as a new 32-byte
+hex secret. Run `run_public_ranked_video.py` alongside the Linux verifier.
+Set `SPEEDRUN_VIDEO_RUNTIME` to the capture AppImage digest when it differs
+from the verifier build. Use a private file for each credential. The
+video process needs Python cryptography, FFmpeg and Xvfb. Use the Mod Library
+FTPS account with access to `downloads/Replays`, and give it a private writable
+job directory for temporary render files. Pass both ROM paths to each video
+worker with the same arguments as the verifier.
+
+The queues prioritise independently verified runs awaiting review and also
+backfill older published runs missing a video. Update the private API Worker,
+portal assets and both renderer processes together. The renderers now use the
+authenticated `video-evidence` route to retrieve the replay for an active job.
+Run separate video workers with `--queue race` and `--queue adventure` so long Full Game movies
+do not block Time Trial videos. Both capture the controller and game audio
+on the authored replay clock. Full Game movies also show the live split
+panel in the opposite corner from the controller. The worker renews its
+job lease throughout rendering and uploading. Full Game encoding adjusts
+resolution and bitrate to fit the existing archive limit.
+
+Keep `assets/ui/Icons/diddy_kong_racing_recompiled_ico_by_pooterman.png` in
+the renderer checkout. The movie adds the translucent logo at the bottom right
+and the submission's credited Discord display name at the bottom left.
+Two-second logo cards appear before and after the replay. The audio gets the
+same padding as the picture and the verification clock only covers the run.
+
+The worker encrypts the MP4 in authenticated 1 MiB chunks and uploads it to
+the existing archive. The Worker checks the proof before it registers the
+video. Website moderation requires the video before publishing. Moderators
+and administrators using the Launcher can watch the verified replay in-game
+and publish while the video is still preparing. The render queue finishes
+the video and attaches it to the published run. Time Trials also require the
+verifier-generated ghost. The website's Review runs page shows **Watch Video**
+as soon as the MP4 is available, using a short-lived link tied to the active
+staff session. Only published runs serve their videos publicly. Rejection
+remains available during rendering.
+The encrypted files use the same host as mod downloads. Use `--once` to
+render or clean one queue cycle.
+
+
+## Portal notifications
+
+Apply 004-notifications.sql after 003-speedruns.sql and before deploying the
+Worker and matching website assets. Existing mod requests and verified runs
+awaiting staff review are included. The migration creates events in the same
+transaction as status changes and keeps read history separate per account.
+The existing scheduled Worker cleanup expires personal notices after 90 days.
+
+
+## Cloud Saves
+
+Apply `005-cloud-saves.sql` to the existing private API database before setting
+`CLOUD_SAVES_ENABLED=true` on the matching Worker. The Launcher requires
+Discord sign-in and an explicit opt-in on each device. Use the Cloud Saves switch
+beside the active save on Play or open the Cloud Saves section in Save Manager.
+
+Apply `006-modded-adventure.sql` before deploying the split Adventure API. It
+adds a separate table for Modded Adventure saves, with the same account and pilot
+isolation as the existing saves. A `?format=2` inventory advertises and lists the
+new slot. Older launchers receive their usual inventory.
+
+For private testing, set `CLOUD_SAVES_ENABLED=pilot` and put the tester’s
+internal account ID in `CLOUD_SAVES_PILOT_ACCOUNT`. The Worker checks the
+authenticated account and keeps pilot saves separate from public saves. Use
+disposable profiles for the Windows and Steam Deck test. Set the mode to
+`true` only after both devices have passed the test.
+
+Each save slot has an account-scoped revision and SHA-256 digest. The Launcher
+syncs personal Adventure, personal Controller Paks, modded course records and
+persistent hosted Online progress. When the saves diverge, the Launcher applies
+the verified cloud copy to the active save and preserves the previous local file
+in save history. An empty cloud slot can be seeded from the local save. Local
+progress can update an existing slot when it was made from the current cloud
+copy. The Launcher syncs before choosing the host's save for a new lobby and
+on return from play. Within a retained lobby it can publish hosted progress and
+defers cloud replacements until the lobby closes. Confirmed gameplay writes
+schedule background uploads for their save slots. The worker can combine writes
+that arrive before its current transfer finishes, and gameplay defers cloud
+replacements until the launcher. Guest session
+snapshots and replay profiles stay outside Cloud Saves.
+
+The Cloud Saves fixture uses two Discord-authenticated test sessions for one
+account and a separate account for access checks. Run it against an owner
+bundle with `node services/online-directory/tests/cloud_saves_api.cjs <bundle> services/test-tools/node_modules/miniflare`.

@@ -61,6 +61,8 @@ StartupResult run_startup_screen(SDL_Window* window, const std::filesystem::path
 void attach(RT64::Application& application);
 void detach(RT64::Application& application);
 void draw(RT64::Application& application);
+bool draw_replay_video_inputs(RT64::Application& application);
+void show_run_return_cover(bool force = false);
 bool handle_runtime_event(SDL_Event* event);
 // Once per event pump, after the events: captures the pointer for the Modern
 // camera's mouse orbit while racing, and lets it go when anything needs it.

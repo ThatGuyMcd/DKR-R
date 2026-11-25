@@ -185,6 +185,8 @@ void run(std::stop_token stop) {
     std::uint64_t host_revision = 0;
     auto changed_at = Clock::time_point{}, social_at = Clock::time_point{};
     std::string social_context;
+    std::string retired_host_epoch;
+    auto pending_host_until = Clock::time_point{};
     while (!stop.stop_requested()) {
         AccountView account;
         AccountRequest request;
@@ -313,6 +315,7 @@ void run(std::stop_token stop) {
                             s.ui.feature_enabled = true;
                             s.ui.running_spectators = capabilities.value("runningSpectators", false);
                             s.ui.social_profiles = capabilities.value("socialProfiles", false);
+                            s.ui.host_handover = capabilities.value("hostHandover", false);
                             s.ui.status = "Connecting to DKR-R Online...";
                             s.update();
                         }
@@ -409,6 +412,28 @@ void run(std::stop_token stop) {
                                     s.social_requests.erase(found);
                                 }
                             }
+                            if (operation == "transfer_prepare" || operation == "transfer_accept" ||
+                                operation == "transfer_commit") {
+                                const auto data = item.value("data", Json::object());
+                                std::lock_guard lock(s.bridge_mutex);
+                                for (auto& [owner, bridge] : s.bridges) {
+                                    std::lock_guard own(bridge->mutex);
+                                    if (bridge->commands.size() < 32)
+                                        bridge->commands.push_back({{"type", "host_transfer_result"},
+                                                                    {"operation", operation},
+                                                                    {"ok", item.value("ok", false)},
+                                                                    {"data", data},
+                                                                    {"error", item.value("error", Json::object())}});
+                                }
+                                if (operation == "transfer_commit" && item.value("ok", false)) {
+                                    retired_host_epoch = string(data, "epoch", 80);
+                                    host_id.clear();
+                                    host_epoch.clear();
+                                    last_state.clear();
+                                    host_revision = 0;
+                                }
+                                continue;
+                            }
                             if (operation == "social") {
                                 std::vector<SocialMember> members;
                                 const auto data = item.value("data", Json::object());
@@ -484,6 +509,17 @@ void run(std::stop_token stop) {
                                         s.outbox.push_back({{"type", "cancel"}, {"id", string(data, "id", 80)}});
                                 }
                             }
+                        } else if (type == "host_transferred") {
+                            host_id = string(item, "id", 80);
+                            host_epoch = string(item, "epoch", 80);
+                            host_revision = item.value("revision", std::uint64_t(0));
+                            last_state.clear();
+                            pending_host_until = now + std::chrono::seconds(120);
+                            {
+                                std::lock_guard lock(s.mutex);
+                                s.ui.public_desired = string(item, "visibility") == "public" && !s.ui.hidden;
+                                s.update();
+                            }
                         } else if (type == "intent" || type == "revoke") {
                             std::lock_guard lock(s.bridge_mutex);
                             for (auto& [owner, bridge] : s.bridges) {
@@ -553,6 +589,7 @@ void run(std::stop_token stop) {
                         social_at = now + std::chrono::seconds(5);
                     }
                     if (!host.is_null()) {
+                        pending_host_until = {};
                         host.erase("host");
                         const auto epoch = string(host, "epoch", 80), serialized = host.dump();
                         bool updating;
@@ -561,7 +598,7 @@ void run(std::stop_token stop) {
                             updating = std::any_of(s.pending.begin(), s.pending.end(),
                                                    [](const auto& p) { return p.second == "room"; });
                         }
-                        if (!updating && serialized != last_state && now >= changed_at) {
+                        if (epoch != retired_host_epoch && !updating && serialized != last_state && now >= changed_at) {
                             send(s, {{"type", "room"},
                                      {"revision", epoch == host_epoch ? host_revision : 0},
                                      {"state", host}});
@@ -571,7 +608,7 @@ void run(std::stop_token stop) {
                             s.ui.updating = true;
                             s.update();
                         }
-                    } else if (!host_id.empty()) {
+                    } else if (!host_id.empty() && now >= pending_host_until) {
                         send(s, {{"type", "close"}});
                         host_id.clear();
                         host_epoch.clear();

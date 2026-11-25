@@ -1,7 +1,9 @@
 #pragma once
 #include "service.hpp"
+#include "../dialog_style.hpp"
 #include "imgui.h"
 #include "imgui_internal.h"
+#include <optional>
 #include <type_traits>
 #include <utility>
 #include <vector>
@@ -66,6 +68,7 @@ template <class T, class... Args> void UiTextColored(const ImVec4& colour, T&& f
     }
 }
 template <class T, class... Args> void UiSetTooltip(T&& format, Args&&... args) {
+    const dkr::runtime::ui::ScopedDialogStyle style({12.0F, 8.0F}, 10.0F);
     if constexpr (sizeof...(Args) > 0) {
         SetTooltip(LocalisedUi::format_copy(std::forward<T>(format)).data(), std::forward<Args>(args)...);
     } else {
@@ -147,6 +150,12 @@ bool UiSelectable(T&& label, bool* selected, ImGuiSelectableFlags flags = 0, con
     return Selectable(shown.c_str(), selected, flags, size);
 }
 template <class T> bool UiBeginPopupModal(T&& label, bool* open = nullptr, ImGuiWindowFlags flags = 0) {
+    // Custom dialogs supply their chrome before calling BeginPopupModal.
+    std::optional<dkr::runtime::ui::ScopedDialogStyle> dialog_style;
+    const auto& current = GetStyle();
+    if ((current.WindowRounding <= 0.0F || current.WindowPadding.x <= 0.0F || current.WindowPadding.y <= 0.0F) &&
+        IsPopupOpen(label))
+        dialog_style.emplace();
     // Popup identity must match existing OpenPopup()/IsPopupOpen() calls.
     const bool visible = BeginPopupModal(label, open, flags);
     if constexpr (LocalisedUi::caption_array<T>) {

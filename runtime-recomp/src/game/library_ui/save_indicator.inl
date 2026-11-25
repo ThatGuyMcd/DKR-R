@@ -26,52 +26,56 @@ PlaySavePreviewData PlayReadSavePreview(const std::filesystem::path& path) {
         return {{}, "Save preview unavailable. Check Save Manager."};
     return {std::move(image), {}};
 }
-void DrawPlaySaveSummary(float width, bool live) {
+void DrawPlaySaveSummary(float width, bool live, bool launching) {
     using namespace dkr::library_ui;
     namespace saves = dkr::runtime::saves;
     SaveScope scope = SaveScope::Vanilla;
     std::filesystem::path path;
-    bool shared_modded = false;
     const bool lobby = dkr::runtime::netplay::session().active();
     if (live) {
         path = saves::runtime_save_path();
         scope = running_save_scope(g_config_directory, path, saves::runtime_save_selection().online);
-        shared_modded = scope == SaveScope::Vanilla && dkr::session_content::running_modded.load();
-    } else if (lobby)
+    } else if (lobby) {
         scope = SaveScope::Online;
-    else if (dkr::session_content::next_enabled.load()) {
-        const auto mods = g_legacy_imports.snapshot();
-        for (const auto& catalogue : {mods.tracks, mods.characters})
-            if (catalogue)
-                for (const auto& item : catalogue->tracks)
-                    shared_modded |= item.enabled && !item.hidden;
-        for (const auto& item : g_code_library.view()->items)
-            shared_modded |= item.selected && item.enabled && item.approved && item.compatibility.empty();
-        for (const auto& item : g_vehicle_library.view()->items)
-            shared_modded |= item.enabled;
-        for (const auto& item : dkr::runtime::custom_tracks::tracks())
-            shared_modded |= item.enabled;
-        for (const auto& item : dkr::runtime::texture_packs::snapshot())
-            shared_modded |= item.enabled && item.compatible;
-        shared_modded |= dkr::runtime::magic_codes::selected_mask() != 0;
+    } else if (dkr::session_content::next_enabled.load()) {
+        scope = SaveScope::Modded;
+        path = saves::personal_adventure_path(g_config_directory, true);
     }
-    const auto indicator = shared_modded ? SaveScope::Modded : scope;
-    const char* heading = indicator == SaveScope::Online   ? "ONLINE ADVENTURE"
-                          : indicator == SaveScope::Modded ? "MODDED ADVENTURE"
-                                                           : "OFFLINE ADVENTURE";
-    PaddockText(PaddockReading(16.F, true, 1.45F), PaddockRgb(0xFFF6DA), dkr::localisation::source(heading), width);
+    const char* heading = scope == SaveScope::Online   ? "ONLINE ADVENTURE"
+                          : scope == SaveScope::Modded ? "MODDED ADVENTURE"
+                                                       : "VANILLA ADVENTURE";
+    const auto heading_type = PaddockReading(16.F, true, 1.45F);
+    const auto heading_text = dkr::localisation::source(heading);
+    const float heading_width = std::ceil(PaddockMeasure(heading_type, heading_text)) + 8.F;
+    const float cloud_width = PlayCloudSwitchWidth() + kPlayCloudGap + kPlayCloudIconWidth;
+    const bool inline_cloud = width - heading_width >= 118.F + kPlayCloudGap + kPlayCloudIconWidth;
+    const bool cloud_locked = live || lobby || launching;
+    if (inline_cloud) {
+        ImGui::BeginGroup();
+        auto position = ImGui::GetCursorScreenPos();
+        position.y += (kPlayCloudControlHeight - heading_type.line) * 0.5F;
+        PaddockDrawRun(ImGui::GetWindowDrawList(), heading_type, position, PaddockCol(0xFFF6DA), heading_text.data(),
+                       heading_text.data() + heading_text.size());
+        ImGui::Dummy({heading_width, kPlayCloudControlHeight});
+        ImGui::SameLine(0.F, 0.F);
+        DrawPlayCloudSaves(std::min(cloud_width, width - heading_width), cloud_locked);
+        ImGui::EndGroup();
+    } else {
+        PaddockText(heading_type, PaddockRgb(0xFFF6DA), heading_text, width);
+        PaddockGap(4.F);
+        DrawPlayCloudSaves(width, cloud_locked);
+    }
     PaddockGap(6.F);
     const auto at = ImGui::GetCursorScreenPos();
     auto* draw = ImGui::GetWindowDrawList();
     draw->AddRectFilled(at, {at.x + 62.F, at.y + 22.F}, PaddockCol(0x041B26), 11.F);
     constexpr std::array<unsigned, 3> colours{0x24D493, 0xFFC04D, 0x57CDE8};
     for (int i = 0; i < 3; ++i) {
-        const bool active = int(indicator) == i + 1;
+        const bool active = int(scope) == i + 1;
         draw->AddCircleFilled({at.x + 11.F + 20.F * i, at.y + 11.F}, 6.F, PaddockCol(active ? colours[i] : 0x304752),
                               14);
     }
-    const auto save_caption = dkr::localisation::source(
-        shared_modded ? std::string_view("Modded game - shared personal save") : save_label(scope));
+    const auto save_caption = dkr::localisation::source(save_label(scope));
     const std::string label = dkr::localisation::format(live ? "save.using" : "save.next", {{"save", save_caption}});
     const auto type = PaddockReading(14.F, true, 1.4F);
     const float label_width = std::max(1.F, width - 72.F);
@@ -83,13 +87,13 @@ void DrawPlaySaveSummary(float width, bool live) {
     PaddockGap(6.F);
     std::string preview;
     if (scope == SaveScope::Vanilla) {
-        const auto& save = CachedSaveManagerView();
+        const auto& save = CachedSaveManagerView().adventures[false];
         preview = save.image
                       ? dkr::localisation::save_preview(*save.image)
-                      : std::string(dkr::localisation::source(save.adventure.exists
+                      : std::string(dkr::localisation::source(save.info.exists
                                                                   ? "Save preview unavailable. Check Save Manager."
-                                                                  : "No offline Adventure save yet."));
-    } else if (!live) {
+                                                                  : "No Vanilla Adventure save yet."));
+    } else if (!live && scope == SaveScope::Online) {
         preview =
             std::string(dkr::localisation::source("The host supplies a separate online save when the match starts."));
     } else if (path.empty())
@@ -119,12 +123,9 @@ void DrawPlaySaveSummary(float width, bool live) {
                       : std::string(dkr::localisation::source("Reading this session's saved progress..."));
     }
     PaddockText(PaddockReading(14.F, false, 1.5F), PaddockRgb(0xB0C9CC), preview, width);
-    PaddockText(
-        PaddockReading(13.F, false, 1.5F), PaddockRgb(0xB0C9CC),
-        dkr::localisation::source(
-            live
-                ? "Ordinary offline mods share your personal Adventure. Online and development saves stay separate. Preview shows saved progress."
-                : "Ordinary offline mods share your personal Adventure. Online and development saves stay separate."),
-        width);
+    PaddockText(PaddockReading(13.F, false, 1.5F), PaddockRgb(0xB0C9CC),
+                dkr::localisation::source(live ? "Preview shows saved progress for this session."
+                                               : "Session Mods selects which Adventure save you use offline."),
+                width);
     PaddockGap(12.F);
 }

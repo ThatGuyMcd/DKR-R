@@ -577,7 +577,8 @@ class InstrumentationTests(unittest.TestCase):
             "runtime-recomp/src/game/audio_event_queue.h":"7899cd55f01c95221a71eac64857611a929bc19ff2d1603ca4c3e56a1a4ebf18",
             "runtime-recomp/src/game/audio_event_queue_state.h":"7e479c5c99dc4ab0d43c9ddfc1a082437d631adc688b14e86c7d5a3edf0f7ecf",
             # Nov 17: reads the selected revision through revision_addresses::current(); same addresses, no new store, call or hook.
-            "runtime-recomp/src/game/runtime_hud_layout.cpp":"de4a56ce106bf5c089c8cfc88fbbf717824a5cc2b481c953ebf70c5060e3affc",
+            # Replay viewport fit and stopwatch identities affect presentation only.
+            "runtime-recomp/src/game/runtime_hud_layout.cpp": "283e311ec6ab1d958375f947212c5159ed7ac348464fc2c1a02d0a0d9c56a25a",
             # Audited camera-clearance metadata: read-only guest observations
             # and local matrix bindings; no simulation/checkpoint writes.
             # Preserve the already-shipped water camera-root/time metadata.
@@ -605,7 +606,8 @@ class InstrumentationTests(unittest.TestCase):
             # recorded in scripts/tests/test_revision_literals.py). Same reads,
             # no new store.
             # Nov 17: reads the selected revision through revision_addresses::current(); same addresses, no new store, call or hook.
-            "runtime-recomp/src/game/presentation_identity.cpp":"86661756c55a04b17a78aca1bd3636e0a3abb81a0bbe354dfed8b7182ac29da7",
+            # Offline replay frames carry their own matrix, HUD and shadow presentation metadata.
+            "runtime-recomp/src/game/presentation_identity.cpp": "822b37db388312fd505548e11f9b1e02b5a980cfa82f157b35672befd90029c1",
             "runtime-recomp/src/game/widescreen_policy.hpp":"3c3ff51000c969d6c7a9628364345fe1293e1c26de057197120728e79f975f36",
             "extern/dkr-decomp/src/save_data.c":"898df1a185c17e1d6ba11302fc5c140a1d7bd10ff3d8b86ff937c834bb13a607",
             "extern/dkr-decomp/src/thread3_main.c":"437434837706ee88e91578ce9e1aa2cd960e65e1e3a6f1aa47ae3b6289892d8e",
@@ -622,7 +624,7 @@ class InstrumentationTests(unittest.TestCase):
             "extern/n64-modern-runtime/ultramodern/src/timer.cpp":"07bec0f6617c0d9965a263ae6f41d8785cd380f5d584df8a844bc83b2cc89211",
         }
         for path,expected in pins.items():
-            self.assertEqual(hashlib.sha256(generator.audited_input_path(path, DEPENDENCIES_DIR).read_bytes()).hexdigest(),expected,
+            self.assertIsNotNone(generator.reviewed_bytes(generator.audited_input_path(path, DEPENDENCIES_DIR).read_bytes(),expected),
                              f"Re-audit the private native contract after source changes: {path}")
 
 

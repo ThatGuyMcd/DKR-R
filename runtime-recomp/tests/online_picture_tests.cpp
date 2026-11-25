@@ -5,6 +5,7 @@
 #include <cassert>
 #include <cstring>
 #include <iostream>
+#include <thread>
 #include <vector>
 using namespace dkr::runtime::netplay::experimental;
 int main() {
@@ -62,6 +63,92 @@ int main() {
             assert(!present_gate::requires_gpu_picture(&slot, 10, 20));
             ++checks;
         }
+    {
+        PresentationMailbox box;
+        assert(!box.retire_for_correction(91, 0) && box.begin_epoch(91));
+        assert(box.retire_for_correction(91, 0));
+        int older_slot = 0, newer_slot = 0;
+        descriptor.frame = 10;
+        assert(box.publish(91, descriptor, ram));
+        auto older = box.take();
+        assert(older);
+        {
+            present_gate::Scope scope(registration, older);
+            present_gate::tag(&state, &older_slot, 100, 200);
+        }
+        assert(box.finish_decode(older));
+        descriptor.frame = 11;
+        assert(box.publish(91, descriptor, ram));
+        auto newer = box.take();
+        assert(newer);
+        {
+            present_gate::Scope scope(registration, newer);
+            present_gate::tag(&state, &newer_slot, 101, 201);
+        }
+        assert(box.finish_decode(newer));
+        descriptor.frame = 12;
+        assert(box.publish(91, descriptor, ram));
+        // Delay the actual queue consumer across a CPU rewind. Unchanged past
+        // frames survive; the changed frame and its pending future do not.
+        bool allowed = false;
+        {
+            auto hold = std::make_unique<present_gate::QueueHoldForTest>(registration,
+                                                                         present_gate::HoldPoint::BeforeAdmission);
+            std::thread worker([&] {
+                auto admission = present_gate::acquire(&older_slot, 100, 200);
+                allowed = admission.allowed;
+            });
+            assert(hold->wait(std::chrono::seconds(2)));
+            assert(box.retire_for_correction(91, 11));
+            hold.reset();
+            worker.join();
+        }
+        assert(allowed && !box.take());
+        {
+            auto rejected = present_gate::acquire(&newer_slot, 101, 201);
+            assert(!rejected.allowed);
+        }
+        for (unsigned frame = 12; frame < 42; ++frame) {
+            descriptor.frame = frame;
+            assert(box.publish(91, descriptor, ram));
+            auto image = box.take();
+            assert(image);
+            assert(box.finish_decode(image) && box.retire_for_correction(91, frame));
+            assert(!SubmissionPermit::acquire(image));
+            auto unaffected = present_gate::acquire(&older_slot, 100, 200);
+            assert(unaffected.allowed);
+            auto wrong_slot = present_gate::acquire(&older_slot, 101, 200);
+            assert(!wrong_slot.allowed);
+        }
+        assert(box.buffer_statistics().image_allocations <= 4);
+        assert(box.retire_for_correction(91, 10));
+        {
+            auto denied = present_gate::acquire(&older_slot, 100, 200);
+            assert(!denied.allowed);
+        }
+        assert(box.retire_for_correction(91, 50));
+        {
+            auto denied = present_gate::acquire(&older_slot, 100, 200);
+            assert(!denied.allowed);
+        } // Never resurrect.
+        newer.reset();
+        older.reset();
+        assert(box.quiescent() && box.begin_epoch(92));
+        descriptor.frame = 2;
+        assert(box.publish(92, descriptor, ram));
+        assert(box.retire_for_correction(92, 3));
+        auto pending = box.take();
+        assert(pending && box.is_current(pending));
+        auto admitted = SubmissionPermit::acquire(pending);
+        assert(admitted);
+        assert(box.retire_for_restore(92, 50) && !box.is_current(pending) && !box.submissions_drained());
+        assert(!SubmissionPermit::acquire(pending)); // Resource retirement is unconditional.
+        admitted.reset();
+        assert(box.submissions_drained() && box.finish_decode(pending));
+        pending.reset();
+        assert(box.quiescent() && box.begin_epoch(93));
+    }
+
     std::cout
         << checks
         << " immutable queue-picture checks passed; menus and shared scenes retain native fallback, stale admissions remain rejected.\n";

@@ -6,3 +6,6 @@ d6690f6da8690bdaf79ab898f10e5cee69f6ef07
 19f198b4649be95368092085588875d99398ad49
 # Put adjacent using-declarations in canonical order
 32f98f5a664ecf2bc6f02e3793f917e29052d01d
+
+# Format the v1.0.16 first-party source and tooling.
+09a432f99d30b54e16bb5a7ed029fa8a245df390

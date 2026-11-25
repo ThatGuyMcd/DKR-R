@@ -4,6 +4,143 @@
 # (scripts/camera_scene_kernel.py). Every hook applies exactly once per payload.
 schema = 1
 
+# Local Time Trial recording and playback have their own input cadence.
+# These hooks are inert outside a prepared solo replay session.
+[[hook]]
+id = "time-trial-launch"
+function = "mode_menu"
+payloads = ["funcs"]
+[[hook.edits]]
+match = "dkr_custom_tracks_auto_boot(rdram, ctx);"
+replace = """
+dkr_custom_tracks_auto_boot(rdram, ctx);
+    { extern void dkr_time_trial_launch(uint8_t*, recomp_context*); dkr_time_trial_launch(rdram, ctx); }
+"""
+
+[[hook]]
+id = "time-trial-vehicle"
+function = "load_level_game"
+payloads = ["funcs"]
+entry = "extern void dkr_time_trial_load_course(uint8_t*, recomp_context*); dkr_time_trial_load_course(rdram, ctx);"
+
+[[hook]]
+id = "time-trial-frame"
+function = "main_game_loop"
+payloads = ["funcs"]
+entry = "extern int dkr_time_trial_frame_begin(uint8_t*, unsigned); { if (dkr_time_trial_frame_begin(rdram, {revision})) { return; } }"
+returns = "extern void dkr_time_trial_frame_end(uint8_t*, unsigned); dkr_time_trial_frame_end(rdram, {revision});"
+
+[[hook]]
+id = "full-game-tracks-menu"
+function = "menu_track_select_init"
+payloads = ["funcs"]
+entry = "extern void dkr_full_game_tracks_menu(uint8_t*, unsigned); dkr_full_game_tracks_menu(rdram, {revision});"
+
+[[hook]]
+id = "time-trial-input"
+function = "input_update"
+payloads = ["funcs"]
+returns = "extern void dkr_time_trial_input(uint8_t*, unsigned); dkr_time_trial_input(rdram, {revision});"
+
+[[hook]]
+id = "time-trial-pause-options"
+function = "menu_pause_init"
+payloads = ["funcs"]
+returns = "extern void dkr_time_trial_pause_options(uint8_t*, unsigned); dkr_time_trial_pause_options(rdram, {revision});"
+
+[[hook]]
+id = "time-trial-pause-entry"
+function = "menu_pause_loop"
+payloads = ["funcs"]
+entry = "extern void dkr_time_trial_resume(uint8_t*, unsigned); dkr_time_trial_resume(rdram, {revision});"
+returns = "extern void dkr_time_trial_pause_action(recomp_context*, unsigned); dkr_time_trial_pause_action(ctx, {revision});"
+
+# Local ghost practice borrows the stock translucent player-ghost object.
+[[hook]]
+id = "practice-ghost-mount"
+function = "timetrial_init_player_ghost"
+payloads = ["funcs"]
+entry = "extern int dkr_practice_ghost_mount(uint8_t*, unsigned); if (dkr_practice_ghost_mount(rdram, {revision})) { ctx->r2 = 0; return; }"
+
+[[hook]]
+id = "practice-ghost-spawned"
+function = "timetrial_init_staff_ghost"
+payloads = ["funcs"]
+entry = "extern void dkr_practice_ghost_spawned(uint8_t*, unsigned); dkr_practice_ghost_spawned(rdram, {revision});"
+
+[[hook]]
+id = "practice-ghost-pose"
+function = "timetrial_ghost_read"
+payloads = ["funcs"]
+entry = "extern int dkr_practice_ghost_pose(uint8_t*, recomp_context*, unsigned); if (dkr_practice_ghost_pose(rdram, ctx, {revision})) return;"
+
+[[hook]]
+id = "practice-ghost-minimap"
+function = "hud_render_general"
+payloads = ["funcs"]
+[[hook.edits]]
+match = "timetrial_player_ghost(rdram, ctx);"
+replace = '''{ extern int dkr_practice_ghost_marker(int);
+    if (dkr_practice_ghost_marker(0)) timetrial_player_ghost(rdram, ctx); else ctx->r2 = 0; }'''
+[[hook.edits]]
+match = "timetrial_ghost_staff(rdram, ctx);"
+replace = '''{ extern int dkr_practice_ghost_marker(int);
+    if (dkr_practice_ghost_marker(1)) timetrial_ghost_staff(rdram, ctx); else ctx->r2 = 0; }'''
+
+# A replay's mixer follows authored updates rather than host retraces.
+[[hook]]
+id = "theatre-audio-clock"
+function = "__amMain"
+payloads = ["funcs"]
+[[hook.edits]]
+match = "__amHandleFrameMsg(rdram, ctx);"
+replace = '''{ extern int dkr_theatre_audio_begin(void); if (!dkr_theatre_audio_begin()) goto L_80002B20; }
+    __amHandleFrameMsg(rdram, ctx);'''
+[[hook.edits]]
+match = "__amHandleDoneMsg(rdram, ctx);"
+replace = '''__amHandleDoneMsg(rdram, ctx);
+    { extern void dkr_theatre_audio_done(void); dkr_theatre_audio_done(); }'''
+
+# These rolls depend on the music channel mask and only set ambience timers.
+[[hook]]
+id = "adventure-parkwarden-music-rng"
+function = "obj_loop_parkwarden"
+payloads = ["funcs"]
+[[hook.edits]]
+match = '''rand_range(rdram, ctx);
+        goto after_91;'''
+replace = '''{ extern void dkr_adventure_presentation_begin(void); extern void dkr_adventure_presentation_end(void); dkr_adventure_presentation_begin(); rand_range(rdram, ctx); dkr_adventure_presentation_end(); }
+        goto after_91;'''
+[[hook.edits]]
+match = '''rand_range(rdram, ctx);
+        goto after_93;'''
+replace = '''{ extern void dkr_adventure_presentation_begin(void); extern void dkr_adventure_presentation_end(void); dkr_adventure_presentation_begin(); rand_range(rdram, ctx); dkr_adventure_presentation_end(); }
+        goto after_93;'''
+
+# The stock car rolls these bits only to enable visual wheel particles.
+[[hook]]
+id = "adventure-car-particle-mask-rng"
+function = "func_8004F7F4"
+payloads = ["funcs"]
+[[hook.edits]]
+match = '''rand_range(rdram, ctx);
+        goto after_30;'''
+replace = '''{ extern void dkr_adventure_presentation_begin(void); extern void dkr_adventure_presentation_end(void); dkr_adventure_presentation_begin(); rand_range(rdram, ctx); dkr_adventure_presentation_end(); }
+        goto after_30;'''
+[[hook.edits]]
+match = '''rand_range(rdram, ctx);
+        goto after_31;'''
+replace = '''{ extern void dkr_adventure_presentation_begin(void); extern void dkr_adventure_presentation_end(void); dkr_adventure_presentation_begin(); rand_range(rdram, ctx); dkr_adventure_presentation_end(); }
+        goto after_31;'''
+
+# Particle pools can change which visual draws are actually evaluated.
+[[hook]]
+id = "adventure-particle-emission-rng"
+function = "obj_trigger_emitter"
+payloads = ["funcs"]
+entry = "extern void dkr_adventure_presentation_begin(void); dkr_adventure_presentation_begin();"
+returns = "extern void dkr_adventure_presentation_end(void); dkr_adventure_presentation_end();"
+
 # Achievements: observe the frame after each main loop pass (achievements).
 [[hook]]
 id = "achievements-observe"

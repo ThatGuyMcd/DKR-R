@@ -4,6 +4,7 @@
 #include "local_scenery_policy.hpp"
 #include "generated/selawik_font.h"
 #include "presentation_identity.hpp"
+#include "time_trial/session.hpp"
 #include "gbi/rt64_gbi_rdp.h"
 #define STBTT_STATIC
 #define STB_TRUETYPE_IMPLEMENTATION
@@ -56,6 +57,10 @@ struct Nameplates::Impl {
     std::array<std::string, 4> names{};
     std::array<std::array<Label, 8>, 4> named{};
     std::array<Label, 8> position{};
+    std::string ghost_name;
+    Label ghost{};
+    Label ghost_outline{};
+    bool outline = false;
     std::vector<std::uint8_t> pixels;
     Plan plan;
     std::uint32_t scene = 0;
@@ -65,6 +70,8 @@ struct Nameplates::Impl {
         float left, top, right, bottom;
     };
     std::array<Box, 4> boxes{};
+    void draw_label(RT64::State&, const Label&, const hlslpp::float4x4&, IdentitySelector, float x, float y, float z,
+                    float object_scale, float opacity, unsigned owner);
     Label raster(const stbtt_fontinfo& font, std::string_view text) {
         constexpr unsigned Width = 512;
         std::array<unsigned char, Width * Height> alpha{};
@@ -137,6 +144,9 @@ void Nameplates::prepare(const Session& session, const Plan& plan, std::span<std
     try {
         if (!p.built || p.names != session.names) {
             p.built = false;
+            p.ghost_name.clear();
+            p.ghost_outline = {};
+            p.outline = false;
             p.pixels.clear();
             p.names = session.names;
             stbtt_fontinfo font{};
@@ -164,6 +174,35 @@ void Nameplates::prepare(const Session& session, const Plan& plan, std::span<std
         p.ready = false;
     } // Optional labels must never end an online race.
 }
+void Nameplates::prepare_ghost(std::string_view name, bool outline, std::span<std::uint8_t> decoder,
+                               std::uint32_t scene) noexcept {
+    auto& p = *impl_;
+    p.plan = {};
+    p.scene = scene ^ 0x47484F53U;
+    p.ready = false;
+    if ((name.empty() && !outline) || decoder.size() < kLabelTextureEnd)
+        return;
+    try {
+        if (p.ghost_name != name || p.outline != outline || p.pixels.empty()) {
+            p.built = false;
+            p.ghost_name.clear();
+            p.pixels.clear();
+            stbtt_fontinfo font{};
+            if (!stbtt_InitFont(&font, reinterpret_cast<const unsigned char*>(dkr_selawik_semibold_font), 0))
+                return;
+            p.ghost = name.empty() ? Label{} : p.raster(font, name);
+            p.ghost_outline = outline ? p.raster(font, "<>") : Label{};
+            p.ghost_name = name;
+            p.outline = outline;
+        }
+        if (!p.ghost.tiles && !p.ghost_outline.tiles)
+            return;
+        std::memcpy(decoder.data() + kLabelTextureBegin, p.pixels.data(), p.pixels.size());
+        p.ready = true;
+    } catch (...) {
+        // Ghost names are optional, including when texture allocation fails.
+    }
+}
 void Nameplates::begin_view(unsigned view) {
     impl_->view = view;
     impl_->occupied = 0;
@@ -175,14 +214,31 @@ void Nameplates::draw(RT64::State& s, const dkr_owned_draw_event& e, const hlslp
     if (!p.ready || !select || e.token != p.view || owner == p.view || owner >= 4 || rank < 1 || rank > 8 ||
         (p.plan.focus && p.view != p.plan.owner) || !dkr_owned_draw_event_valid(&e))
         return;
+    const auto& label = p.plan.labels == Labels::NameAndPosition ? p.named[owner][rank - 1] : p.position[rank - 1];
+    p.draw_label(s, label, camera, select, std::bit_cast<float>(e.parameters[2]), std::bit_cast<float>(e.parameters[3]),
+                 std::bit_cast<float>(e.parameters[4]), std::bit_cast<float>(e.parameters[5]), 1.F, owner);
+}
+void Nameplates::draw_ghost(RT64::State& s, const time_trial::GhostNameplate& ghost, const hlslpp::float4x4& camera,
+                            IdentitySelector select) {
+    auto& p = *impl_;
+    if (!p.ready || !select)
+        return;
+    if (ghost.outline)
+        p.draw_label(s, p.ghost_outline, camera, select, ghost.position[0], ghost.position[1], ghost.position[2],
+                     ghost.scale, ghost.opacity, 1);
+    p.draw_label(s, p.ghost, camera, select, ghost.position[0], ghost.position[1], ghost.position[2], ghost.scale,
+                 ghost.opacity, 0);
+}
+void Nameplates::Impl::draw_label(RT64::State& s, const Label& label, const hlslpp::float4x4& camera,
+                                  IdentitySelector select, float x, float y, float z, float object_scale, float opacity,
+                                  unsigned owner) {
+    if (!label.tiles)
+        return;
     auto& rsp = *s.rsp;
     auto& rdp = *s.rdp;
     if (rdp.colorCombinerStackSize >= RDP_EXTENDED_STACK_SIZE || rdp.primColorStackSize >= RDP_EXTENDED_STACK_SIZE ||
         rdp.envColorStackSize >= RDP_EXTENDED_STACK_SIZE)
         return;
-    const float x = std::bit_cast<float>(e.parameters[2]), y = std::bit_cast<float>(e.parameters[3]),
-                z = std::bit_cast<float>(e.parameters[4]);
-    const float object_scale = std::bit_cast<float>(e.parameters[5]);
     if (!std::isfinite(x) || !std::isfinite(y) || !std::isfinite(z) || !std::isfinite(object_scale) ||
         std::abs(x) > 32768 || std::abs(y) > 32768 || std::abs(z) > 32768 || object_scale <= 0 || object_scale > 64)
         return;
@@ -194,13 +250,10 @@ void Nameplates::draw(RT64::State& s, const dkr_owned_draw_event& e, const hlslp
     if (!std::isfinite(nx) || !std::isfinite(ny) || !std::isfinite(nz) || std::abs(nx) > 4 || std::abs(ny) > 1.15F ||
         nz < 0 || nz > 1)
         return;
-    const auto& label = p.plan.labels == Labels::NameAndPosition ? p.named[owner][rank - 1] : p.position[rank - 1];
-    if (!label.tiles)
-        return;
     const auto& viewport = rsp.viewportStack[rsp.viewportStackSize - 1];
     if (std::abs(float(viewport.scale.x)) < 1 || std::abs(float(viewport.scale.y)) < 1)
         return;
-    const float pixel_scale = 4.5F * float(p.plan.label_size) * .01F / FontHeight;
+    const float pixel_scale = 4.5F * float(plan.label_size) * .01F / FontHeight;
     const float half_width = float(label.width) * pixel_scale * .5F;
     const float screen_x = nx * float(viewport.scale.x) + float(viewport.translate.x);
     float screen_y = -ny * float(viewport.scale.y) + float(viewport.translate.y) - float(Height) * pixel_scale;
@@ -208,8 +261,8 @@ void Nameplates::draw(RT64::State& s, const dkr_owned_draw_event& e, const hlslp
     // Bounded local placement, not a change to the actor's transform or rank.
     for (unsigned attempt = 0; attempt < 4; ++attempt) {
         bool overlap = false;
-        for (unsigned i = 0; i < p.occupied; ++i) {
-            const auto& b = p.boxes[i];
+        for (unsigned i = 0; i < occupied; ++i) {
+            const auto& b = boxes[i];
             overlap |= screen_x + half_width > b.left && screen_x - half_width < b.right && screen_y + height > b.top &&
                        screen_y < b.bottom;
         }
@@ -217,10 +270,10 @@ void Nameplates::draw(RT64::State& s, const dkr_owned_draw_event& e, const hlslp
             break;
         screen_y -= height + 1;
     }
-    if (p.occupied < p.boxes.size())
-        p.boxes[p.occupied++] = {screen_x - half_width, screen_y, screen_x + half_width, screen_y + height};
+    if (occupied < boxes.size())
+        boxes[occupied++] = {screen_x - half_width, screen_y, screen_x + half_width, screen_y + height};
     anchor.y = (float(viewport.translate.y) - screen_y) / float(viewport.scale.y) * w;
-    const auto alpha = std::uint32_t(std::clamp((6000.F - w) / 1000.F, 0.F, 1.F) * 255.F);
+    const auto alpha = std::uint32_t(std::clamp((6000.F - w) / 1000.F, 0.F, 1.F) * opacity * 255.F);
     if (!alpha)
         return;
     NativeDrawScope restore(s);
@@ -236,8 +289,8 @@ void Nameplates::draw(RT64::State& s, const dkr_owned_draw_event& e, const hlslp
     billboard[3] = anchor;
     // Native scenery owns placement bytes 1..128. Labels use 241..244,
     // retaining the native high bit and never matching canonical game draws.
-    select(rsp, local_scenery::native_identity(presentation::normalise_identity(p.scene ^ 0x4E414D45U), 0xF0U + owner,
-                                               p.view));
+    select(rsp,
+           local_scenery::native_identity(presentation::normalise_identity(scene ^ 0x4E414D45U), 0xF0U + owner, view));
     rsp.modelMatrixStack[2] = billboard;
     rsp.modelMatrixStackSize = 3;
     rsp.modelMatrixPhysicalAddressStack[2] = rsp.modelMatrixSegmentedAddressStack[2] = local_scenery::kVertexScratch;

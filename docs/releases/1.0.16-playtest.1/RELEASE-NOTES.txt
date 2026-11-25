@@ -1,0 +1,22 @@
+DKR-R v1.0.16 playtest 1
+
+This is a testing build. It brings our latest online work together with the
+changes that have landed from other contributors since v1.0.15.
+
+Racers can send inputs directly to each other, while the host still handles
+recovery. Spectators stay outside that input path. You can also offer the host
+role to someone else in the lobby without making everyone leave and rejoin.
+They have to accept, and the transfer has to finish before starting the game.
+Your controller seat and the owner of the online save stay the same.
+
+There are further changes to online picture handling and Auto input delay to
+help with the frame dips we saw on Steam Deck. Please test both a normal session
+and a full lobby, and keep the runtime logs if anything goes wrong.
+
+The launcher layout is unchanged. The contributor work on cross-platform play,
+relay connections, shutdown, Track Lab and the rest of the folded source tree
+is included. This does not add a new hosted relay service.
+
+Use matching builds for testing. No release or service update has been published
+as part of preparing these files. See docs/notes/2026-11-17-upstream-integration.md
+for the exact source and verification record.

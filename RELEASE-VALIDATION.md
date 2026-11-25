@@ -1,4 +1,18 @@
-# v1.0.15 release preparation — 8 November 2026
+# Release validation
+
+## v1.0.16 local review
+
+The candidate includes the contributor history through upstream commit 669b916
+and the local integration changes. The local release handoff records its exact
+commit, build and updater evidence, package hashes and remaining device checks.
+Only publish from the approved release commit after the compatibility review,
+platform qualification and signature verification are complete.
+
+The checkpoint contract changed upstream. Verify both US revisions and use
+matched v1.0.16 packages to test online. Retest replay verification and Cloud
+Saves against isolated test storage before drawing conclusions about this build.
+
+## v1.0.15 release preparation — 8 November 2026
 
 This records local preparation since the public `Version1.0.14` release at
 `fbae505f9fe2dae63d3a351aa3a82da2b4e7dae1`. No push, tag, upload, draft or

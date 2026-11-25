@@ -20,6 +20,11 @@ changes status filters. Search has an on-screen keyboard.
 Settings controls notification position, size, duration, sound and motion.
 Earned goals show a rounded notification and optional chime.
 
+The Badge Gallery presents your collection in a grid. Search by goal, filter
+by category or status, and sort by collection order, recent unlocks or progress.
+Open a badge for its criteria and pin it to track the goal. **Settings** contains
+notification controls and collection backup and recovery.
+
 ## Progress and existing saves
 
 Progress lives in `achievements/progress-v1.json` in your active user-data

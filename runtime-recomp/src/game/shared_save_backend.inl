@@ -26,7 +26,7 @@ bool write_json(const std::filesystem::path& path, const Json& doc, std::string&
 std::filesystem::path transaction_destination(const Json& item) {
     const auto kind = item.at("kind").get<unsigned>();
     if (kind == kBundleAdventureKind && item.at("channel") == 0)
-        return data_root() / "saves/dkr.us.v77.bin";
+        return personal_adventure_path(data_root(), item.value("modded", false));
     if (kind == kBundleRecordsKind && item.at("channel") == 0)
         return data_root() / "saves/custom-records-v1.bin";
     const auto channel = item.at("channel").get<unsigned>();
@@ -124,9 +124,16 @@ bool recover_unlocked(std::string& error) {
 }
 } // namespace
 
-std::string revision() {
+bool load_draft(codec::SaveImage& image, std::string& revision, std::string& error, bool modded) {
+    const auto path = personal_adventure_path(data_root(), modded);
     std::vector<std::uint8_t> bytes;
-    return storage::read_exact(adventure_info().path, 512, bytes) ? storage::content_id(bytes) : "missing";
+    if (!ReadAdventure(path, bytes) || !codec::decode(bytes, image, &error)) {
+        error = "No checksum-valid Adventure save is available to edit.";
+        return false;
+    }
+    revision = storage::content_id(bytes);
+    error.clear();
+    return true;
 }
 bool recover_transaction(std::string& error) {
     std::scoped_lock lock(operation_mutex);
@@ -196,11 +203,11 @@ bool prepare(const std::filesystem::path& root, std::string& error) {
     std::fprintf(stderr, "[save][migration] original-images=%zu retained; personal save unchanged\n", records.size());
     return true;
 }
-bool queue_development_copy(std::string& error) {
+bool queue_development_copy(std::string& error, bool modded) {
     if (!prepare(data_root(), error))
         return false;
     std::scoped_lock lock(operation_mutex);
-    const auto personal = data_root() / "saves/dkr.us.v77.bin";
+    const auto personal = personal_adventure_path(data_root(), modded);
     auto owner = storage::acquire(personal, error);
     if (!owner)
         return false;
@@ -340,25 +347,22 @@ void complete(codec::SaveImage& image, int selected) {
         }
     unlock(image);
 }
-bool apply(const codec::SaveImage& image, std::string_view expected, std::string& error) {
+bool apply(const codec::SaveImage& image, std::string_view expected, std::string& error, bool modded) {
     if (!prepare(data_root(), error))
         return false;
     std::scoped_lock lock(operation_mutex);
-    auto owner = storage::acquire(adventure_info().path, error);
+    const auto path = personal_adventure_path(data_root(), modded);
+    auto owner = storage::acquire(path, error);
     if (!owner)
         return false;
-    if (revision() != expected) {
+    std::vector<std::uint8_t> original;
+    if (!storage::read_exact(path, codec::kImageSize, original) || storage::content_id(original) != expected) {
         error =
             "Your save changed since this editor was opened. Reload it before applying edits; no progress was replaced.";
         return false;
     }
     if (!codec::validate_editable_ranges(image, &error))
         return false;
-    std::vector<std::uint8_t> original;
-    if (!ReadAdventure(adventure_info().path, original)) {
-        error = "The current personal image is not valid; use Recovery before editing.";
-        return false;
-    }
     codec::SaveImage previous;
     if (!codec::decode(original, previous, &error))
         return false;
@@ -375,11 +379,10 @@ bool apply(const codec::SaveImage& image, std::string_view expected, std::string
     if (!codec::validate(proposed, &error))
         return false;
     std::filesystem::path backup;
-    if (!backup_adventure(backup, error) ||
-        !storage::write_atomic(adventure_info().path, proposed, ReadAdventure, error))
+    if (!backup_adventure(backup, error, modded) || !storage::write_atomic(path, proposed, ReadAdventure, error))
         return false;
     std::vector<std::uint8_t> check;
-    if (!ReadAdventure(adventure_info().path, check) || check != proposed) {
+    if (!ReadAdventure(path, check) || check != proposed) {
         error = "The saved edit failed read-back verification. Its backup was retained.";
         return false;
     }
@@ -387,7 +390,7 @@ bool apply(const codec::SaveImage& image, std::string_view expected, std::string
     error.clear();
     return true;
 }
-bool adopt(const std::filesystem::path& source, bool repair, std::string& error) {
+bool adopt(const std::filesystem::path& source, bool repair, std::string& error, bool modded) {
     if (!prepare(data_root(), error))
         return false;
     std::vector<std::uint8_t> bytes;
@@ -411,7 +414,7 @@ bool adopt(const std::filesystem::path& source, bool repair, std::string& error)
     const auto staged = data_root() / "save-recovery" / ("candidate-" + storage::content_id(bytes) + ".bin");
     if (!storage::write_atomic(staged, bytes, ReadAdventure, error))
         return false;
-    return import_adventure(staged, error);
+    return import_adventure(staged, error, modded);
 }
 bool export_raw(const std::filesystem::path& source, const std::filesystem::path& destination, std::string& error) {
     if (!ExportDestinationAllowed(destination, error))
@@ -453,7 +456,7 @@ std::string describe(const std::filesystem::path& path) {
                                           : "locked");
     return text;
 }
-bool apply_bundle(const std::filesystem::path& source, std::string& error) {
+bool apply_bundle(const std::filesystem::path& source, std::string& error, bool modded) {
     if (!prepare(data_root(), error))
         return false;
     std::scoped_lock lock(operation_mutex);
@@ -472,6 +475,8 @@ bool apply_bundle(const std::filesystem::path& source, std::string& error) {
     for (std::size_t i = 0; i < entries.size(); ++i) {
         const auto& entry = entries[i];
         Json item = {{"kind", entry.kind}, {"channel", entry.channel}};
+        if (entry.kind == kBundleAdventureKind)
+            item["modded"] = modded;
         const auto dest = transaction_destination(item);
         auto owner = storage::acquire(dest, error);
         if (!owner)
@@ -516,24 +521,10 @@ bool apply_bundle(const std::filesystem::path& source, std::string& error) {
         return false;
     return retire_transaction(dir, error);
 }
-bool reset(std::string& error) {
+bool reset(std::string& error, bool modded) {
     if (!prepare(data_root(), error))
         return false;
-    std::vector<BundleEntry> entries{{kBundleAdventureKind, 0, codec::blank_bytes()},
-                                     {kBundleRecordsKind, 0, records::encode({})}};
-    std::vector<std::uint8_t> bytes(kBundleMagic.begin(), kBundleMagic.end());
-    AppendLE32(bytes, kBundleVersion);
-    AppendLE32(bytes, entries.size());
-    for (const auto& entry : entries) {
-        AppendLE32(bytes, entry.kind);
-        AppendLE32(bytes, entry.channel);
-        AppendLE32(bytes, entry.bytes.size());
-        AppendLE32(bytes, ImageChecksum(entry.bytes));
-        bytes.insert(bytes.end(), entry.bytes.begin(), entry.bytes.end());
-    }
-    const auto source = data_root() / "save-recovery" / ("fresh-" + Timestamp() + ".dkrsave");
-    if (!storage::write_atomic(source, bytes, ReadBundle, error))
-        return false;
-    return apply_bundle(source, error);
+    std::scoped_lock lock(operation_mutex);
+    return reset_adventure(error, modded);
 }
 } // namespace dkr::runtime::saves::shared

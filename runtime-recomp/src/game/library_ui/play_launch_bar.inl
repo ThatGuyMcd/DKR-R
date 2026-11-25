@@ -9,11 +9,15 @@ extern int g_launcher_layout_step;
 bool PlayLaunchLayoutCheck() {
     const char* value = std::getenv("DKR_OWNED_CHECK_PLAY_LAUNCH");
     return !g_launcher_layout_root.empty() && value &&
-           (std::string_view(value) == "1" || std::string_view(value) == "save");
+           (std::string_view(value) == "1" || std::string_view(value) == "save" ||
+            std::string_view(value) == "save-modded");
 }
 bool SaveDraftLayoutCheck() {
     const char* value = std::getenv("DKR_OWNED_CHECK_PLAY_LAUNCH");
-    return PlayLaunchLayoutCheck() && std::string_view(value) == "save";
+    return PlayLaunchLayoutCheck() && std::string_view(value).starts_with("save");
+}
+bool ModdedSaveDraftLayoutCheck() {
+    return SaveDraftLayoutCheck() && std::string_view(std::getenv("DKR_OWNED_CHECK_PLAY_LAUNCH")) == "save-modded";
 }
 struct PlayLaunchGeometry {
     ImVec2 button_min{}, button_max{}, clip_min{}, clip_max{};
@@ -78,18 +82,23 @@ void PlayLaunchCaptureCheck() {
 }
 
 struct SaveDraftGeometry {
-    ImRect panel, bounds;
-    float top = 0.F;
-    bool dirty = false;
+    ImRect panel, bounds, slots, editor, editor_body;
+    float top = 0.F, editor_scroll = 0.F;
+    int selected_slot = 0;
+    bool dirty = false, modded = false;
 };
 SaveDraftGeometry g_save_draft_geometry;
 void SaveDraftCaptureCheck() {
     const auto& g = g_save_draft_geometry;
-    std::fprintf(
-        stderr,
-        "[save-draft][isolated-check] step=%d bar-left=%.1f bar-right=%.1f bar-top=%.1f bar-bottom=%.1f panel-left=%.1f panel-right=%.1f panel-bottom=%.1f dirty=%d\n",
-        g_launcher_layout_step, g.panel.Min.x, g.panel.Max.x, g.top, g.panel.Max.y, g.bounds.Min.x, g.bounds.Max.x,
-        g.bounds.Max.y, int(g.dirty));
+    std::fprintf(stderr,
+                 "[save-draft][isolated-check] step=%d bar-left=%.1f bar-right=%.1f bar-top=%.1f bar-bottom=%.1f "
+                 "panel-left=%.1f panel-right=%.1f panel-bottom=%.1f dirty=%d slots-left=%.1f slots-right=%.1f "
+                 "slots-bottom=%.1f editor-left=%.1f editor-right=%.1f editor-top=%.1f editor-bottom=%.1f "
+                 "editor-scroll=%.1f editor-body-left=%.1f editor-body-right=%.1f slot=%d modded=%d\n",
+                 g_launcher_layout_step, g.panel.Min.x, g.panel.Max.x, g.top, g.panel.Max.y, g.bounds.Min.x,
+                 g.bounds.Max.x, g.bounds.Max.y, int(g.dirty), g.slots.Min.x, g.slots.Max.x, g.slots.Max.y,
+                 g.editor.Min.x, g.editor.Max.x, g.editor.Min.y, g.editor.Max.y, g.editor_scroll, g.editor_body.Min.x,
+                 g.editor_body.Max.x, g.selected_slot, int(g.modded));
 }
 
 float PlayLaunchButtonWidth(float width) {

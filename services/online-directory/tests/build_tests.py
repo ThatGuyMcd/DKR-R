@@ -40,10 +40,35 @@ class BundleTests(unittest.TestCase):
         inputs = json.loads((out / "API-BUILD-INPUTS.json").read_text())["inputs"]
         self.assertEqual(
             {Path(name).name for name in inputs},
-            {"worker.mjs", "library_api.mjs", "profile_api.mjs", "community_api.mjs"},
+            {
+                "worker.mjs",
+                "library_api.mjs",
+                "profile_api.mjs",
+                "community_api.mjs",
+                "speedrun_api.mjs",
+                "speedrun_replay.mjs",
+                "speedrun_verifier.mjs",
+                "speedrun_tracks.mjs",
+                "speedrun_rankings.mjs",
+                "speedrun_video.mjs",
+                "speedrun_ghost.mjs",
+                "speedrun_rules.mjs",
+                "speedrun_storage.mjs",
+                "cloud_saves_api.mjs",
+                "notification_api.mjs",
+                "adventure-catalogue.js",
+                "replay-format.js",
+            },
         )
         self.assertEqual((out / "ROLLBACK/worker-single-file.mjs").read_bytes(), previous.read_bytes())
-        self.assertTrue((out / "PRIVATE-API/002-launcher-profiles.sql").is_file())
+        for migration in (
+            "002-launcher-profiles.sql",
+            "003-speedruns.sql",
+            "004-notifications.sql",
+            "005-cloud-saves.sql",
+            "006-modded-adventure.sql",
+        ):
+            self.assertTrue((out / "PRIVATE-API" / migration).is_file(), migration)
         self.assertEqual(run("--verify", "--output", str(out))[0], 0)
         (out / "PRIVATE-API/worker-single-file.mjs").write_text("changed")
         self.assertIn("Bundle file changed", run("--verify", "--output", str(out))[1])

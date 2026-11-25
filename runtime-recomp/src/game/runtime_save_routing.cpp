@@ -3,6 +3,7 @@
 #include "netplay/netplay_types.hpp"
 #include "save_manager.hpp"
 #include "save_storage.hpp"
+#include "shared_saves.hpp"
 
 #include "ultramodern/ultramodern.hpp"
 
@@ -17,7 +18,8 @@ dkr::runtime::saves::RuntimeOnlineSaveStatus g_runtime_save_status;
 struct SaveContext {
     std::filesystem::path path, paks;
     std::shared_ptr<dkr::runtime::saves::storage::Lease> lease;
-    bool online = false, host = false, loaded = false, incomplete = false, development = false;
+    bool online = false, host = false, loaded = false, incomplete = false, development = false, time_trial = false;
+    dkr::runtime::saves::ReplaySave replay_save = dkr::runtime::saves::ReplaySave::Blank;
     std::uint64_t match = 0, hash = 0;
     std::string failure;
 };
@@ -104,7 +106,7 @@ bool dkr::runtime::saves::prepare_runtime_save_context(const std::filesystem::pa
                                                        std::uint64_t match, std::uint64_t hash, std::string& error,
                                                        bool development) {
     std::scoped_lock lock(g_runtime_save_mutex);
-    if (g_context.lease) {
+    if (g_context.lease || g_context.time_trial) {
         error = "The previous save owner has not retired.";
         return false;
     }
@@ -144,6 +146,19 @@ bool dkr::runtime::saves::prepare_runtime_save_context(const std::filesystem::pa
     error.clear();
     return true;
 }
+
+bool dkr::runtime::saves::prepare_time_trial_save_context(std::string& error, ReplaySave seed) {
+    std::scoped_lock lock(g_runtime_save_mutex);
+    if (g_context.lease || g_context.time_trial) {
+        error = "The previous save owner has not retired.";
+        return false;
+    }
+    g_context = {};
+    g_context.time_trial = true;
+    g_context.replay_save = seed;
+    return true;
+}
+
 void dkr::runtime::saves::retire_runtime_save_context() {
     std::scoped_lock lock(g_runtime_save_mutex);
     g_context = {};
@@ -152,6 +167,8 @@ void dkr::runtime::saves::retire_runtime_save_context() {
 }
 bool dkr::runtime::saves::runtime_save_context_ready() {
     std::scoped_lock lock(g_runtime_save_mutex);
+    if (g_context.time_trial)
+        return g_context.loaded && ultramodern::get_save_file_path().empty();
     if (!g_context.lease || !g_context.loaded || !g_context.failure.empty())
         return false;
     // Verify what init_saving actually loaded, not a second proposed route.
@@ -189,6 +206,24 @@ dkr::runtime::saves::RuntimeSaveSelection dkr::runtime::saves::runtime_save_sele
 }
 bool dkr::runtime::saves::load_runtime_save(const std::filesystem::path& path, std::vector<char>& buffer) {
     std::scoped_lock lock(g_runtime_save_mutex);
+    if (g_context.time_trial) {
+        if (!path.empty()) {
+            g_context.failure = "Time Trial cannot load a file-backed save.";
+            return false;
+        }
+        if (g_context.replay_save == ReplaySave::MissingAdventure) {
+            // Match the runtime's missing-file boot. Reads and writes stay in memory.
+            buffer.assign(codec::kImageSize, 0);
+        } else {
+            auto image = codec::blank_image();
+            if (g_context.replay_save == ReplaySave::CompletedAdventure)
+                shared::complete(image, 0);
+            const auto bytes = codec::encode(image);
+            buffer.assign(bytes.begin(), bytes.end());
+        }
+        g_context.loaded = true;
+        return true;
+    }
     std::vector<std::uint8_t> bytes;
     if (!g_context.lease || storage::absolute(path) != g_context.path) {
         g_context.failure = "The runtime tried to load a save outside its launch scope.";
@@ -217,6 +252,8 @@ bool dkr::runtime::saves::load_runtime_save(const std::filesystem::path& path, s
 }
 bool dkr::runtime::saves::commit_runtime_save(const std::filesystem::path& path, const std::vector<char>& buffer) {
     std::scoped_lock lock(g_runtime_save_mutex);
+    if (g_context.time_trial)
+        return false;
     if (!g_context.lease || !g_context.loaded || storage::absolute(path) != g_context.path) {
         g_context.failure = "A stale save write was refused outside its launch scope.";
         return false;
@@ -237,7 +274,7 @@ bool dkr::runtime::saves::commit_runtime_save(const std::filesystem::path& path,
         return true;
     }
     std::string error;
-    if (!storage::write_atomic(path, bytes, ValidRuntimeImage, error)) {
+    if (!storage::write_progress(path, bytes, ValidRuntimeImage, error)) {
         g_context.failure = error;
         std::fprintf(stderr, "[save][commit] %s\n", error.c_str());
         return false;

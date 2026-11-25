@@ -1,4 +1,10 @@
+#include "cloud_saves/progress.hpp"
+#include "cloud_saves/sync.hpp"
+#include "custom_records.hpp"
+#include "personal_adventure_paths.hpp"
 #include "save_manager.hpp"
+#include "save_storage.hpp"
+#include "shared_saves.hpp"
 
 #include <algorithm>
 #include <array>
@@ -9,6 +15,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <thread>
 #include <vector>
 
 namespace {
@@ -50,6 +57,20 @@ void write_bytes(const std::filesystem::path& path, const std::vector<std::uint8
 std::vector<std::uint8_t> read_bytes(const std::filesystem::path& path) {
     std::ifstream input(path, std::ios::binary);
     return {std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>()};
+}
+
+std::optional<dkr::cloud_saves::ProgressBatch> take_progress(dkr::cloud_saves::ProgressWrites& writes,
+                                                             std::chrono::milliseconds timeout) {
+    std::stop_source stop;
+    std::jthread watchdog([&](std::stop_token done) {
+        std::mutex mutex;
+        std::condition_variable_any changed;
+        std::unique_lock lock(mutex);
+        changed.wait_for(lock, done, timeout, [] { return false; });
+        if (!done.stop_requested())
+            stop.request_stop();
+    });
+    return writes.take(stop.get_token());
 }
 
 } // namespace
@@ -282,6 +303,197 @@ int main() {
     const auto oversized_bundle = root / "oversized.dkrsave";
     write_bytes(oversized_bundle, std::vector<std::uint8_t>(200U * 1024U, 0U));
     assert(!dkr::runtime::saves::import_bundle(oversized_bundle, error));
+
+    std::fputs("[test][save-manager] cloud save isolation and checkout priority\n", stderr);
+    using namespace dkr::cloud_saves;
+    static_assert(next_action("local", "", "") == Action::Upload);
+    static_assert(next_action("local", "", "private-pilot") == Action::Upload);
+    static_assert(next_action("local", "remote", "") == Action::Download);
+    static_assert(next_action("", "", "previous") == Action::None);
+    static_assert(next_action("", "remote", "") == Action::Download);
+    static_assert(next_action("base", "remote", "base") == Action::Download);
+    static_assert(next_action("local", "base", "base") == Action::Upload);
+    static_assert(next_action("local", "remote", "base") == Action::Download);
+    static_assert(next_action("same", "same", "") == Action::None);
+    constexpr auto lobby_return = SyncScope::PublishHostedOnline;
+    static_assert(includes_slot(lobby_return, "online-adventure"));
+    static_assert(includes_slot(lobby_return, "online-paks"));
+    static_assert(includes_slot(lobby_return, "online-records"));
+    static_assert(!includes_slot(lobby_return, "offline-adventure"));
+    static_assert(!includes_slot(lobby_return, "modded-records"));
+    static_assert(next_action("played", "base", "base", lobby_return) == Action::Upload);
+    static_assert(next_action("played", "", "", lobby_return) == Action::Upload);
+    static_assert(next_action("played", "newer", "base", lobby_return) == Action::Defer);
+    static_assert(next_action("", "newer", "", lobby_return) == Action::Defer);
+    static_assert(sync_failure(true, 0) == SyncStatus::Unreachable);
+    static_assert(sync_failure(false, 503) == SyncStatus::Unreachable);
+    static_assert(sync_failure(false, 522) == SyncStatus::Unreachable);
+    static_assert(sync_failure(false, 409) == SyncStatus::Error);
+    static_assert(sync_failure(false, 415) == SyncStatus::Error);
+    static_assert(sync_failure(false, 0) == SyncStatus::Error);
+    namespace saves = dkr::runtime::saves;
+    std::vector<std::uint8_t> local, cloud;
+    assert(saves::cloud_save_slots().size() == 10);
+    assert(saves::read_cloud_save("modded-adventure", local, error) && local.empty());
+    assert(saves::personal_adventure_path(root, false) == saves::adventure_info().path);
+    assert(!std::filesystem::exists(saves::personal_adventure_path(root, true)));
+    assert(saves::read_cloud_save("offline-adventure", local, error));
+    assert(saves::read_cloud_save("online-adventure", cloud, error));
+    assert(local != cloud);
+    assert(!saves::replace_cloud_save("offline-adventure", {}, cloud, error));
+    auto bad_cloud = cloud;
+    bad_cloud[12] ^= 1;
+    assert(!saves::replace_cloud_save("offline-adventure", local, bad_cloud, error));
+    assert(read_bytes(saves::adventure_info().path) == local);
+    assert(saves::replace_cloud_save("offline-adventure", local, cloud, error));
+    assert(read_bytes(saves::adventure_info().path.string() + ".bak") == local);
+    assert(!saves::replace_cloud_save("offline-adventure", local, local, error));
+    assert(read_bytes(saves::adventure_info().path) == cloud);
+    assert(saves::read_cloud_save("offline-pak-1", cloud, error) && cloud == valid_pak());
+    assert(saves::read_cloud_save("online-paks", cloud, error) && cloud.empty());
+    assert(!saves::read_cloud_save("online/sessions/experimental-controller-paks.bin", cloud, error));
+
+    // Both devices have valid but different progress. The first upload must
+    // seed public slots even with pilot history. The second device checks out
+    // the cloud versions through the save backend and preserves its originals.
+    const auto windows = root / "windows", deck = root / "deck";
+    const auto make_adventure = [](const char* name, std::uint8_t balloons = 0) {
+        auto image = saves::codec::blank_image();
+        image.slots[0].name = name;
+        image.slots[0].balloons[0] = balloons;
+        return saves::codec::encode(image);
+    };
+    const auto make_record = [](std::uint16_t time) {
+        saves::records::Record record;
+        record.key.assign(64, 'a');
+        record.lap = time;
+        return saves::records::encode({{{record.key, record.vehicle}, record}});
+    };
+    struct Checkout {
+        const char* key;
+        std::filesystem::path path;
+        std::vector<std::uint8_t> windows, deck;
+    };
+    const Checkout slots[]{
+        {"offline-adventure", "saves/dkr.us.v77.bin", make_adventure("WIN", 2), make_adventure("DEK", 3)},
+        {"modded-records", "saves/custom-records-v1.bin", make_record(100), make_record(200)},
+        {"online-adventure", "saves/online/host/dkr.us.v77.bin", make_adventure("NWN"), make_adventure("NDK")},
+        {"modded-adventure", "saves/modded/dkr.us.v77.bin", make_adventure("MWN"), make_adventure("MDK", 1)},
+    };
+    for (const auto& slot : slots) {
+        write_bytes(windows / slot.path, slot.windows);
+        write_bytes(deck / slot.path, slot.deck);
+        saves::configure(windows);
+        assert(next_action("windows", "", "pilot") == Action::Upload);
+        assert(saves::read_cloud_save(slot.key, cloud, error) && cloud == slot.windows);
+        saves::configure(deck);
+        assert(saves::read_cloud_save(slot.key, local, error) && local == slot.deck);
+        assert(next_action("deck", "windows", "older") == Action::Download);
+        assert(saves::replace_cloud_save(slot.key, local, cloud, error));
+        assert(read_bytes(deck / slot.path) == slot.windows);
+        assert(read_bytes((deck / slot.path).string() + ".bak") == slot.deck);
+        const auto history = (deck / slot.path).parent_path() / "save-history" / slot.path.filename();
+        assert(read_bytes(std::filesystem::directory_iterator(history)->path()) == slot.deck);
+        assert(next_action("deck-next", "windows", "windows") == Action::Upload);
+    }
+
+    const auto vanilla_save_path = saves::personal_adventure_path(deck, false);
+    const auto modded_save_path = saves::personal_adventure_path(deck, true);
+    assert(read_bytes(vanilla_save_path) == slots[0].windows && read_bytes(modded_save_path) == slots[3].windows);
+    assert(saves::replace_cloud_save("modded-adventure", slots[3].windows, make_adventure("MOD", 5), error));
+    assert(read_bytes(vanilla_save_path) == slots[0].windows);
+    // The two editors can hold drafts concurrently. Each revision belongs to
+    // the exact bytes loaded by that editor, including during a cloud update.
+    saves::codec::SaveImage vanilla_draft, modded_draft;
+    std::string vanilla_revision, modded_revision;
+    assert(saves::shared::load_draft(vanilla_draft, vanilla_revision, error, false));
+    assert(saves::shared::load_draft(modded_draft, modded_revision, error, true));
+    modded_draft.slots[0].balloons[0] = 6;
+    assert(saves::shared::apply(modded_draft, modded_revision, error, true));
+    assert(read_bytes(vanilla_save_path) == slots[0].windows);
+    assert(read_bytes(modded_save_path) == make_adventure("MOD", 6));
+    assert(!saves::shared::apply(modded_draft, modded_revision, error, true));
+    const auto modded_backups = saves::adventure_backups(true);
+    assert(!modded_backups.empty() && read_bytes(modded_backups.front()) == make_adventure("MOD", 5));
+    vanilla_draft.slots[0].balloons[0] = 4;
+    assert(saves::shared::apply(vanilla_draft, vanilla_revision, error, false));
+    const auto edited_vanilla = read_bytes(vanilla_save_path);
+    const auto edited_modded = read_bytes(modded_save_path);
+    const auto custom_records = deck / slots[1].path;
+    const auto existing_records = read_bytes(custom_records);
+    const auto modded_bundle = root / "modded.dkrsave";
+    assert(saves::export_bundle(modded_bundle, error, true));
+    assert(saves::shared::reset(error, true));
+    assert(read_bytes(modded_save_path) == saves::codec::blank_bytes());
+    assert(read_bytes(vanilla_save_path) == edited_vanilla && read_bytes(custom_records) == existing_records);
+    assert(saves::import_bundle(modded_bundle, error, true));
+    assert(read_bytes(modded_save_path) == edited_modded && read_bytes(vanilla_save_path) == edited_vanilla);
+    assert(saves::shared::adopt(modded_backups.front(), false, error, true));
+    assert(read_bytes(modded_save_path) == make_adventure("MOD", 5));
+    assert(read_bytes(vanilla_save_path) == edited_vanilla);
+    saves::set_online_save_protection(true);
+    assert(!saves::shared::reset(error, true));
+    assert(!saves::read_cloud_save("modded-adventure", local, error));
+    saves::set_online_save_protection(false);
+
+    std::fputs("[test][save-manager] synced lobby seed and retained lobby protection\n", stderr);
+    const auto host_path = deck / "saves/online/host/dkr.us.v77.bin";
+    std::vector<std::uint8_t> seed;
+    assert(saves::prepare_host_online_adventure(saves::OnlineSaveSeedMode::ContinuePreviousSession, seed, error));
+    assert(seed == slots[2].windows);
+    assert(saves::bind_staged_host_online_adventure(101, error));
+    const auto played = make_adventure("NEW");
+    assert(saves::commit_online_adventure(true, 101, played, error));
+    saves::set_online_save_protection(true);
+    assert(!saves::read_cloud_save("offline-adventure", local, error));
+    assert(saves::read_cloud_save("online-adventure", local, error) && local == played);
+    assert(next_action("played", "newer", "windows", lobby_return) == Action::Defer);
+    assert(read_bytes(host_path) == played);
+    saves::set_online_save_protection(false);
+    assert(next_action("played", "newer", "windows") == Action::Download);
+    assert(saves::replace_cloud_save("online-adventure", played, slots[2].deck, error));
+    assert(read_bytes(host_path) == slots[2].deck);
+    assert(read_bytes(host_path.string() + ".bak") == played);
+
+    std::fputs("[test][save-manager] confirmed writes and background cloud scope\n", stderr);
+    constexpr auto live_sync = SyncScope::PublishProgress;
+    static_assert(next_action("played", "base", "base", live_sync) == Action::Upload);
+    static_assert(next_action("played", "newer", "base", live_sync) == Action::Defer);
+    static_assert(next_action("played", "", "", live_sync) == Action::Upload);
+    auto& writes = progress_writes;
+    writes.account(7U);
+    writes.gameplay(true);
+    assert(saves::commit_online_adventure(true, 101, played, error));
+    assert(read_bytes(host_path) == played);
+    const auto batch = take_progress(writes, std::chrono::seconds(1));
+    assert(batch && batch->account_generation == 7U && batch->slots.size() == 1 &&
+           batch->slots.contains("online-adventure"));
+    assert(writes.visible());
+    assert(saves::commit_online_adventure(true, 101, played, error));
+    assert(!take_progress(writes, std::chrono::milliseconds(50))); // Unchanged save.
+    assert(saves::replace_cloud_save("online-adventure", played, slots[2].deck, error));
+    assert(!take_progress(writes, std::chrono::milliseconds(50))); // Cloud checkout.
+    const auto new_modded = make_adventure("MOD", 8);
+    const auto valid_adventure = [](const std::filesystem::path& path, std::vector<std::uint8_t>& bytes) {
+        bytes = read_bytes(path);
+        return saves::codec::validate(bytes);
+    };
+    assert(saves::storage::write_progress(modded_save_path, new_modded, valid_adventure, error));
+    const auto modded_batch = take_progress(writes, std::chrono::seconds(1));
+    assert(modded_batch && modded_batch->slots.size() == 1 && modded_batch->slots.contains("modded-adventure"));
+    assert(read_bytes(modded_save_path) == new_modded);
+    assert(read_bytes(vanilla_save_path) == edited_vanilla);
+    writes.gameplay(false);
+    writes.account(std::nullopt);
+
+    ProgressWrites notice;
+    notice.gameplay(true);
+    const auto start = ProgressWrites::Clock::time_point(std::chrono::seconds(5));
+    notice.committed("any-gameplay-save", start);
+    notice.committed("second-write", start + std::chrono::milliseconds(800));
+    assert(notice.visible(start + std::chrono::milliseconds(849)));
+    assert(!notice.visible(start + std::chrono::milliseconds(850)));
+    assert(!notice.visible(start + std::chrono::seconds(1)));
 
     std::error_code cleanup_error;
     std::filesystem::remove_all(root, cleanup_error);

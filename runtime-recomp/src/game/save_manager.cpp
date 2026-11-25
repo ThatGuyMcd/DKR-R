@@ -54,6 +54,7 @@ std::mutex g_save_manager_mutex;
 std::vector<std::uint8_t> g_staged_host_online_save;
 std::uint64_t g_staged_host_online_match_id = 0;
 std::string g_host_online_mod_profile;
+void ConfigureCloudProgressRoutes();
 bool ValidModProfile(std::string_view profile) {
     return profile.empty() || (profile.size() == 64 && std::all_of(profile.begin(), profile.end(), [](char c) {
                                    return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f');
@@ -65,8 +66,8 @@ std::filesystem::path HostOnlineSubfolder(std::string_view profile) {
     return folder;
 }
 
-std::filesystem::path AdventurePath() {
-    return g_config_directory / "saves" / "dkr.us.v77.bin";
+std::filesystem::path AdventurePath(bool modded = false) {
+    return dkr::runtime::saves::personal_adventure_path(g_config_directory, modded);
 }
 
 std::string MatchIdText(std::uint64_t match_id) {
@@ -221,8 +222,8 @@ bool WriteAtomic(const std::filesystem::path& destination, const std::vector<std
     return dkr::runtime::saves::storage::write_atomic(destination, bytes, validator, error);
 }
 
-bool BackupUnlocked(std::filesystem::path& created, std::string& error) {
-    const auto source = AdventurePath();
+bool BackupUnlocked(std::filesystem::path& created, std::string& error, bool modded = false) {
+    const auto source = AdventurePath(modded);
     const auto owner = dkr::runtime::saves::storage::acquire(source, error);
     if (!owner)
         return false;
@@ -232,7 +233,8 @@ bool BackupUnlocked(std::filesystem::path& created, std::string& error) {
         return false;
     }
     std::error_code filesystem_error;
-    const auto directory = g_config_directory / "save-backups";
+    const auto directory =
+        g_config_directory / "save-backups" / dkr::runtime::saves::personal_adventure_subfolder(modded);
     std::filesystem::create_directories(directory, filesystem_error);
     if (filesystem_error) {
         error = "Could not create the backup garage: " + filesystem_error.message();
@@ -242,8 +244,8 @@ bool BackupUnlocked(std::filesystem::path& created, std::string& error) {
     return WriteAtomic(created, bytes, ReadAdventure, error);
 }
 
-bool BackupRawAdventureUnlocked(std::filesystem::path& created, std::string& error) {
-    const auto source = AdventurePath();
+bool BackupRawAdventureUnlocked(std::filesystem::path& created, std::string& error, bool modded = false) {
+    const auto source = AdventurePath(modded);
     const auto owner = dkr::runtime::saves::storage::acquire(source, error);
     if (!owner)
         return false;
@@ -253,7 +255,8 @@ bool BackupRawAdventureUnlocked(std::filesystem::path& created, std::string& err
         return false;
     }
     std::error_code filesystem_error;
-    const auto directory = g_config_directory / "save-backups";
+    const auto directory =
+        g_config_directory / "save-backups" / dkr::runtime::saves::personal_adventure_subfolder(modded);
     std::filesystem::create_directories(directory, filesystem_error);
     if (filesystem_error) {
         error = "Could not create the backup garage: " + filesystem_error.message();
@@ -368,6 +371,7 @@ void dkr::runtime::saves::configure(const std::filesystem::path& config_director
     g_staged_host_online_save.clear();
     g_staged_host_online_match_id = 0;
     g_host_online_mod_profile.clear();
+    ConfigureCloudProgressRoutes();
 }
 
 void dkr::runtime::saves::configure_recovery_locations(std::vector<std::filesystem::path> roots) {
@@ -463,7 +467,9 @@ std::vector<dkr::runtime::saves::StoredAdventure> dkr::runtime::saves::stored_ad
             continue;
         const bool active = storage::key(candidate) == storage::key(root);
         const std::string prefix = active ? "" : "Other profile/portable location: ";
-        admit(candidate / "saves" / "dkr.us.v77.bin", active ? 0 : 3, prefix + "Offline Adventure",
+        admit(personal_adventure_path(candidate, false), active ? 0 : 3, prefix + "Vanilla Adventure",
+              StoredSaveKind::Adventure);
+        admit(personal_adventure_path(candidate, true), active ? 2 : 3, prefix + "Modded Adventure",
               StoredSaveKind::Adventure);
         for (int channel = 0; channel < kControllerPakCount; ++channel) {
             const auto pak = candidate / ("controller-pak-" + std::to_string(channel + 1) + ".mpk");
@@ -514,10 +520,7 @@ std::vector<dkr::runtime::saves::StoredAdventure> dkr::runtime::saves::stored_ad
                 const bool transaction = relative.starts_with("save-transactions/") && name.ends_with(".original");
                 if (!primary && !recovery && !preserved && !transaction)
                     continue;
-                const int scope = recovery || !active                     ? 3
-                                  : relative.starts_with("saves/online/") ? 1
-                                  : relative.starts_with("saves/mods/")   ? 2
-                                                                          : 3;
+                const int scope = !recovery && active && relative.starts_with("saves/online/") ? 1 : 3;
                 const auto kind =
                     relative.find("custom-records-v1.bin") != std::string::npos ? StoredSaveKind::CustomRecords
                     : relative.find("experimental-controller-paks.bin") != std::string::npos
@@ -556,10 +559,10 @@ bool dkr::runtime::saves::export_stored_save(const std::filesystem::path& source
     return WriteAtomic(destination, bytes, validator, error);
 }
 
-dkr::runtime::saves::SaveInfo dkr::runtime::saves::adventure_info() {
+dkr::runtime::saves::SaveInfo dkr::runtime::saves::adventure_info(bool modded) {
     std::scoped_lock lock(g_save_manager_mutex);
     SaveInfo info{};
-    info.path = AdventurePath();
+    info.path = AdventurePath(modded);
     std::error_code error;
     info.exists = std::filesystem::exists(info.path, error);
     if (info.exists && !error) {
@@ -575,11 +578,11 @@ std::filesystem::path dkr::runtime::saves::backup_directory() {
     return g_config_directory / "save-backups";
 }
 
-std::vector<std::filesystem::path> dkr::runtime::saves::adventure_backups() {
+std::vector<std::filesystem::path> dkr::runtime::saves::adventure_backups(bool modded) {
     std::scoped_lock lock(g_save_manager_mutex);
     std::vector<std::filesystem::path> result;
     std::error_code error;
-    const auto directory = g_config_directory / "save-backups";
+    const auto directory = g_config_directory / "save-backups" / personal_adventure_subfolder(modded);
     if (!std::filesystem::is_directory(directory, error)) {
         return result;
     }
@@ -598,9 +601,9 @@ std::vector<std::filesystem::path> dkr::runtime::saves::adventure_backups() {
     return result;
 }
 
-bool dkr::runtime::saves::backup_adventure(std::filesystem::path& created, std::string& error) {
+bool dkr::runtime::saves::backup_adventure(std::filesystem::path& created, std::string& error, bool modded) {
     std::scoped_lock lock(g_save_manager_mutex);
-    return BackupUnlocked(created, error);
+    return BackupUnlocked(created, error, modded);
 }
 
 bool dkr::runtime::saves::export_adventure(const std::filesystem::path& destination, std::string& error) {
@@ -612,9 +615,9 @@ bool dkr::runtime::saves::export_adventure(const std::filesystem::path& destinat
     return export_stored_adventure(source, destination, error);
 }
 
-bool dkr::runtime::saves::import_adventure(const std::filesystem::path& source, std::string& error) {
+bool dkr::runtime::saves::import_adventure(const std::filesystem::path& source, std::string& error, bool modded) {
     std::scoped_lock lock(g_save_manager_mutex);
-    const auto owner = storage::acquire(AdventurePath(), error);
+    const auto owner = storage::acquire(AdventurePath(modded), error);
     if (!owner)
         return false;
     std::vector<std::uint8_t> bytes;
@@ -623,39 +626,39 @@ bool dkr::runtime::saves::import_adventure(const std::filesystem::path& source, 
         return false;
     }
     std::error_code equivalent_error;
-    if (std::filesystem::exists(AdventurePath(), equivalent_error)) {
+    if (std::filesystem::exists(AdventurePath(modded), equivalent_error)) {
         std::filesystem::path backup;
         std::vector<std::uint8_t> current;
-        const bool current_valid = ReadAdventure(AdventurePath(), current);
-        if (current_valid && !BackupUnlocked(backup, error)) {
+        const bool current_valid = ReadAdventure(AdventurePath(modded), current);
+        if (current_valid && !BackupUnlocked(backup, error, modded)) {
             return false;
         }
-        if (!current_valid && !BackupRawAdventureUnlocked(backup, error)) {
+        if (!current_valid && !BackupRawAdventureUnlocked(backup, error, modded)) {
             return false;
         }
     }
-    return WriteAtomic(AdventurePath(), bytes, ReadAdventure, error);
+    return WriteAtomic(AdventurePath(modded), bytes, ReadAdventure, error);
 }
 
-bool dkr::runtime::saves::reset_adventure(std::string& error) {
+bool dkr::runtime::saves::reset_adventure(std::string& error, bool modded) {
     std::scoped_lock lock(g_save_manager_mutex);
-    const auto owner = storage::acquire(AdventurePath(), error);
+    const auto owner = storage::acquire(AdventurePath(modded), error);
     if (!owner)
         return false;
     std::error_code exists_error;
-    if (std::filesystem::exists(AdventurePath(), exists_error)) {
+    if (std::filesystem::exists(AdventurePath(modded), exists_error)) {
         std::filesystem::path backup;
-        if (!BackupUnlocked(backup, error)) {
+        if (!BackupUnlocked(backup, error, modded)) {
             return false;
         }
     }
-    return WriteAtomic(AdventurePath(), codec::blank_bytes(), ReadAdventure, error);
+    return WriteAtomic(AdventurePath(modded), codec::blank_bytes(), ReadAdventure, error);
 }
 
-bool dkr::runtime::saves::load_adventure(codec::SaveImage& image, std::string& error) {
+bool dkr::runtime::saves::load_adventure(codec::SaveImage& image, std::string& error, bool modded) {
     std::scoped_lock lock(g_save_manager_mutex);
     std::vector<std::uint8_t> bytes;
-    if (!ReadAdventure(AdventurePath(), bytes)) {
+    if (!ReadAdventure(AdventurePath(modded), bytes)) {
         error = "No checksum-valid Adventure EEPROM is available to edit.";
         return false;
     }
@@ -687,16 +690,17 @@ bool dkr::runtime::saves::commit_adventure(const codec::SaveImage& image, std::s
 }
 
 bool dkr::runtime::saves::repair_adventure_checksums(bool& changed, std::filesystem::path& original_backup,
-                                                     std::string& error) {
+                                                     std::string& error, bool modded) {
     std::scoped_lock lock(g_save_manager_mutex);
     changed = false;
     original_backup.clear();
-    const auto owner = storage::acquire(AdventurePath(), error);
+    const auto owner = storage::acquire(AdventurePath(modded), error);
     if (!owner)
         return false;
 
     std::vector<std::uint8_t> original;
-    if (!ReadFileBounded(AdventurePath(), kAdventureSaveSize, original) || original.size() != kAdventureSaveSize) {
+    if (!ReadFileBounded(AdventurePath(modded), kAdventureSaveSize, original) ||
+        original.size() != kAdventureSaveSize) {
         error = "No 512-byte Adventure EEPROM is available to repair.";
         return false;
     }
@@ -736,10 +740,10 @@ bool dkr::runtime::saves::repair_adventure_checksums(bool& changed, std::filesys
         }
     }
 
-    if (!BackupRawAdventureUnlocked(original_backup, error)) {
+    if (!BackupRawAdventureUnlocked(original_backup, error, modded)) {
         return false;
     }
-    if (!WriteAtomic(AdventurePath(), repaired, ReadAdventure, error)) {
+    if (!WriteAtomic(AdventurePath(modded), repaired, ReadAdventure, error)) {
         return false;
     }
     changed = true;
@@ -965,9 +969,9 @@ bool dkr::runtime::saves::commit_experimental_online_paks(bool host, std::uint64
         error = "Invalid confirmed online MemPak image; no file was changed.";
         return false;
     }
-    return WriteAtomic(g_config_directory / "saves" / OnlineAdventureSubfolder(host, match_id) /
-                           "experimental-controller-paks.bin",
-                       {images.begin(), images.end()}, ReadExperimentalOnlinePaks, error);
+    return storage::write_progress(g_config_directory / "saves" / OnlineAdventureSubfolder(host, match_id) /
+                                       "experimental-controller-paks.bin",
+                                   {images.begin(), images.end()}, ReadExperimentalOnlinePaks, error);
 }
 bool dkr::runtime::saves::commit_online_adventure(bool host, std::uint64_t match_id,
                                                   std::span<const std::uint8_t> bytes, std::string& error) {
@@ -976,7 +980,8 @@ bool dkr::runtime::saves::commit_online_adventure(bool host, std::uint64_t match
         error = "The confirmed online EEPROM cannot be persisted: " + error;
         return false;
     }
-    return WriteAtomic(OnlineAdventurePath(host, match_id), {bytes.begin(), bytes.end()}, ReadAdventure, error);
+    return storage::write_progress(OnlineAdventurePath(host, match_id), {bytes.begin(), bytes.end()}, ReadAdventure,
+                                   error);
 }
 
 dkr::runtime::saves::SaveInfo dkr::runtime::saves::controller_pak_info(int channel) {
@@ -1074,13 +1079,13 @@ bool dkr::runtime::saves::import_controller_pak(int channel, const std::filesyst
     return WriteAtomic(ControllerPakPath(channel), bytes, ReadControllerPak, error);
 }
 
-bool dkr::runtime::saves::export_bundle(const std::filesystem::path& destination, std::string& error) {
+bool dkr::runtime::saves::export_bundle(const std::filesystem::path& destination, std::string& error, bool modded) {
     std::scoped_lock lock(g_save_manager_mutex);
     if (!ExportDestinationAllowed(destination, error))
         return false;
     std::vector<BundleEntry> entries;
     std::vector<std::uint8_t> image;
-    if (ReadAdventure(AdventurePath(), image)) {
+    if (ReadAdventure(AdventurePath(modded), image)) {
         entries.push_back({kBundleAdventureKind, 0U, image});
     }
     for (int channel = 0; channel < kControllerPakCount; ++channel) {
@@ -1114,8 +1119,95 @@ bool dkr::runtime::saves::export_bundle(const std::filesystem::path& destination
     return WriteAtomic(destination, bundle, ReadBundle, error);
 }
 
-bool dkr::runtime::saves::import_bundle(const std::filesystem::path& source, std::string& error) {
-    return shared::apply_bundle(source, error);
+bool dkr::runtime::saves::import_bundle(const std::filesystem::path& source, std::string& error, bool modded) {
+    return shared::apply_bundle(source, error, modded);
+}
+
+namespace {
+using dkr::runtime::saves::CloudSaveSlot;
+using dkr::runtime::saves::storage::Validator;
+constexpr std::size_t kCloudRecordLimit = 20 + 8192 * 76;
+constexpr std::array<CloudSaveSlot, 10> kCloudSaveSlots{{
+    {"offline-adventure", "Vanilla Adventure", 512},
+    {"modded-adventure", "Modded Adventure", 512},
+    {"offline-pak-1", "Controller Pak 1", kControllerPakSize},
+    {"offline-pak-2", "Controller Pak 2", kControllerPakSize},
+    {"offline-pak-3", "Controller Pak 3", kControllerPakSize},
+    {"offline-pak-4", "Controller Pak 4", kControllerPakSize},
+    {"modded-records", "Modded course records", kCloudRecordLimit},
+    {"online-adventure", "Hosted Online Adventure", 512},
+    {"online-records", "Hosted Online course records", kCloudRecordLimit},
+    {"online-paks", "Hosted Online Controller Paks", kControllerPakSize * 4},
+}};
+struct CloudSaveTarget {
+    std::filesystem::path path;
+    Validator validate = nullptr;
+};
+CloudSaveTarget CloudTarget(std::string_view key) {
+    const auto host = OnlineAdventurePath(true, 0).parent_path();
+    if (key == "offline-adventure" || key == "modded-adventure")
+        return {dkr::runtime::saves::personal_adventure_path(g_config_directory, key == "modded-adventure"),
+                ReadAdventure};
+    if (key.starts_with("offline-pak-") && key.size() == 13 && key.back() >= '1' && key.back() <= '4')
+        return {ControllerPakPath(key.back() - '1'), ReadControllerPak};
+    if (key == "modded-records")
+        return {AdventurePath().parent_path() / "custom-records-v1.bin", ReadCustomRecords};
+    if (key == "online-adventure")
+        return {host / AdventurePath().filename(), ReadAdventure};
+    if (key == "online-records")
+        return {host / "custom-records-v1.bin", ReadCustomRecords};
+    if (key == "online-paks")
+        return {host / "experimental-controller-paks.bin", ReadExperimentalOnlinePaks};
+    return {};
+}
+
+void ConfigureCloudProgressRoutes() {
+    using dkr::runtime::saves::storage::key;
+    dkr::cloud_saves::ProgressWrites::Routes routes;
+    routes.reserve(kCloudSaveSlots.size());
+    for (const auto& slot : kCloudSaveSlots)
+        routes.emplace_back(key(CloudTarget(slot.key).path), slot.key);
+    dkr::cloud_saves::progress_writes.configure(std::move(routes));
+}
+} // namespace
+
+std::span<const CloudSaveSlot> dkr::runtime::saves::cloud_save_slots() {
+    return kCloudSaveSlots;
+}
+bool dkr::runtime::saves::read_cloud_save(std::string_view key, std::vector<std::uint8_t>& bytes, std::string& error) {
+    std::scoped_lock lock(g_save_manager_mutex);
+    bytes.clear();
+    const auto target = CloudTarget(key);
+    if (!target.validate) {
+        error = "Unknown Cloud Save type.";
+        return false;
+    }
+    if (!storage::writable_path(target.path, error))
+        return false;
+    std::error_code ec;
+    const bool exists = std::filesystem::exists(target.path, ec);
+    if (!ec) {
+        if (!exists)
+            return true;
+        const auto lease = storage::acquire(target.path, error);
+        if (!lease)
+            return false;
+        std::scoped_lock transaction(lease->transaction);
+        if (target.validate(target.path, bytes))
+            return true;
+    }
+    error = "This save needs recovery. Its original file was kept.";
+    return false;
+}
+bool dkr::runtime::saves::replace_cloud_save(std::string_view key, const std::vector<std::uint8_t>& expected,
+                                             const std::vector<std::uint8_t>& replacement, std::string& error) {
+    std::scoped_lock lock(g_save_manager_mutex);
+    const auto target = CloudTarget(key);
+    if (!target.validate || replacement.empty()) {
+        error = "Unknown or empty Cloud Save image.";
+        return false;
+    }
+    return storage::write_atomic(target.path, replacement, target.validate, error, &expected);
 }
 
 #include "shared_save_backend.inl"

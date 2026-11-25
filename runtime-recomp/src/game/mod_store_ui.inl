@@ -62,6 +62,7 @@ void StoreControlFocus() {
         g_mod_store.page_focus = id;
 }
 SDL_Renderer* g_mod_store_renderer = nullptr;
+SDL_Texture* g_speedrunning_preview_texture = nullptr;
 bool g_store_in_game = false;
 constexpr std::array<const char*, 6> kStoreCategoryNames = {
     "All", "Tracks", "Characters", "Vehicles", "Custom Magic Codes", "Texture packs"};
@@ -167,6 +168,8 @@ int StoreCombo(const char* id, int current, const std::vector<std::string>& raw_
 #include "store_polish_controls.inl"
 void ReleaseModStoreTextures() {
     ReleaseVehicleTextures();
+    if (g_speedrunning_preview_texture)
+        SDL_DestroyTexture(std::exchange(g_speedrunning_preview_texture, nullptr));
     for (auto& [url, texture] : g_mod_store.textures)
         if (texture)
             SDL_DestroyTexture(texture);

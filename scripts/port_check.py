@@ -120,8 +120,8 @@ def probe_cmake_args(args, generated: Path, build: Path) -> list[str]:
         "-B",
         str(build),
         "-DCMAKE_BUILD_TYPE=Release",
-        f"-DDKR_DEPENDENCIES_DIR={args.deps}",
-        f"-DDKR_PROBE_GENERATED={generated}",
+        f"-DDKR_DEPENDENCIES_DIR={args.deps.as_posix()}",
+        f"-DDKR_PROBE_GENERATED={generated.as_posix()}",
     ]
     if args.toolchain_file:
         command.append(f"-DCMAKE_TOOLCHAIN_FILE={args.toolchain_file}")

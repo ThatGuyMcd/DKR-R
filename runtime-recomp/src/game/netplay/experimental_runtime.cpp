@@ -1,3 +1,4 @@
+#include "netplay/session_links/menu_control.hpp"
 #include "online_input_broker.hpp"
 #include "online_stability/startup_transport.hpp"
 #include "online_stability/flow_trace.hpp"
@@ -427,10 +428,23 @@ bool run_party_runtime(ultramodern::renderer::WindowHandle window, const std::fi
     namespace party = dkr::runtime::spectators;
     auto hub = party::party_link(&lobby);
     const auto initial = party::party_link_view(&lobby);
-    std::vector<std::uint8_t> seed;
+    std::vector<std::uint8_t> seed, transferred_paks;
+    bool save_owner = false;
+    unsigned menu_owner_port = 0;
     {
         std::scoped_lock lock(hub->mutex);
         seed = hub->seed;
+        save_owner = hub->links.save_owner == initial.local;
+        if (initial.host)
+            transferred_paks = hub->links.save_paks;
+        if (const auto* owner = hub->party.find(hub->party.snapshot().host); owner && owner->port)
+            menu_owner_port = *owner->port;
+        else
+            for (const auto& member : hub->party.snapshot().members)
+                if (member.port) {
+                    menu_owner_port = *member.port;
+                    break;
+                }
     }
     if (!initial.enabled || !initial.admitted || seed.size() != 512 || bootstrap.empty()) {
         error = "The party launch is missing its verified local bootstrap/save.";
@@ -452,10 +466,10 @@ bool run_party_runtime(ultramodern::renderer::WindowHandle window, const std::fi
     shared.confirmed_save = seed;
     std::atomic<unsigned> local_port{4};
     std::atomic<bool> watching{true};
-    ConfirmedSaveWriter save_writer([&, host = initial.host](const ConfirmedSaveSnapshot& s, std::string& e) {
-        // Only the authority stores the communal online bank. Observers never
-        // install host state into a personal save, records bank or controller Pak.
-        if (host && !launch.development) {
+    ConfirmedSaveWriter save_writer([&, owner = save_owner](const ConfirmedSaveSnapshot& s, std::string& e) {
+        // The original save owner retains the durable bank after host handover.
+        // The current host retains only the verified in-memory transfer state.
+        if (owner && !launch.development) {
             if (!saves::commit_online_adventure(true, launch.match_id, s.eeprom, e) ||
                 !saves::commit_experimental_online_paks(true, launch.match_id, s.paks, e))
                 return false;
@@ -466,6 +480,11 @@ bool run_party_runtime(ultramodern::renderer::WindowHandle window, const std::fi
                     !saves::records::persist(owner.parent_path() / "custom-records-v1.bin", s.records, e))
                     return false;
             }
+        }
+        if (initial.host) {
+            std::scoped_lock lock(hub->mutex);
+            hub->links.save_paks = s.paks;
+            hub->links.save_records = s.records;
         }
         std::scoped_lock lock(shared.mutex);
         shared.confirmed_save = s.eeprom;
@@ -557,6 +576,7 @@ bool run_party_runtime(ultramodern::renderer::WindowHandle window, const std::fi
                 throw std::runtime_error("Party presentation epoch refused.");
             const auto revision =
                 lobby.view().room.manifest.revision == Revision::UsV80 ? rom::Revision::UsV80 : rom::Revision::UsV77;
+            dkr::runtime::netplay::links::menu_control::CreationPort menu_controls(menu_owner_port);
             world = make_owned_game_for_revision(
                 revision, bootstrap, bytes, epoch, shared.mailbox,
                 [&](ConfirmedAudio a, std::string& e) { return shared.audio.push(a.rate, a.pcm, e); }, message, false,
@@ -569,8 +589,9 @@ bool run_party_runtime(ultramodern::renderer::WindowHandle window, const std::fi
                 throw std::runtime_error(message);
             std::fprintf(stderr, "[party][boot] owned world ready; bytes=%zu\n", world->contract().state_bytes);
             if (initial.host) {
-                std::vector<std::uint8_t> paks;
-                if (!saves::read_experimental_online_paks(true, launch.match_id, paks, message) ||
+                auto paks = transferred_paks;
+                if ((paks.empty() &&
+                     !saves::read_experimental_online_paks(save_owner, launch.match_id, paks, message)) ||
                     !world->install_initial_paks(epoch, paks, message))
                     throw std::runtime_error(message);
             }
@@ -710,8 +731,9 @@ bool run_party_runtime(ultramodern::renderer::WindowHandle window, const std::fi
                 report({true, wait, cursor.epoch, cursor.frame, runtime.confirmed(), stats.rollbacks,
                         stats.replayed_frames, runtime.status(), cursor.epoch == 0});
                 if (now >= next_save) {
-                    if (initial.host && !save_writer.submit(world->confirmed_save(), world->confirmed_paks(), message,
-                                                            world->confirmed_records()))
+                    if ((initial.host || save_owner) &&
+                        !save_writer.submit(world->confirmed_save(), world->confirmed_paks(), message,
+                                            world->confirmed_records()))
                         throw std::runtime_error(message);
                     next_save = now + std::chrono::seconds(5);
                 }
@@ -737,7 +759,7 @@ bool run_party_runtime(ultramodern::renderer::WindowHandle window, const std::fi
             else
                 party::party_stop(&lobby, "Party simulation stopped.");
         }
-        if (world && initial.host) {
+        if (world && (initial.host || save_owner)) {
             std::string message;
             if (!save_writer.submit(world->confirmed_save(), world->confirmed_paks(), message,
                                     world->confirmed_records()))

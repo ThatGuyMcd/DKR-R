@@ -44,7 +44,7 @@ bool persist(const std::filesystem::path& path, std::span<const std::uint8_t> by
         error = "The custom-record store is full; export a copy before adding more records.";
         return false;
     }
-    return storage::write_atomic(path, encode(merged), ReadRecords, error);
+    return storage::write_progress(path, encode(merged), ReadRecords, error);
 }
 bool begin(const std::filesystem::path& path, bool restore, std::string& error) {
     if (!finish(error))
@@ -62,6 +62,18 @@ bool begin(const std::filesystem::path& path, bool restore, std::string& error) 
             return false;
         }
     }
+    return true;
+}
+bool begin_memory(std::span<const std::uint8_t> bytes, std::string& error) {
+    Map next;
+    if (!bytes.empty() && !decode(bytes, next)) {
+        error = "The shared online records seed is invalid.";
+        return false;
+    }
+    if (!begin({}, false, error))
+        return false;
+    std::scoped_lock lock(record_mutex);
+    record_seed = std::move(next);
     return true;
 }
 Bytes seed() {

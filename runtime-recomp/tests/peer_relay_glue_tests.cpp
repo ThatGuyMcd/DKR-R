@@ -154,6 +154,12 @@ int main() {
         const auto client = route({{1, {1}}, {2, {2}}, {1, {3}}}, table);
         check(client.size() == 2 && client[0].bytes == Bytes({1}) && client[1].bytes == Bytes({3}),
               "client sends to the host only");
+        table.introduced = {2};
+        const Bytes ice{'D', 'K', 'R', 'X', 1, 6, 0};
+        const Bytes grant{'D', 'K', 'R', 'X', 1, 3, 0};
+        const auto introduced = route({{2, ice}, {2, grant}, {3, ice}, {1, grant}}, table);
+        check(introduced.size() == 2 && introduced[0].target == 2 && introduced[1].target == 1,
+              "introduced racers exchange ICE only; relay grants and unknown peers retain host routing");
     }
     std::puts("peer relay glue passed");
     return 0;

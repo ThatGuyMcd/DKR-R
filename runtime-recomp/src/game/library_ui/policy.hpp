@@ -9,10 +9,13 @@
 
 namespace dkr::library_ui {
 // Existing page identities stay stable. Only visual order changes.
-inline constexpr int LibraryPage = 10, PageCount = 11;
+inline constexpr int LibraryPage = 10, PageCount = 11, LeaderboardsPage = 14;
 inline constexpr std::array<int, PageCount> SidebarOrder{0, 5, LibraryPage, 6, 1, 2, 3, 7, 13, 11, 12};
+inline constexpr bool is_content_page(int page) {
+    return (page >= 0 && page < PageCount) || page == LeaderboardsPage;
+}
 inline constexpr int sidebar_parent(int page) {
-    return page == 4 || page == 9 ? 0 : page;
+    return page == 4 || page == 9 || page == LeaderboardsPage ? 0 : page;
 }
 inline constexpr int TexturesSection = 4;
 // Preserve existing section identities used by links and import callbacks.
@@ -34,6 +37,13 @@ inline bool configurable(std::string_view id, bool selected, bool approved, bool
 }
 inline bool writes_locked(bool game, bool lobby, bool preparing, bool admission, bool vehicles) {
     return game || lobby || preparing || admission || vehicles;
+}
+inline constexpr bool can_post_replay_attempt(bool has_attempt, bool practice, bool personal_best) {
+    return has_attempt && (!practice || personal_best);
+}
+inline constexpr bool can_purge_replay(bool personal_best, bool submitted, bool include_bests,
+                                       bool include_unsubmitted) {
+    return (!personal_best || include_bests) && (submitted || include_unsubmitted);
 }
 // This conversion is for displayed status copy, never IDs, URLs or credentials.
 inline std::string visible_status(std::string value) {

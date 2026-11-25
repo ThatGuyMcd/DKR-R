@@ -3,6 +3,7 @@
 #include "../game/runtime_ui.hpp"
 #include "imgui/imgui.h"
 #include "imgui/imgui_internal.h"
+#include "../game/dialog_style.hpp"
 #include <SDL.h>
 #if defined(__ANDROID__) && !defined(DKR_MOBILE_UI_TEST)
 #include <SDL_system.h>
@@ -626,7 +627,10 @@ void editor() {
     // expose controls beneath it. Gameplay remains blocked for its lifetime.
     ImGui::SetNextWindowPos({safe.x + std::max(0.0F, (safe.w - 340.0F) * .5F), safe.y}, ImGuiCond_Appearing);
     ImGui::SetNextWindowSize({std::min(340.0F, safe.w), std::min(330.0F, safe.h)}, ImGuiCond_Appearing);
-    ImGui::Begin("Touch layout - options", nullptr, ImGuiWindowFlags_NoSavedSettings);
+    if (!ui::begin_dialog_window("Touch layout - options", nullptr, ImGuiWindowFlags_NoSavedSettings)) {
+        ImGui::End();
+        return;
+    }
     ImGui::TextWrapped("Drag a group. Collapse this sheet to reach covered controls.");
     if (ImGui::BeginCombo("Group", labels[selection])) {
         for (int i = 0; i < group_count; ++i)

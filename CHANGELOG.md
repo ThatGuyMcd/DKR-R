@@ -1,5 +1,69 @@
 # DKR-R changelog
 
+## 1.0.16
+
+- Add Speedrunning, ranked verification, replay theatre, prepared ghosts,
+  automatic splits, overall standings, record history, review and hosted videos.
+- Add public lobbies and portal activity. Improve direct inputs, host handover,
+  spectator recovery and rollback presentation.
+- Add independent Cloud Saves, the save indicator and a redesigned Save Manager.
+- Add Badge Gallery, compact Play settings and Speedrunning loading transitions.
+- Integrate contributor work on custom levels, checkpoint capacity, controllers,
+  water, road wheels, relay, build tooling and tests.
+- Allow rollback self-tests to race a Track Lab course and report the number
+  of checkpoints loaded.
+- See the [release notes](docs/releases/1.0.16/RELEASE-NOTES.txt) for details.
+
+## 1.0.16 playtest 5 — 2026-11-25
+
+- Browse Achievements in the Badge Gallery with search, filters and individual
+  badge details.
+- Use the standard launcher tabs in Save Manager. Progress shows every editing
+  tool, including the Max Out actions. Files groups transfer and recovery tools.
+
+## 1.0.16 playtest 4 — 2026-11-25
+
+- Put Adventure slots beside the editor in Save Manager for both Vanilla and
+  Modded saves. Keep Progress, Unlocks, Records and Files in a single workspace.
+- Keep Apply Changes and Discard Changes visible while the editor scrolls.
+  Vanilla and Modded saves keep separate drafts, backups and Cloud Saves slots.
+
+## 1.0.16 playtest 3 — 2026-11-24
+
+- Give Speedrunning Options its own tab under Runs. Arrange related settings
+  across the available width and show HUD changes over an Ancient Lake
+  gameplay screenshot.
+- Enable Cloud Saves for signed-in players. The Play tab can turn sync on or
+  off beside the active save. Select the cloud icon to sync and check its status.
+- Use the cloud save when devices diverge and keep the replaced copy in local
+  save history. A device can upload progress made from the current cloud save.
+- Refresh Cloud Saves before a new Online lobby chooses its save. Sync again
+  when returning to the launcher, including hosted progress in an open lobby.
+- Show a brief Saving Progress indicator after a game save. Send changes to
+  cloud-synced saves in the background once the local write succeeds.
+- Give Session Mods its own Adventure save and sync it separately from Vanilla.
+  Existing Adventure progress stays in the Vanilla save.
+
+## 1.0.16 playtest 1 — 2026-11-17
+
+- Bring our online work onto the latest contributor code. Keep the upstream
+  source layout, cross-platform compatibility checks, relay support, shutdown
+  fixes, settings work and Track Lab improvements.
+- Send racers' inputs directly to one another when that route is available.
+  Keep the host route for recovery. Spectators stay outside the racing input
+  path, including in a full lobby with four racers and eight spectators.
+- Show a suggested host from measured connections. Let the host offer ownership
+  to another member without closing the lobby. The new host must accept, and
+  every member must finish the transfer before the next game starts. Controller
+  seats and the original online save owner stay the same.
+- Keep usable pictures during ordinary rollback corrections and measure input
+  lateness against forward progress. Auto delay also takes replay cost into
+  account, to avoid repeatedly removing the delay that a slower machine needs.
+- Mark window-matched resolution as recommended. Keep explicit rendering
+  preferences and the existing launcher layout.
+- Keep the Linux Wayland fallback and package closure checks. Fix Windows test
+  portability for long cache paths, separate temporary drives and path separators.
+
 ## 1.0.15 — 2026-11-08
 
 - Replace the added Player Select footer with native colourful names for selected

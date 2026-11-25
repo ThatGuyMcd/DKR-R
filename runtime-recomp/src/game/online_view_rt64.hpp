@@ -6,6 +6,9 @@ namespace RT64 {
 struct State;
 struct RSP;
 } // namespace RT64
+namespace dkr::runtime::time_trial {
+struct GhostNameplate;
+}
 namespace dkr::runtime::online_view {
 // One instance per owned renderer. No reference to live/replay RAM is retained.
 class Pass final {
@@ -16,6 +19,8 @@ class Pass final {
     Pass& operator=(const Pass&) = delete;
     void prepare(const Session&, std::span<const dkr_owned_draw_event>, std::span<std::uint8_t> decoder,
                  std::uint32_t scene, float aspect, std::uint32_t framebuffer, hud::LayoutMode hud_mode) noexcept;
+    void prepare_ghost(time_trial::GhostNameplate, std::span<std::uint8_t> decoder, std::uint32_t scene) noexcept;
+    void ghost_world_boundary(RT64::State&, unsigned view, bool end);
     bool focused() const noexcept;
     bool focused_hud() const noexcept;
     bool widget_active() const noexcept;

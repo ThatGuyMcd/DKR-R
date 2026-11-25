@@ -15,7 +15,8 @@ Use Python 3.11+ and Node.js 24+ on Windows or Linux. On Windows substitute
 ```sh
 npm install --prefix build/library-community-tools --no-save --ignore-scripts --package-lock=false esbuild@0.28.2 jsdom@29.1.1
 python3 services/library-workflow/build.py community --output build/library-community-release/stage --baseline build/mod-library-community-20261029/baseline --archive build/library-community-release/DKR-R-website-update.zip
-node runtime-recomp/tests/mod_library_community_tests.cjs build/library-workflow-d1-runtime/node_modules/miniflare build/library-community-tools/node_modules/jsdom
+npm ci --prefix services/test-tools --ignore-scripts
+node runtime-recomp/tests/mod_library_community_tests.cjs services/test-tools/node_modules/miniflare build/library-community-tools/node_modules/jsdom
 python3 scripts/check.py --suite guard,tooling
 ```
 
@@ -87,3 +88,46 @@ and a 60 ms stagger capped after eight groups. Featured mods crossfade every
 Reduced-motion preferences disable entrances and automatic rotation by default.
 The companion picker keeps checked inputs mounted while filtering so existing
 draft/preview serialization includes selections outside the visible results.
+
+## Online and ranked replay review
+
+The Online page at `#online` reads `GET /v1/online/public`. The private
+directory Worker creates the projection from the same live account leases and
+room list as the launcher. This endpoint never forwards a browser credential
+or a private room. The browser polls every 30 seconds while visible. A missing
+count is shown as unavailable, and an available count of zero is shown as zero.
+
+The Online card shows currently connected unique accounts against the number
+of active accounts that have signed in through the shared library sign-in.
+People with several launcher instances count once. Live public lobby, racer
+and spectator totals only include publicly listed lobbies.
+
+Player activity has 7-day, 30-day and All-time views. Each view shows the
+peak and days with activity. The recent views also show the busiest hour, new
+sign-ups and daily peaks. All time keeps the first timestamp of the lifetime
+peak, the total active days and a lifetime history chart. The chart groups peaks by month at first and by year once activity spans more than 12 months. Activity history starts when the directory Worker starts collecting
+it. Date buckets are UTC and peak times display in the visitor's time zone.
+
+Copy a public lobby link and choose **Find lobby from website** under **Public
+lobbies** in the updated launcher. The link selects a room from the current
+signed-in launcher list. The existing host, compatibility, mod and slot checks
+still govern requests to join or spectate.
+
+Leaderboards at `#leaderboards` use the existing library account. The flow is
+**Sign in → attach replay → check the detected event and recorded time → Post
+run**. My runs tracks the upload, independent verification and review. Only
+published verified PBs count on each board. The website is staged with no
+qualified boards or upload access by default.
+
+The launcher and in-game overlay use the same Leaderboards page. Open it
+next to Achievements on Play. Its category tabs, track cards and rankings
+read the public website API. Post a run opens the signed-in website flow.
+The launcher keeps the last successful catalogue in memory for the session.
+
+Custom tracks are discovered automatically from the live catalogue, including
+newly published releases. A board identifies an exact release and the server
+checks the catalogue's verified SHA-256. Publish a new board after qualifying a
+new release. Previous eligible versions stay available under their own boards.
+
+See [Ranked replay review](notes/2026-11-22-ranked-replay-review.md) for the
+replay format, open qualification work and checks before opening submissions.

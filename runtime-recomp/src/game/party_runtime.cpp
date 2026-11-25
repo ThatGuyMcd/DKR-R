@@ -622,7 +622,9 @@ struct PartyRuntime::Impl {
             playback.request_resync("Loading the confirmed race");
             held.reset();
             admitted_at.reset();
-            if (!server())
+            const bool matching = (receiving || decoding.valid()) && last_offer && last_offer->next == at &&
+                                  last_offer->control_generation == controls;
+            if (!server() && !matching)
                 send(host, Msg::Need);
         }
         activated_release = std::pair{at, controls};
@@ -684,6 +686,10 @@ struct PartyRuntime::Impl {
         d.actions = held->magic_actions;
         if (!d.sender.begin(++transfer_serial, std::make_shared<Baseline>(wire)))
             throw std::runtime_error("Could not stage spectator checkpoint delivery.");
+        party_retire_checkpoint(key, id, match, d.sender.offer().transfer);
+        std::fprintf(stderr, "[party][checkpoint-send] peer=%llu transfer=%llu epoch=%llu frame=%u bytes=%zu\n",
+                     static_cast<unsigned long long>(id), static_cast<unsigned long long>(transfer_serial),
+                     static_cast<unsigned long long>(wire.next.epoch), wire.next.frame, wire.state->size());
     }
     bool current_checkpoint() const {
         if (!encoded || !feed.covers(encoded->next))
@@ -864,13 +870,14 @@ struct PartyRuntime::Impl {
             body.n(controls).n(wire::ControllerSampleBytes, 1).data(wire::controller(sample)).data(command_bytes(c));
             if (relay)
                 racers(Msg::Input, body.b, Lane::Authoritative);
-        } else if (source != host)
+        } else if (source != host && (launch.development || !c.empty() ||
+                                      !roster.accepts(source, sample.port, sample.lease, sample.cursor)))
             return;
         const auto result =
             driver->receive(cursor.epoch, sample.port, sample.cursor.frame - base, packed(sample.input), c);
         if (result == ex::InputResult::Accepted || result == ex::InputResult::Duplicate) {
-            if (result == ex::InputResult::Accepted && !server() && source == host && sample.port == 0 &&
-                roster.accepts(host, 0, sample.lease, sample.cursor)) {
+            if (result == ex::InputResult::Accepted && !server() && source == host &&
+                roster.accepts(host, sample.port, sample.lease, sample.cursor)) {
                 const auto identity = dkr::online_stability::control(key)->identity();
                 unsigned rtt = 0;
                 for (const auto& route : identity.routes)
@@ -910,7 +917,7 @@ struct PartyRuntime::Impl {
             return;
         (void)r.n();
         const bool from_host = source == host;
-        if (!server() && !from_host)
+        if (!server() && !from_host && type != Msg::LiveInputs)
             return;
         if (server() && !roster.find(source))
             return;
@@ -960,6 +967,9 @@ struct PartyRuntime::Impl {
             last_offer = offer;
             receiving = offer;
             active_transfer = offer.transfer;
+            std::fprintf(stderr, "[party][checkpoint-receive] transfer=%llu epoch=%llu frame=%u bytes=%u\n",
+                         static_cast<unsigned long long>(offer.transfer),
+                         static_cast<unsigned long long>(offer.next.epoch), offer.next.frame, offer.bytes);
             admitted_at.reset();
             buffered.clear();
             if (phase == Phase::Admission)
@@ -983,6 +993,8 @@ struct PartyRuntime::Impl {
             if (result == CheckpointReceiver::Result::Rejected)
                 throw std::runtime_error(e);
             if (result == CheckpointReceiver::Result::Complete) {
+                std::fprintf(stderr, "[party][checkpoint-receive] complete transfer=%llu bytes=%zu\n",
+                             static_cast<unsigned long long>(chunk.transfer), receiver.received_bytes());
                 auto wire_state = receiver.take_verified(e);
                 if (!wire_state)
                     throw std::runtime_error(e);
@@ -1070,7 +1082,7 @@ struct PartyRuntime::Impl {
                 std::uint64_t(packet.first) + packet.count > freeze ||
                 std::uint64_t(packet.first) + packet.count > std::uint64_t(next().frame) + 49)
                 return;
-            if (server())
+            if (server() || !from_host)
                 for (unsigned i = 0; i < packet.count; ++i)
                     if (!roster.accepts(source, packet.owner, packet.lease, {packet.epoch, packet.first + i}))
                         return;
@@ -1375,8 +1387,22 @@ struct PartyRuntime::Impl {
             const auto bytes = dkr::online_stability::encode_live_inputs(live);
             if (server())
                 racers(Msg::LiveInputs, bytes, Lane::Realtime);
-            else
+            else {
                 send(host, Msg::LiveInputs, bytes, Lane::Realtime);
+                for (auto id : required())
+                    if (id != local && id != host) {
+                        Write direct;
+                        direct.n('D', 1)
+                            .n('P', 1)
+                            .n('R', 1)
+                            .n(2, 1)
+                            .n(unsigned(Msg::LiveInputs), 1)
+                            .n(match)
+                            .n(++serial)
+                            .data(bytes);
+                        party_direct_input(key, id, direct.b, Lane::Realtime);
+                    }
+            }
             return; // Exact old holes retain the independent authority repair lane.
         }
         Write body;
@@ -1719,6 +1745,8 @@ struct PartyRuntime::Impl {
                 // An observer cannot stop required racing peers with malformed
                 // playback/seat requests. Required members still fail closed.
                 if (server() && !required().contains(packet.source)) {
+                    std::fprintf(stderr, "[party][observer-packet] rejected peer=%llu reason=%s\n",
+                                 static_cast<unsigned long long>(packet.source), e.what());
                     needing.erase(packet.source);
                     deliveries.erase(packet.source);
                     continue;
@@ -1749,6 +1777,15 @@ struct PartyRuntime::Impl {
         if (!callback_error.empty())
             throw std::runtime_error(callback_error);
         transfer(now);
+        if (phase != Phase::Admission && now >= admission_log &&
+            ((!simulating() && playback.needs_baseline()) || (server() && !deliveries.empty()))) {
+            admission_log = now + std::chrono::seconds(5);
+            std::fprintf(
+                stderr,
+                "[party][checkpoint-progress] authority=%u receiving=%zu active=%u decoding=%u encoded=%u needing=%zu deliveries=%zu\n",
+                unsigned(server()), receiver.received_bytes(), unsigned(bool(receiving)), unsigned(decoding.valid()),
+                unsigned(bool(encoded)), needing.size(), deliveries.size());
+        }
         std::erase_if(deliveries, [&](const auto& entry) { return !roster.find(entry.first); });
         std::erase_if(requested_at, [&](const auto& entry) { return !roster.find(entry.first); });
         if (server() && phase == Phase::Admission && all(prepared))

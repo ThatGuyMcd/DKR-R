@@ -72,8 +72,8 @@
       "reason": "online identity changed to cfc1d8e0d92c"
     },
     "runtime-recomp/guest-hooks/hooks.toml": {
-      "sha256": "6644a6c981a6c94e64ae462784031a7082c3b70dd4bf1c1d1d78a955ea389d28",
-      "reason": "Camera payload hooks added to hooks.toml: funcs and owned payload output unchanged, camera kernel output differs only by the road-wheel scope calls"
+      "sha256": "b0fe0d2efb0dac427a22bbd17ce7c0ec036831592d7bde6f18da36b1f1758dde",
+      "reason": "online identity changed to cfc1d8e0d92c"
     },
     "runtime-recomp/legacy-character-menu.v77.recomp-fragment.json": {
       "sha256": "82db39e16f1e30eff1851d74eaf443cd962a2b65517d95f531f4cc0924357ce0",
@@ -280,12 +280,12 @@
       "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
     },
     "runtime-recomp/src/game/netplay/experimental_presentation.cpp": {
-      "sha256": "66c93e26eedbea8826cb15c063b72f5bc507cfe3686736ff4e0c7cec27f4438e",
-      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+      "sha256": "43db182ddc6589b23af5582778acf57463d85e647144705f7c89f2a6675401d1",
+      "reason": "online identity changed to cfc1d8e0d92c"
     },
     "runtime-recomp/src/game/netplay/experimental_presentation.hpp": {
-      "sha256": "dbd26ed84319448054da4be0f49c277391dee838b40e67f5654f54eb9066c955",
-      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+      "sha256": "6752a3cbfd1b6a4635b06377deabb2ffca70500dbc5f567fd244a74c517af6d6",
+      "reason": "online identity changed to cfc1d8e0d92c"
     },
     "runtime-recomp/src/game/netplay/experimental_process.cpp": {
       "sha256": "ebbfba4aa3f500c843dcedacb2f15bf605b8c8abe4e9f83224ab5aff6b549a31",
@@ -316,8 +316,8 @@
       "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
     },
     "runtime-recomp/src/game/netplay/experimental_runtime.cpp": {
-      "sha256": "770acd6c9bbe19ca8f3e609ba3a130cc7409e5298fa1237368c59e5a7cb9056d",
-      "reason": "The self-test's [check][course] line also logs how many checkpoints the race loaded; nothing peers simulate or send changes."
+      "sha256": "a9028bf0eb17d727e5513310d612bc6e0d056fcdb5b6dd0c2f1c374ac06c562e",
+      "reason": "PR #195 adds the checkpoint count to the opt-in rollback self-test log. The integrated race simulation and peer protocol are unchanged by that logging."
     },
     "runtime-recomp/src/game/netplay/experimental_runtime.hpp": {
       "sha256": "e2bd584098e45af7e67b6198f650d18a204d3b57be6bbe3214639e3abe73598c",
@@ -384,32 +384,32 @@
       "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
     },
     "runtime-recomp/src/game/party_runtime.cpp": {
-      "sha256": "0eb45b3483dabebd0e0ae6b98e6fed67ae8593dd5bfdaa40ed899db38893a8fc",
-      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+      "sha256": "bc72a11cf8e128929e60184a90f3e028600b28ec005f8501ccdadaf582b0ebeb",
+      "reason": "online identity changed to cfc1d8e0d92c"
     },
     "runtime-recomp/src/game/party_runtime.hpp": {
       "sha256": "f71d5b873f71fd24000c43833171967fa40860468f2ee6f50367ac1c1c60b404",
       "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
     },
     "runtime-recomp/src/game/runtime_save_routing.cpp": {
-      "sha256": "837917b9ede8d0f9cadd86edaa325da50c7e88a6c34242758f18228112737890",
-      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+      "sha256": "5ff3de1c1cec5b401b5a83348845621690e839922617a44681fc4323c9e0a297",
+      "reason": "online identity changed to cfc1d8e0d92c"
     },
     "runtime-recomp/src/game/runtime_save_routing.hpp": {
-      "sha256": "cb3ae802050f29e38def0d42c60c01345be2cc46a515a95e9c50d49a06cf6879",
-      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+      "sha256": "ede6f9dbaaefa85a66b795434290d996563380b3292612e33680fe891ff956ea",
+      "reason": "online identity changed to cfc1d8e0d92c"
     },
     "runtime-recomp/src/game/save_manager.cpp": {
-      "sha256": "e9f129814e79576fd2369c19734d83aeff04c979068ce2cf204998f3e278f662",
-      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+      "sha256": "60d25e04c6448653efb0d5c902106988d32ef14de7a022063afc80f43288d3b3",
+      "reason": "online identity changed to cfc1d8e0d92c The release formatting pass preserved the source tokens."
     },
     "runtime-recomp/src/game/save_manager.hpp": {
-      "sha256": "c004fb91343bebc9afb2361f4d4988cd28603ff94830d98daf2f01542053801c",
-      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+      "sha256": "937f75bd9c991a6bd1c3e0eb3c14bf05e4f79e9f0df1f496d9463d5b93a12e11",
+      "reason": "online identity changed to cfc1d8e0d92c The release formatting pass preserved the source tokens."
     },
     "runtime-recomp/src/game/save_storage.hpp": {
-      "sha256": "ca3a5457b5f7a6341473661e10a662fa590f64bf240053648a4a120a7838bc78",
-      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+      "sha256": "927931ba173914c442f62ef4e0bb414538f4b1923e122ea4e2789d91bf2f8702",
+      "reason": "online identity changed to cfc1d8e0d92c The release formatting pass preserved the source tokens."
     },
     "runtime-recomp/src/game/track_select_draw_guest.h": {
       "sha256": "053e11b284c433b88b19470534003519ad3d16bc3e625ce4bcc2b5f4f172041e",
@@ -499,6 +499,10 @@
       "sha256": "e4bf2f3fc699742f73ad2ac84445e0651b480bef53f26675454a7090d91ef7d2",
       "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
     },
+    "runtime-recomp/symbols/time_trial_symbols.toml": {
+      "sha256": "cff8034acdb874dc87e28432e557d98845d72e66d97a6c136106817cdb3a89e2",
+      "reason": "online identity changed to cfc1d8e0d92c"
+    },
     "runtime-recomp/symbols/title_text_symbols.toml": {
       "sha256": "e0ae1ea2c67d97949bfc3b51776fa7b874b1fac2d63d5351d2897a8a5103b354",
       "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
@@ -556,8 +560,8 @@
       "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
     },
     "runtime-recomp/tests/replay_probe/probe_driver.cpp": {
-      "sha256": "bc027b5aa7fbe082d863be3ace06fc7e89fac76639919abe6d2b546565fabeaa",
-      "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
+      "sha256": "a4940cce66a8fee0169797085c2fc0d391211c8035d4cfa11f68b3c5832b5288",
+      "reason": "online identity changed to cfc1d8e0d92c"
     },
     "runtime-recomp/tests/replay_probe/probe_driver.hpp": {
       "sha256": "630fb96603ea6f9d3abc2a6554c63d1acbaa43b5dc741e767df06a2d154660f6",
@@ -700,8 +704,8 @@
       "reason": "Recorded before per-input reasons existed; earlier reasons are in the git history of this file."
     },
     "scripts/generate_replay_probe.py": {
-      "sha256": "93cc61c967eb0e854332ca15bd34d5e139bed2a4b673e8b04d953461951d9df1",
-      "reason": "The boss-finish and shadow hooks apply only to offline funcs payloads and return for frozen online resources or owned bootstrap. The owned hook set is identical to main for both revisions, and probe behavior and recomp policies are unchanged. Track Lab retains the runtime limit of 60 checkpoints."
+      "sha256": "c3187ba130104c8046625c72dfe3ed360c0241900579f35d5fdcf4c656be3d26",
+      "reason": "The reviewed native input digest entries admit the existing local Pak save notification and offline replay presentation. The checked ROM-derived payload hashes and inherited checkpoint contract are unchanged by this pin update. Updated the native audit to follow token-identical source formatting."
     },
     "scripts/generate_revision_policy.py": {
       "sha256": "bafbefad41542e00b6c5ec13b02acde69dda7f48e34025f46d92d028da6427b9",

@@ -1192,23 +1192,24 @@ void DrawDkrTrackDetails(const std::vector<DkrLibraryTrack>& tracks, bool rom_re
 
 // ------------------------------------------------------------ page controls
 
-float PaddockImportButtonWidth(const char* label) {
+float PaddockImportButtonWidth(const char* label, bool compact = false) {
     const auto caption = dkr::localisation::label(label);
     label = caption.c_str();
-    const PaddockType type = PaddockSign(22.0F, 1.1F);
-    return std::ceil(2.0F + 12.0F + 30.0F + 12.0F + PaddockMeasure(type, label, PaddockLabelEnd(label)) + 20.0F + 2.0F);
+    const PaddockType type = compact ? PaddockSign(16.F, .8F) : PaddockSign(22.F, 1.1F);
+    return std::ceil((compact ? 50.F : 78.F) + PaddockMeasure(type, label, PaddockLabelEnd(label)));
 }
 
 // The painted "+ Import mods" sign (.mods-import-button).
 bool PaddockImportButton(const char* label, float forced_width = 0.0F, bool update_icon = false,
-                         bool website_icon = false, int tool_icon = 0) {
+                         bool website_icon = false, int tool_icon = 0, bool compact = false) {
     const auto caption = dkr::localisation::label(label);
     label = caption.c_str();
-    const PaddockType type = PaddockSign(22.0F, 1.1F);
+    const PaddockType type = compact ? PaddockSign(16.F, .8F) : PaddockSign(22.F, 1.1F);
     const char* end = PaddockLabelEnd(label);
-    const float natural = PaddockImportButtonWidth(label);
+    const float natural = PaddockImportButtonWidth(label, compact);
     const float width = forced_width > 0.0F ? forced_width : natural;
-    const PaddockPress press = PaddockBeginPress(label, {width, 56.0F});
+    const float height = compact ? 40.F : 56.F;
+    const PaddockPress press = PaddockBeginPress(label, {width, height});
     ImDrawList* draw = ImGui::GetWindowDrawList();
     PaddockPanelStyle panel;
     panel.radii = {8.0F, 18.0F, 8.0F, 8.0F};
@@ -1219,50 +1220,62 @@ bool PaddockImportButton(const char* label, float forced_width = 0.0F, bool upda
     panel.drop_offset = 4.0F;
     panel.highlight = PaddockRgb(0xFFFFFF, 38U);
     panel.highlight_width = 2.0F;
+    if (compact) {
+        panel.radii = {6.F, 12.F, 6.F, 6.F};
+        panel.drop_offset = 3.F;
+    }
     PaddockPanel(draw, press.min, press.max, panel);
-    const float left = press.min.x + (width - natural) * 0.5F + 14.0F;
-    const ImVec2 symbol{left, press.min.y + 13.0F};
-    PaddockFill(draw, symbol, {symbol.x + 30.0F, symbol.y + 30.0F}, PaddockRound(5.0F), PaddockCol(0x6F2B11));
+    draw->PushClipRect(press.min, press.max, true);
+    const float icon_size = compact ? 21.F : 30.F;
+    const float left = press.min.x + (width - natural) * .5F + (compact ? 10.F : 14.F);
+    const ImVec2 symbol{left, press.min.y + (height - icon_size) * .5F};
+    PaddockFill(draw, symbol, {symbol.x + icon_size, symbol.y + icon_size}, PaddockRound(5.F), PaddockCol(0x6F2B11));
+    const auto icon = [&](float x, float y) -> ImVec2 {
+        const float scale = icon_size / 30.F;
+        return {symbol.x + x * scale, symbol.y + y * scale};
+    };
     // Two centred strokes, which a font glyph's baseline would not give
     // (.import-button-symbol).
     const ImU32 ink = PaddockCol(0xFFF3C9);
     if (website_icon) {
-        draw->AddRect({symbol.x + 7.F, symbol.y + 11.F}, {symbol.x + 19.F, symbol.y + 23.F}, ink, 2.F, 0, 2.F);
-        draw->AddLine({symbol.x + 13.F, symbol.y + 17.F}, {symbol.x + 23.F, symbol.y + 7.F}, ink, 2.F);
-        draw->AddLine({symbol.x + 16.F, symbol.y + 7.F}, {symbol.x + 23.F, symbol.y + 7.F}, ink, 2.F);
-        draw->AddLine({symbol.x + 23.F, symbol.y + 7.F}, {symbol.x + 23.F, symbol.y + 14.F}, ink, 2.F);
+        draw->AddRect(icon(7.F, 11.F), icon(19.F, 23.F), ink, 2.F, 0, 2.F);
+        draw->AddLine(icon(13.F, 17.F), icon(23.F, 7.F), ink, 2.F);
+        draw->AddLine(icon(16.F, 7.F), icon(23.F, 7.F), ink, 2.F);
+        draw->AddLine(icon(23.F, 7.F), icon(23.F, 14.F), ink, 2.F);
     } else if (tool_icon == 1) {
-        draw->AddLine({symbol.x + 9.F, symbol.y + 7.F}, {symbol.x + 21.F, symbol.y + 7.F}, ink, 2.F);
-        draw->PathArcTo({symbol.x + 15.F, symbol.y + 12.F}, 6.F, 0.F, 3.141593F, 16);
+        draw->AddLine(icon(9.F, 7.F), icon(21.F, 7.F), ink, 2.F);
+        draw->PathArcTo(icon(15.F, 12.F), icon_size * .2F, 0.F, 3.141593F, 16);
         draw->PathStroke(ink, 0, 2.F);
-        draw->AddLine({symbol.x + 9.F, symbol.y + 7.F}, {symbol.x + 9.F, symbol.y + 12.F}, ink, 2.F);
-        draw->AddLine({symbol.x + 21.F, symbol.y + 7.F}, {symbol.x + 21.F, symbol.y + 12.F}, ink, 2.F);
-        draw->AddLine({symbol.x + 15.F, symbol.y + 18.F}, {symbol.x + 15.F, symbol.y + 23.F}, ink, 2.F);
-        draw->AddLine({symbol.x + 10.F, symbol.y + 23.F}, {symbol.x + 20.F, symbol.y + 23.F}, ink, 2.F);
+        draw->AddLine(icon(9.F, 7.F), icon(9.F, 12.F), ink, 2.F);
+        draw->AddLine(icon(21.F, 7.F), icon(21.F, 12.F), ink, 2.F);
+        draw->AddLine(icon(15.F, 18.F), icon(15.F, 23.F), ink, 2.F);
+        draw->AddLine(icon(10.F, 23.F), icon(20.F, 23.F), ink, 2.F);
     } else if (tool_icon == 3) {
         const bool on = dkr::session_content::next_enabled.load();
-        draw->AddRectFilled({symbol.x + 3.F, symbol.y + 9.F}, {symbol.x + 27.F, symbol.y + 21.F},
-                            PaddockCol(on ? 0x13B99B : 0x32576A), 6.F);
-        draw->AddCircleFilled({symbol.x + (on ? 21.F : 9.F), symbol.y + 15.F}, 4.F, ink, 16);
+        draw->AddRectFilled(icon(3.F, 9.F), icon(27.F, 21.F), PaddockCol(on ? 0x13B99B : 0x32576A), 6.F);
+        draw->AddCircleFilled(icon(on ? 21.F : 9.F, 15.F), icon_size * (4.F / 30.F), ink, 16);
     } else if (tool_icon == 2) {
-        draw->AddRect({symbol.x + 7.F, symbol.y + 7.F}, {symbol.x + 23.F, symbol.y + 23.F}, ink, 2.F, 0, 2.F);
-        draw->AddRect({symbol.x + 11.F, symbol.y + 7.F}, {symbol.x + 19.F, symbol.y + 13.F}, ink, 0.F, 0, 2.F);
-        draw->AddRect({symbol.x + 11.F, symbol.y + 17.F}, {symbol.x + 19.F, symbol.y + 23.F}, ink, 0.F, 0, 2.F);
+        draw->AddRect(icon(7.F, 7.F), icon(23.F, 23.F), ink, 2.F, 0, 2.F);
+        draw->AddRect(icon(11.F, 7.F), icon(19.F, 13.F), ink, 0.F, 0, 2.F);
+        draw->AddRect(icon(11.F, 17.F), icon(19.F, 23.F), ink, 0.F, 0, 2.F);
+    } else if (tool_icon == 4) {
+        draw->AddRectFilled(icon(6.F, 17.F), icon(11.F, 23.F), ink, 1.F);
+        draw->AddRectFilled(icon(12.5F, 8.F), icon(17.5F, 23.F), ink, 1.F);
+        draw->AddRectFilled(icon(19.F, 13.F), icon(24.F, 23.F), ink, 1.F);
     } else if (update_icon) {
-        draw->PathArcTo({symbol.x + 15.0F, symbol.y + 15.0F}, 8.0F, -1.4F, 3.8F, 20);
+        draw->PathArcTo(icon(15.0F, 15.0F), 8.0F, -1.4F, 3.8F, 20);
         draw->PathStroke(ink, 0, 2.0F);
-        draw->AddTriangleFilled({symbol.x + 13.0F, symbol.y + 4.0F}, {symbol.x + 22.0F, symbol.y + 8.0F},
-                                {symbol.x + 14.0F, symbol.y + 12.0F}, ink);
+        draw->AddTriangleFilled(icon(13.0F, 4.0F), icon(22.0F, 8.0F), icon(14.0F, 12.0F), ink);
     } else {
-        PaddockFill(draw, {symbol.x + 8.0F, symbol.y + 14.0F}, {symbol.x + 22.0F, symbol.y + 16.0F}, PaddockRound(1.0F),
-                    ink);
-        PaddockFill(draw, {symbol.x + 14.0F, symbol.y + 8.0F}, {symbol.x + 16.0F, symbol.y + 22.0F}, PaddockRound(1.0F),
-                    ink);
+        PaddockFill(draw, icon(8.0F, 14.0F), icon(22.0F, 16.0F), PaddockRound(1.0F), ink);
+        PaddockFill(draw, icon(14.0F, 8.0F), icon(16.0F, 22.0F), PaddockRound(1.0F), ink);
     }
-    const float text_top = press.min.y + (56.0F - type.line) * 0.5F;
-    PaddockDrawRun(draw, type, {symbol.x + 42.0F, text_top + 2.0F}, PaddockCol(0x632706), label, end);
-    PaddockDrawRun(draw, type, {symbol.x + 42.0F, text_top}, PaddockCol(0xFFF3C9), label, end);
-    PaddockEndPress(press, 18.0F);
+    const float text_top = press.min.y + (height - type.line) * .5F;
+    const float text_x = symbol.x + icon_size + (compact ? 8.F : 12.F);
+    PaddockDrawRun(draw, type, {text_x, text_top + 2.0F}, PaddockCol(0x632706), label, end);
+    PaddockDrawRun(draw, type, {text_x, text_top}, PaddockCol(0xFFF3C9), label, end);
+    draw->PopClipRect();
+    PaddockEndPress(press, compact ? 12.F : 18.F);
     return press.pressed;
 }
 

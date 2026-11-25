@@ -4,6 +4,7 @@ import { DurableObject } from 'cloudflare:workers';
 
 const PROTOCOL = 1;
 const LEASE = 60_000, AUTH_LEASE = 125_000, RESERVATION = 30_000;
+const HOUR = 3_600_000, DAY = 24 * HOUR, MAX_HISTORY_HOURS = 30 * 24;
 const MAX_BODY = 16_384, MAX_ROOMS = 1000, MAX_SESSIONS = 5000;
 const phases = new Set(['waiting', 'testing', 'starting', 'loading', 'racing', 'returning']);
 const identifier = /^[A-Za-z0-9_-]{1,160}$/;
@@ -84,6 +85,7 @@ export class WorldwideDirectory extends DurableObject {
       CREATE TABLE IF NOT EXISTS joins(id TEXT PRIMARY KEY, account TEXT NOT NULL, instance TEXT NOT NULL, room TEXT NOT NULL, expires INTEGER NOT NULL, data TEXT NOT NULL);
       CREATE INDEX IF NOT EXISTS join_room ON joins(room,expires);
       CREATE TABLE IF NOT EXISTS social_members(room TEXT NOT NULL,instance TEXT NOT NULL,account TEXT NOT NULL,sender TEXT NOT NULL,PRIMARY KEY(room,instance),UNIQUE(room,sender));
+      CREATE TABLE IF NOT EXISTS host_transfers(room TEXT PRIMARY KEY,expires INTEGER NOT NULL,data TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS replies(key TEXT PRIMARY KEY, expires INTEGER NOT NULL, data TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS tickets(hash TEXT PRIMARY KEY, expires INTEGER NOT NULL, data TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS limits(key TEXT PRIMARY KEY, window INTEGER NOT NULL, count INTEGER NOT NULL);
@@ -93,7 +95,13 @@ export class WorldwideDirectory extends DurableObject {
       CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY, value INTEGER NOT NULL);
       INSERT OR IGNORE INTO meta VALUES('revision',1);
       INSERT OR IGNORE INTO meta VALUES('published',0);
-      INSERT OR IGNORE INTO meta VALUES('connection',0);`);
+      INSERT OR IGNORE INTO meta VALUES('connection',0);
+      CREATE TABLE IF NOT EXISTS online_hourly_peaks(hour INTEGER PRIMARY KEY, players INTEGER NOT NULL);
+      CREATE TABLE IF NOT EXISTS online_monthly_peaks(month INTEGER PRIMARY KEY, players INTEGER NOT NULL);
+      CREATE TABLE IF NOT EXISTS online_yearly_peaks(year INTEGER PRIMARY KEY, players INTEGER NOT NULL);
+      CREATE TABLE IF NOT EXISTS online_peak(singleton INTEGER PRIMARY KEY CHECK(singleton=1), players INTEGER NOT NULL, observed_at INTEGER NOT NULL);`);
+    this.onlineHour = -1;
+    this.hourPeak = 0;
     for (const socket of ctx.getWebSockets()) {
       const data = socket.deserializeAttachment();
       if (data?.instance && data?.account && (!this.sessions.has(data.instance) || (data.connection || 0) > (this.sessions.get(data.instance).data.connection || 0)))
@@ -133,12 +141,107 @@ export class WorldwideDirectory extends DurableObject {
     catch { try { session.socket.close(1013, 'Reconnect to refresh'); } catch {} }
   }
   count() { return new Set([...this.sessions.values()].filter(s => this.live(s.data)).map(s => s.data.account)).size; }
-  list(cursor = '') {
+  observeOnline(players, time = Date.now()) {
+    if (players === 0) return;
+    try {
+      const hour = Math.floor(time / HOUR);
+      if (hour !== this.onlineHour) {
+        this.hourPeak = this.rows('SELECT players FROM online_hourly_peaks WHERE hour=?', hour)[0]?.players ?? 0;
+        this.sql.exec('DELETE FROM online_hourly_peaks WHERE hour<?', hour - MAX_HISTORY_HOURS + 1);
+        this.onlineHour = hour;
+      }
+      if (players <= this.hourPeak) return;
+      const date = new Date(time);
+      const month = date.getUTCFullYear() * 12 + date.getUTCMonth();
+      const day = Math.floor(time / DAY);
+      this.ctx.storage.transactionSync(() => {
+        this.sql.exec(`INSERT INTO online_hourly_peaks VALUES(?,?)
+          ON CONFLICT(hour) DO UPDATE SET players=MAX(players,excluded.players)`, hour, players);
+        this.sql.exec(`INSERT INTO online_peak VALUES(1,?,?)
+          ON CONFLICT(singleton) DO UPDATE SET players=excluded.players,observed_at=excluded.observed_at
+          WHERE excluded.players>online_peak.players`, players, time);
+        this.sql.exec(`INSERT INTO online_monthly_peaks VALUES(?,?)
+          ON CONFLICT(month) DO UPDATE SET players=MAX(players,excluded.players)`, month, players);
+        this.sql.exec('DELETE FROM online_monthly_peaks WHERE month<?', month - 11);
+        this.sql.exec(`INSERT INTO online_yearly_peaks VALUES(?,?)
+          ON CONFLICT(year) DO UPDATE SET players=MAX(players,excluded.players)`, date.getUTCFullYear(), players);
+        const lastDay = this.rows("SELECT value FROM meta WHERE key='online_stats_last_day'")[0]?.value;
+        if (lastDay === undefined || day > lastDay) {
+          this.sql.exec("INSERT OR IGNORE INTO meta VALUES('online_stats_started',?)", time);
+          this.sql.exec("INSERT OR REPLACE INTO meta VALUES('online_stats_last_day',?)", day);
+          this.sql.exec(`INSERT INTO meta VALUES('online_stats_active_days',1)
+            ON CONFLICT(key) DO UPDATE SET value=value+1`);
+        }
+      });
+      this.hourPeak = players;
+    } catch {
+      console.error('Failed to record directory activity.');
+    }
+  }
+  onlineHistory(time) {
+    const hour = Math.floor(time / HOUR);
+    const day = Math.floor(time / DAY);
+    const peak = this.rows('SELECT players,observed_at AS observedAt FROM online_peak WHERE singleton=1')[0] ?? null;
+    const hourly = this.rows('SELECT hour,players FROM online_hourly_peaks WHERE hour>=? ORDER BY hour',
+      (day - 29) * 24);
+    const range = days => {
+      const cutoff = (day - days + 1) * 24;
+      let busiest = null;
+      const daily = new Map();
+      for (const row of hourly) {
+        if (row.hour < cutoff) continue;
+        const dayStart = Math.floor(row.hour / 24) * DAY;
+        daily.set(dayStart, Math.max(row.players, daily.get(dayStart) ?? 0));
+        if (!busiest || row.players > busiest.players) busiest = row;
+      }
+      return { peak: busiest?.players ?? null,
+        busiestHour: busiest ? { startsAt: busiest.hour * HOUR, players: busiest.players } : null,
+        activeDays: daily.size, history: [...daily].map(([startsAt, players]) => ({ startsAt, players })) };
+    };
+    const date = new Date(time);
+    const month = date.getUTCFullYear() * 12 + date.getUTCMonth();
+    const metadata = Object.fromEntries(this.rows("SELECT key,value FROM meta WHERE key IN ('online_stats_started','online_stats_active_days')").map(row => [row.key,row.value]));
+    const oldestMonth = Date.UTC(Math.floor((month - 11) / 12), (month - 11) % 12, 1);
+    const yearly = metadata.online_stats_started < oldestMonth;
+    const lifetime = yearly
+      ? this.rows('SELECT year,players FROM online_yearly_peaks ORDER BY year')
+        .map(row => ({ startsAt: Date.UTC(row.year, 0, 1), players: row.players }))
+      : this.rows('SELECT month,players FROM online_monthly_peaks WHERE month>=? ORDER BY month', month - 11)
+        .map(row => ({ startsAt: Date.UTC(Math.floor(row.month / 12), row.month % 12, 1), players: row.players }));
+    return { peak, trackedSince: metadata.online_stats_started ?? null, periods: {
+      '7': range(7), '30': range(30), all: {
+        peak: peak?.players ?? null,
+        busiestHour: peak ? { startsAt: Math.floor(peak.observedAt / HOUR) * HOUR, players: peak.players } : null,
+        activeDays: metadata.online_stats_active_days ?? 0, interval: yearly ? 'year' : 'month', history: lifetime
+      }
+    } };
+  }
+  list(cursor = '', web = false) {
     need(typeof cursor === 'string' && (!cursor || identifier.test(cursor)), 400, 'cursor', 'Invalid list cursor.');
     const active = this.rows('SELECT data FROM rooms WHERE id>? ORDER BY id', cursor)
       .map(row => JSON.parse(row.data)).filter(room => room.visibility === 'public' && this.roomLive(room));
-    return { rooms: active.slice(0, 50).map(room => publicRoom(room, this.env.RUNNING_SPECTATORS_ENABLED === 'true')), nextCursor: active.length > 50 ? active[49].id : '',
-      online: this.count(), revision: this.revision(), serverTime: Date.now() };
+    const rooms = active.slice(0, 50).map(room => publicRoom(room, this.env.RUNNING_SPECTATORS_ENABLED === 'true'));
+    return { rooms, nextCursor: active.length > 50 ? active[49].id : '',
+      online: this.count(), revision: this.revision(), serverTime: Date.now(), ...(web && !cursor ? {
+        publicLobbies: active.length,
+        publicRacers: active.reduce((total, room) => total + room.racers, 0),
+        publicSpectators: active.reduce((total, room) => total + room.spectators, 0)
+      } : {}) };
+  }
+  publicSnapshot(cursor) {
+    const { rooms, online, nextCursor, serverTime, publicLobbies, publicRacers, publicSpectators } = this.list(cursor, true);
+    const snapshot = { online, nextCursor, serverTime,
+      rooms: rooms.map(({ id, title, phase, racers, maxRacers, spectators, maxSpectators, canJoin, canSpectate }) => ({
+        id, title, phase, racers, maxRacers, spectators, maxSpectators, canJoin, canSpectate
+      }))
+    };
+    if (!cursor) {
+      snapshot.stats = { publicLobbies, publicRacers, publicSpectators };
+      try {
+        Object.assign(snapshot.stats, this.onlineHistory(serverTime));
+      } catch { console.error('Failed to read directory activity history.'); }
+    }
+    return snapshot;
   }
   cleanup() {
     const now = Date.now(); let changed = false;
@@ -152,6 +255,7 @@ export class WorldwideDirectory extends DurableObject {
     for (const row of this.rows('SELECT data FROM joins WHERE expires<=?', now)) this.cancelJoin(JSON.parse(row.data), 'The join request expired.');
     this.sql.exec('DELETE FROM replies WHERE expires<=?', now);
     this.sql.exec('DELETE FROM tickets WHERE expires<=?', now);
+    this.sql.exec('DELETE FROM host_transfers WHERE expires<=?', now);
     this.sql.exec('DELETE FROM limits WHERE window<?', now - 120000);
     this.sql.exec('DELETE FROM audit WHERE expires<=?', now);
     if (changed) this.changed();
@@ -188,6 +292,9 @@ export class WorldwideDirectory extends DurableObject {
   async fetch(request) {
     try {
       const url = new URL(request.url);
+      // This route is only reachable through the private service binding.
+      if (url.pathname === '/v1/online/public' && request.method === 'GET')
+        return json(this.publicSnapshot(url.searchParams.get('cursor') || ''));
       let who;
       if (url.pathname === '/v1/online/connect') {
         const protocols = (request.headers.get('Sec-WebSocket-Protocol') || '').split(',').map(s => s.trim());
@@ -223,7 +330,10 @@ export class WorldwideDirectory extends DurableObject {
         this.ctx.acceptWebSocket(socket); socket.serializeAttachment(data);
         this.sessions.set(who.instance, { socket, data });
         if (old) { try { old.socket.close(1000, 'Reconnected'); } catch {} }
-        this.changed(); this.send({ socket, data }, { type: 'snapshot', ...this.list() });
+        this.changed();
+        const snapshot = this.list();
+        this.observeOnline(snapshot.online, now);
+        this.send({ socket, data }, { type: 'snapshot', ...snapshot });
         return new Response(null, { status: 101, webSocket: client, headers: { 'Sec-WebSocket-Protocol': 'dkrr-online-v1' } });
       }
       const current = this.sessions.get(who.instance);
@@ -279,6 +389,67 @@ export class WorldwideDirectory extends DurableObject {
       return { online: this.count(), revision: this.revision(), serverTime: Date.now() };
     }
     if (input.type === 'list') return this.list(input.cursor || '');
+    if (input.type === 'transfer_prepare' || input.type === 'transfer_accept' || input.type === 'transfer_commit') {
+      const serial=text(input.serial,20,'transfer serial'),epoch=text(input.epoch,80,'room epoch');
+      const hash=text(input.digest,64,'prepared session digest'),code=text(input.code,5,'lobby code');
+      const nextCode=text(input.nextCode,5,'successor code'),sender=text(input.sender,20,'successor identity');
+      need(/^[1-9][0-9]{0,19}$/.test(serial)&&/^[a-f0-9]{64}$/.test(hash)&&socialSender(sender)&&
+        /^[A-Z0-9]{5}$/.test(code)&&/^[A-Z0-9]{5}$/.test(nextCode),400,'transfer','Invalid prepared host transfer.');
+      this.sql.exec('DELETE FROM host_transfers WHERE expires<=?',Date.now());
+      const prior=this.rows('SELECT data FROM host_transfers').map(row=>JSON.parse(row.data)).find(t=>
+        t.epoch===epoch&&t.serial===serial&&t.digest===hash&&t.oldAccount===who.account&&t.oldInstance===who.instance&&t.completed);
+      if(input.type==='transfer_commit'&&prior)return prior.result;
+      const room=this.rows('SELECT data FROM rooms').map(row=>JSON.parse(row.data)).find(r=>r.code===code&&r.epoch===epoch);
+      need(room&&this.roomLive(room),409,'transfer_room','The original lobby is no longer available.');
+      need(['waiting','testing'].includes(room.phase),409,'transfer_phase','Return to the lobby before transferring host.');
+      if(input.type==='transfer_prepare') {
+        need(room.owner===who.account&&room.instance===who.instance,403,'owner','Only the current host can prepare this transfer.');
+        const member=this.rows('SELECT account,instance FROM social_members WHERE room=? AND sender=?',room.id,sender)[0];
+        need(member&&room.socialRoster.includes(sender)&&member.instance!==room.instance,
+          403,'transfer_member','The proposed host is not an admitted lobby member.');
+        const candidate=this.sessions.get(member.instance);
+        need(candidate&&this.live(candidate.data)&&candidate.data.account===member.account,409,'transfer_left','The proposed host disconnected.');
+        const previous=this.rows('SELECT data FROM host_transfers WHERE room=?',room.id)[0];
+        const pending=previous&&JSON.parse(previous.data);
+        if(pending&&!pending.completed&&pending.serial===serial&&pending.digest===hash&&pending.sender===sender)return {prepared:true,serial,digest:hash};
+        const transfer={room:room.id,epoch,serial,digest:hash,code,nextCode,sender,account:member.account,instance:member.instance,
+          oldAccount:room.owner,oldInstance:room.instance,completed:false,accepted:false};
+        this.sql.exec('INSERT OR REPLACE INTO host_transfers VALUES(?,?,?)',room.id,Date.now()+120000,JSON.stringify(transfer));
+        return {prepared:true,serial,digest:hash};
+      }
+      if(input.type==='transfer_accept') {
+        const row=this.rows('SELECT data FROM host_transfers WHERE room=?',room.id)[0],pending=row&&JSON.parse(row.data);
+        need(pending&&!pending.completed&&pending.instance===who.instance&&pending.account===who.account&&pending.serial===serial&&
+          pending.digest===hash&&pending.sender===sender&&pending.nextCode===nextCode,
+          403,'transfer_member','Only the admitted successor can accept the host prepared session.');
+        pending.accepted=true;this.sql.exec('UPDATE host_transfers SET data=?,expires=? WHERE room=?',JSON.stringify(pending),Date.now()+120000,room.id);
+        return {accepted:true,serial,digest:hash};
+      }
+      need(room.owner===who.account&&room.instance===who.instance,403,'owner','Only the current host can commit this transfer.');
+      const row=this.rows('SELECT data FROM host_transfers WHERE room=?',room.id)[0],transfer=row&&JSON.parse(row.data);
+      need(transfer&&!transfer.completed&&transfer.accepted&&transfer.serial===serial&&transfer.digest===hash&&transfer.nextCode===nextCode&&transfer.sender===sender,
+        409,'transfer_consent','Waiting for the admitted successor to confirm the same session.');
+      const candidate=this.sessions.get(transfer.instance),member=this.rows('SELECT account,sender FROM social_members WHERE room=? AND instance=?',room.id,transfer.instance)[0];
+      need(candidate&&this.live(candidate.data)&&candidate.data.account===transfer.account&&member?.account===transfer.account&&member.sender===sender&&
+        room.socialRoster.includes(sender),409,'transfer_left','The proposed host disconnected.');
+      need(!this.rows('SELECT id FROM rooms WHERE owner=? AND instance=?',transfer.account,transfer.instance).length,
+        409,'transfer_busy','The proposed host already owns another lobby.');
+      for(const join of this.rows('SELECT data FROM joins WHERE room=?',room.id))this.cancelJoin(JSON.parse(join.data),'The host transferred the lobby. Please request to join again.');
+      const oldHost=room.socialHost,wasPublic=room.visibility==='public';
+      const next={...room,owner:transfer.account,instance:transfer.instance,hostName:candidate.data.name,socialHost:sender,
+        code:nextCode,bootstrap:nextCode,revision:room.revision+1,generation:room.generation+1};
+      const result={id:next.id,epoch:next.epoch,revision:next.revision,visibility:next.visibility,serial,digest:hash};
+      transfer.completed=true;transfer.result=result;
+      this.ctx.storage.transactionSync(()=>{
+        this.saveRoom(next);
+        this.sql.exec('DELETE FROM social_members WHERE room=? AND instance=?',room.id,transfer.instance);
+        if(socialSender(oldHost))this.sql.exec('INSERT OR REPLACE INTO social_members VALUES(?,?,?,?)',room.id,who.instance,who.account,oldHost);
+        this.sql.exec('UPDATE host_transfers SET expires=?,data=? WHERE room=?',Date.now()+120000,JSON.stringify(transfer),room.id);
+      });
+      who.room='';current.socket.serializeAttachment(who);candidate.data.room=room.id;candidate.socket.serializeAttachment(candidate.data);
+      this.send(candidate,{type:'host_transferred',...result});this.publicChange(next,wasPublic);this.changed();this.record(who.account,'host_transferred',room.id);
+      return result;
+    }
     if (input.type === 'social') {
       const member=this.rows('SELECT room,sender FROM social_members WHERE instance=? AND account=?',who.instance,who.account)
         .map(row=>({row,room:this.room(row.room)})).find(entry=>entry.room?.code===input.code && entry.room.socialRoster?.includes(entry.row.sender));
@@ -403,13 +574,15 @@ export class WorldwideDirectory extends DurableObject {
   async alarm() {
     this.sql.exec("INSERT OR REPLACE INTO meta VALUES('alarm',0)");
     this.cleanup();
+    const online = this.count();
+    this.observeOnline(online);
     const revision = this.revision();
     if (revision > this.rows("SELECT value FROM meta WHERE key='published'")[0].value) {
       const changes = this.rows('SELECT id,data FROM changes');
       const batches = Math.max(1, Math.ceil(changes.length / 50));
       for (let index = 0; index < batches; index++) {
         const batch = changes.slice(index * 50, (index + 1) * 50);
-        const delta = { type: 'delta', revision, online: this.count(),
+        const delta = { type: 'delta', revision, online,
           upsert: batch.filter(row => row.data !== 'null').map(row => JSON.parse(row.data)),
           remove: batch.filter(row => row.data === 'null').map(row => row.id) };
         for (const session of this.sessions.values()) if (this.live(session.data)) this.send(session, delta);
