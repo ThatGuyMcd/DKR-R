@@ -3,6 +3,7 @@
 #include "options.hpp"
 
 #include "achievements.hpp"
+#include "atomic_snapshot.hpp"
 #include "capture_symbols.hpp"
 #include "custom_tracks.hpp"
 #include "game_payload.hpp"
@@ -109,7 +110,7 @@ struct GhostObjectState {
 };
 std::optional<GhostPreparation> ghost_preparation;
 std::optional<GhostObjectState> ghost_object_state;
-std::atomic<std::shared_ptr<const std::string>> ghost_credited_name;
+AtomicSnapshot<const std::string> ghost_credited_name;
 std::atomic<bool> ghost_race_active{false};
 std::vector<GhostPose> ghost_poses;
 std::string ghost_replay_digest;
