@@ -12,8 +12,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 def copy_patch_input(source: Path, target: Path) -> None:
     # The checked patches use LF; Windows dependency checkouts can use CRLF.
-    data = source.read_bytes().replace(b"\r\n", b"\n")
-    target.write_bytes(data)
+    target.write_text(source.read_text(encoding="utf-8"), encoding="utf-8", newline="\n")
 
 
 class AndroidStartupContractTests(unittest.TestCase):
