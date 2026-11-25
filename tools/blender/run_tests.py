@@ -39,7 +39,7 @@ PLAIN_SUITES = [
     "test_midi_import.py", "test_checkpoint_order.py", "test_rom_extract.py",
     "test_version.py", "test_model_transaction.py", "test_render_water.py",
     "test_flythrough.py", "test_mode_checklist.py", "test_level_links.py",
-    "test_ai_graph.py",
+    "test_ai_graph.py", "test_dense_checkpoint_track.py",
 ]
 BLENDER_SUITES = ["test_blender_roundtrip.py", "test_blender_operators.py",
                   "test_blender_waterfalls.py", "test_blender_minimap.py",

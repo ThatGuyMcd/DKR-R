@@ -4,7 +4,10 @@
 //
 // A fresh session save only unlocks the first track of each of the four worlds,
 // each with its default vehicle (a vehicle choice needs a cleared race), so the
-// value is a world index 0..3 and nothing else can be selected.
+// value is a world index 0..3 and nothing else in the stock grid can be
+// selected. With Future Fun Land locked the grid has those four rows, and the
+// lobby's Track Lab courses start on the row under them: kCheckCourseCustomRow
+// is the first one (DKR_OWNED_CHECK_TRACKS_DIR supplies it).
 #include "analog_driving/packed_input.hpp"
 #include <atomic>
 #include <cstdint>
@@ -13,6 +16,7 @@
 namespace dkr::runtime::netplay::experimental {
 
 inline constexpr int kCheckCourseWorlds = 4;
+inline constexpr int kCheckCourseCustomRow = kCheckCourseWorlds;
 inline std::atomic<int> g_check_course_world{-1};
 
 inline void set_check_course_world(int world) {

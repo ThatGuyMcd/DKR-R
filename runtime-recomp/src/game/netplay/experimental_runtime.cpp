@@ -664,10 +664,12 @@ bool run_party_runtime(ultramodern::renderer::WindowHandle window, const std::fi
                         sampled = check_autopilot_input(scene.autopilot, local_port.load(), at.frame);
                         if (!course_logged && scene.autopilot[0].valid) {
                             course_logged = true;
-                            std::fprintf(stderr, "[check][course] raced level=%d race-type=%d vehicles=%u,%u,%u,%u\n",
-                                         scene.level, scene.race_type, unsigned(scene.autopilot[0].vehicle),
-                                         unsigned(scene.autopilot[1].vehicle), unsigned(scene.autopilot[2].vehicle),
-                                         unsigned(scene.autopilot[3].vehicle));
+                            std::fprintf(stderr,
+                                         "[check][course] raced level=%d race-type=%d checkpoints=%d "
+                                         "vehicles=%u,%u,%u,%u\n",
+                                         scene.level, scene.race_type, int(scene.autopilot[0].checkpoints),
+                                         unsigned(scene.autopilot[0].vehicle), unsigned(scene.autopilot[1].vehicle),
+                                         unsigned(scene.autopilot[2].vehicle), unsigned(scene.autopilot[3].vehicle));
                         }
                     }
                 }

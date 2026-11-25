@@ -528,6 +528,7 @@ AutopilotView capture_autopilot_observations(const std::uint8_t* ram, std::size_
         if (!g.range(data, 0x1D8) || g.get(data, 2) > 3)
             continue;
         auto& obs = view[port];
+        obs.checkpoints = std::int32_t(count);
         obs.vehicle = std::uint8_t(g.get(data + 0x1D6, 1));
         obs.position = {g.real(object + 0x0C), g.real(object + 0x10), g.real(object + 0x14)};
         obs.heading = std::int16_t(g.get(data + 0x1A0, 2));

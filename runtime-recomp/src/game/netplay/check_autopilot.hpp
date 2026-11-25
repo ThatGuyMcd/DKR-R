@@ -34,6 +34,9 @@ struct AutopilotObservation {
     // 0x10000 = a full turn).
     CheckpointPoint position;
     std::int16_t heading = 0;
+    // gNumberOfMainCheckpoints: how many gates the course loaded for this
+    // race's vehicle set.
+    std::int32_t checkpoints = 0;
     // Object_Racer::nextCheckpoint and ::checkpoint_distance (1 at the
     // previous checkpoint, 0 at the next one).
     std::int32_t next_checkpoint = 0;
