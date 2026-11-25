@@ -17,9 +17,10 @@ in both modes, including Textures and its legacy ROM installation notice.
 **Ready to race** is centred within its part of the Play card. The save summary
 has a small three-light indicator: green for Vanilla, amber for Modded and blue
 for Online. The label says **Using** for the running game and **Next** before
-launch. Ordinary offline mods still use your shared personal Adventure; the
-amber label says so. Online and isolated development progress use their own
-saves, and the preview follows the running save owner.
+launch. **Session Mods** selects Vanilla Adventure when off and Modded
+Adventure when on. Each has separate progress and its own Cloud Saves slot.
+Online and development progress use separate saves. The preview follows the
+running save while you play.
 
 Use **Sidebar navigation**, just above the divider and Restart button, to
 choose **LB / RB** or **D-pad**. In D-pad mode, Up and Down change sidebar pages
@@ -113,7 +114,7 @@ has Export, Capture and My Dumps tabs; switching
 tabs does not cancel an active job. See [Textures](TEXTURE_PACKS.md).
 CRT filters are in **Graphics > HUD & effects**.
 
-**Play > Achievements** shows 94 local goals, filters, pinned goals,
+**Play > Achievements** opens the Badge Gallery with 94 local goals, filters, pinned goals,
 notification settings and progress import/export. It needs no account.
 See [Achievements](ACHIEVEMENTS.md).
 

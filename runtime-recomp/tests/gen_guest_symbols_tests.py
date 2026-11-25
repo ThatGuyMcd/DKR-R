@@ -36,6 +36,7 @@ GOLDEN = {
     "water_symbols.hpp": "f8992cae",
     "achievement_symbols.hpp": "36b9daa3",
     "autopilot_symbols.hpp": "632fb177",
+    "time_trial_symbols.hpp": "bd70a995",
     "polish_symbols.hpp": "4eac568d",
     "render_heap_addresses.hpp": "0cbe828b",
     # v1.0.15 added the light intensity, inverse view and viewport layout symbols.

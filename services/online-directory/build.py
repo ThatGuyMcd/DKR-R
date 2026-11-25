@@ -52,6 +52,9 @@ def compose(output, esbuild, rollback_api=None, rollback_directory=None):
     shutil.copy2(API / "discord_schema.sql", output / "PRIVATE-API/001-launcher-discord-profiles.sql")
     shutil.copy2(API / "profile_schema.sql", output / "PRIVATE-API/002-launcher-profiles.sql")
     shutil.copy2(API / "speedrun_schema.sql", output / "PRIVATE-API/003-speedruns.sql")
+    shutil.copy2(API / "notification_schema.sql", output / "PRIVATE-API/004-notifications.sql")
+    shutil.copy2(API / "cloud_saves_schema.sql", output / "PRIVATE-API/005-cloud-saves.sql")
+    shutil.copy2(API / "modded_adventure_schema.sql", output / "PRIVATE-API/006-modded-adventure.sql")
     for name in ("directory.mjs", "wrangler-online.jsonc"):
         shutil.copy2(AUTH / name, output / "ONLINE-WORKER" / name)
     for source, name in ((rollback_api, "worker-single-file.mjs"), (rollback_directory, "directory.mjs")):

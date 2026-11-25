@@ -1,3 +1,4 @@
+#include "time_trial/session.hpp"
 #include "controller_feedback/service.hpp"
 #include "library_ui/surface_policy.hpp"
 #include "look_behind/policy.hpp"
@@ -68,6 +69,9 @@ extern "C" bool dkr_handle_fullscreen_event(const SDL_Event* event);
 
 namespace {
 
+#if DKR_RUNTIME_HAS_RT64
+void close_startup_cover();
+#endif
 std::atomic<std::uint64_t> g_audio_buffers{0};
 constexpr std::size_t kControllerCount = 4;
 std::array<std::atomic<std::uint16_t>, kControllerCount> g_buttons{};
@@ -1322,6 +1326,7 @@ void dkr::runtime::platform::shutdown() {
     CancelSdl3InputProbe();
     g_sdl3_input_client.stop();
     std::scoped_lock lock(g_platform_mutex);
+    close_startup_cover();
     if (g_cursor_hidden) {
         SDL_ShowCursor(SDL_ENABLE);
         g_cursor_hidden = false;
@@ -1442,6 +1447,60 @@ ultramodern::renderer::WindowHandle dkr::runtime::platform::create_window() {
 #endif
 }
 
+namespace {
+SDL_Window* startup_cover = nullptr;
+bool startup_cover_returning = false;
+std::atomic<bool> startup_cover_ready{false};
+std::chrono::steady_clock::time_point startup_cover_timeout;
+
+void close_startup_cover() {
+    if (startup_cover) {
+        SDL_DestroyWindow(startup_cover);
+        startup_cover = nullptr;
+    }
+    startup_cover_returning = false;
+}
+} // namespace
+
+void dkr::runtime::platform::show_startup_cover(void* surface, bool returning) {
+#if defined(_WIN32) || (defined(__linux__) && !defined(__ANDROID__))
+    close_startup_cover();
+    if (!surface || !g_window)
+        return;
+    int x, y, width, height;
+    SDL_GetWindowPosition(g_window, &x, &y);
+    SDL_GetWindowSize(g_window, &width, &height);
+    startup_cover = SDL_CreateWindow(returning ? "DKR-R Returning" : "DKR-R Starting", x, y, width, height,
+                                     SDL_WINDOW_BORDERLESS | SDL_WINDOW_ALWAYS_ON_TOP | SDL_WINDOW_SKIP_TASKBAR |
+                                         SDL_WINDOW_TOOLTIP | SDL_WINDOW_HIDDEN);
+    if (!startup_cover)
+        return;
+    if (auto* pixels = SDL_GetWindowSurface(startup_cover)) {
+        if (SDL_BlitScaled(static_cast<SDL_Surface*>(surface), nullptr, pixels, nullptr) == 0) {
+            startup_cover_ready.store(false, std::memory_order_relaxed);
+            startup_cover_returning = returning;
+            startup_cover_timeout = std::chrono::steady_clock::now() + std::chrono::seconds(15);
+            SDL_ShowWindow(startup_cover);
+            if (SDL_UpdateWindowSurface(startup_cover) == 0)
+                return;
+        }
+    }
+    close_startup_cover();
+#else
+    (void)surface;
+    (void)returning;
+#endif
+}
+
+void dkr::runtime::platform::finish_run_return_cover() {
+    if (startup_cover_returning)
+        close_startup_cover();
+}
+
+void dkr::runtime::platform::startup_frame_presented() {
+    startup_cover_ready.store(true, std::memory_order_release);
+}
+
 ultramodern::renderer::WindowHandle dkr::runtime::platform::prepare_window_for_game() {
 #if defined(_WIN32)
     if (g_window && g_retire_launcher_window_for_game) {
@@ -1500,6 +1559,8 @@ ultramodern::renderer::WindowHandle dkr::runtime::platform::prepare_window_for_g
 }
 
 void* dkr::runtime::platform::prepare_window_for_launcher(bool retire_game_surface) {
+    if (!startup_cover_returning)
+        close_startup_cover();
 #if defined(_WIN32)
     if (retire_game_surface && g_window) {
         // Called only after both owned runtime workers and their GPU owners
@@ -1550,6 +1611,9 @@ void* dkr::runtime::platform::prepare_window_for_launcher(bool retire_game_surfa
 }
 
 void dkr::runtime::platform::pump_window_events(void*) {
+    if (startup_cover && (startup_cover_ready.load(std::memory_order_acquire) ||
+                          std::chrono::steady_clock::now() >= startup_cover_timeout))
+        close_startup_cover();
     pump_input_backend_events();
     if (dkr::runtime::ui::lifecycle_request() != dkr::runtime::ui::LifecycleRequest::None) {
         ultramodern::quit();
@@ -1557,6 +1621,11 @@ void dkr::runtime::platform::pump_window_events(void*) {
     }
     SDL_Event event{};
     while (SDL_PollEvent(&event) != 0) {
+        if (startup_cover && event.type == SDL_WINDOWEVENT && event.window.windowID == SDL_GetWindowID(startup_cover)) {
+            if (event.window.event == SDL_WINDOWEVENT_EXPOSED)
+                SDL_UpdateWindowSurface(startup_cover);
+            continue;
+        }
 #if defined(DKR_IOS)
         if (event.type == SDL_APP_DIDENTERFOREGROUND)
             dkr::runtime::ios::import_inbox();
@@ -1875,9 +1944,8 @@ void dkr::runtime::platform::update_ui_gamepad_navigation() {
 
 #endif
 
-void dkr::runtime::platform::queue_audio(std::int16_t* samples, std::size_t sample_count) {
-    if (!dkr::runtime::netplay::external_side_effects_allowed())
-        return;
+namespace {
+void queue_audio_output(const std::int16_t* samples, std::size_t sample_count, bool mix_track_recording = true) {
     dkr::runtime::telemetry::record_audio_buffer(sample_count);
     const auto index = ++g_audio_buffers;
 #if DKR_RUNTIME_HAS_RT64
@@ -1945,7 +2013,7 @@ void dkr::runtime::platform::queue_audio(std::int16_t* samples, std::size_t samp
         }
         // Mixed before the equaliser and master volume, so it is heard
         // exactly as the game's own music would be.
-        const bool custom_music_active = dkr::runtime::custom_music::active();
+        const bool custom_music_active = mix_track_recording && dkr::runtime::custom_music::active();
         if (custom_music_active) {
             g_custom_music_buffer.assign(sample_count, 0.0F);
             dkr::runtime::custom_music::render(g_custom_music_buffer.data(), sample_count / 2U, g_audio_frequency);
@@ -2000,6 +2068,85 @@ void dkr::runtime::platform::queue_audio(std::int16_t* samples, std::size_t samp
 #endif
 }
 
+} // namespace
+
+void dkr::runtime::platform::queue_audio(std::int16_t* samples, std::size_t sample_count) {
+    if (time_trial::preparing_ghost())
+        return;
+    if (!dkr::runtime::netplay::external_side_effects_allowed())
+        return;
+#if DKR_RUNTIME_HAS_RT64
+    if (time_trial::watching() && sample_count != 0 && sample_count <= 8192 && (sample_count & 1U) == 0 &&
+        custom_music::active()) {
+        std::scoped_lock lock(g_platform_mutex);
+        // Archive the host-rendered track recording on the same update as
+        // the guest's DMA audio. The DMA stereo pairs stay in R,L order.
+        g_custom_music_buffer.assign(sample_count, 0.0F);
+        custom_music::render(g_custom_music_buffer.data(), sample_count / 2U, g_audio_frequency);
+        g_audio_swap_buffer.resize(sample_count);
+        for (std::size_t i = 0; i < sample_count; ++i) {
+            const float mixed = samples[i] + g_custom_music_buffer[i ^ 1U];
+            g_audio_swap_buffer[i] = static_cast<std::int16_t>(std::lround(std::clamp(mixed, -32768.0F, 32767.0F)));
+        }
+        if (time_trial::theatre_capture_audio(g_audio_swap_buffer))
+            return;
+    }
+#endif
+    if (!time_trial::theatre_capture_audio({samples, sample_count}))
+        queue_audio_output(samples, sample_count);
+}
+
+void dkr::runtime::platform::queue_theatre_audio(std::span<const std::int16_t> samples, unsigned speed,
+                                                 unsigned previous, unsigned frame) {
+#if DKR_RUNTIME_HAS_RT64
+    unsigned rate;
+    {
+        std::scoped_lock lock(g_platform_mutex);
+        rate = g_audio_frequency;
+    }
+    const auto frames = samples.size() / 2;
+    const auto sample_at = [rate, speed](unsigned update) {
+        return std::uint64_t(rate) * update * 100 / (30 * speed);
+    };
+    const auto output_frames = static_cast<std::size_t>(sample_at(frame) - sample_at(previous));
+    if (!frames || !output_frames)
+        return;
+    if (frames == output_frames) {
+        queue_audio_output(samples.data(), samples.size(), false);
+        return;
+    }
+    // The mixer now supplies one block per authored update. Account for
+    // the N64's 16-sample alignment and apply the selected viewing speed.
+    std::vector<std::int16_t> converted(output_frames * 2);
+    for (std::size_t i = 0; i < output_frames; ++i) {
+        const auto position = i * frames;
+        const auto first = position / output_frames;
+        const auto second = std::min(frames - 1, first + 1);
+        const auto weight = static_cast<float>(position % output_frames) / static_cast<float>(output_frames);
+        for (std::size_t channel = 0; channel < 2; ++channel)
+            converted[2 * i + channel] = static_cast<std::int16_t>(
+                std::lerp(samples[2 * first + channel], samples[2 * second + channel], weight));
+    }
+    queue_audio_output(converted.data(), converted.size(), false);
+#else
+    (void)samples;
+    (void)speed;
+    (void)previous;
+    (void)frame;
+#endif
+}
+
+void dkr::runtime::platform::clear_theatre_audio() {
+#if DKR_RUNTIME_HAS_RT64
+    std::scoped_lock lock(g_platform_mutex);
+    if (g_audio_device != 0) {
+        SDL_ClearQueuedAudio(g_audio_device);
+        SDL_PauseAudioDevice(g_audio_device, 1);
+        g_audio_playback_started = false;
+    }
+#endif
+}
+
 void dkr::runtime::platform::request_ui_tone(float frequency_hz, std::uint32_t duration_ms) {
     const float clamped_frequency = std::clamp(frequency_hz, 80.0F, 4000.0F);
     const std::uint32_t clamped_duration = std::clamp(duration_ms, 20U, 500U);
@@ -2049,6 +2196,13 @@ void dkr::runtime::platform::set_treble_gain(float decibels) {
 }
 
 std::size_t dkr::runtime::platform::audio_frames_remaining() {
+    // One authored replay update covers 735 samples at 22,050 Hz. A
+    // virtual AI residual of 192 selects the nearest 16-sample quantum
+    // (736) on the US v1.1 mixer. SDL drains on the independent playback
+    // clock, so its queued samples cannot provide this feedback.
+    constexpr std::size_t theatre_ai_residual_frames = 192U;
+    if (time_trial::watching())
+        return theatre_ai_residual_frames;
 #if DKR_RUNTIME_HAS_RT64
     std::scoped_lock lock(g_platform_mutex);
     if (g_audio_device != 0) {

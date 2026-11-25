@@ -23,6 +23,8 @@ bool prepare_runtime_save_context(const std::filesystem::path& root, const std::
                                   const std::filesystem::path& offline_paks, bool online, bool host,
                                   std::uint64_t match_id, std::uint64_t expected_hash, std::string& error,
                                   bool development = false);
+enum class ReplaySave { Blank, MissingAdventure, CompletedAdventure };
+bool prepare_time_trial_save_context(std::string& error, ReplaySave seed);
 void retire_runtime_save_context();
 bool runtime_save_context_ready();
 bool runtime_save_writes_allowed();

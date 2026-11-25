@@ -2,6 +2,7 @@
 #include "launcher_themes/corner_atlas.hpp"
 #include "library_ui/control_layout.hpp"
 #include "library_ui/surface_policy.hpp"
+#include "dialog_style.hpp"
 #include "launcher_themes/button_pattern_ui.hpp"
 #include "library_ui/handoff.hpp"
 #include "library_ui/launcher_fade.hpp"
@@ -39,6 +40,9 @@
 #include "sound_settings/policy.hpp"
 #include "overlay_settings/policy.hpp"
 #include "session_content/policy.hpp"
+#include "time_trial/session.hpp"
+#include "time_trial/options.hpp"
+#include "time_trial/ghost_file.hpp"
 #include "analog_driving/settings.hpp"
 #include "look_behind/policy.hpp"
 #include "file_picker/client.hpp"
@@ -146,6 +150,8 @@
 #include "runtime_texture_packs.hpp"
 #include "save_manager.hpp"
 #include "runtime_save_routing.hpp"
+#include "personal_adventure_paths.hpp"
+#include "cloud_saves/progress.hpp"
 #include "texture_pack_browser_policy.hpp"
 #include "ui_notification_policy.hpp"
 #include "virtual_pak.hpp"
@@ -199,6 +205,7 @@ extern "C" bool dkr_show_metal_layer(void* ns_window_ptr, void* layer_ptr);
 #include <initializer_list>
 #include <iterator>
 #include <map>
+#include <tuple>
 #include <mutex>
 #include <functional>
 #include <optional>
@@ -207,6 +214,13 @@ extern "C" bool dkr_show_metal_layer(void* ns_window_ptr, void* layer_ptr);
 #include <string>
 #include <thread>
 #include <vector>
+
+#if DKR_RUNTIME_HAS_RT64
+extern "C" {
+extern const char SpeedrunningHudPreview[];
+extern const std::size_t SpeedrunningHudPreview_size;
+}
+#endif
 
 namespace {
 
@@ -459,6 +473,7 @@ struct OnlineHostRequest {
     dkr::runtime::netplay::CompatibilityManifest manifest;
     dkr::runtime::saves::OnlineSaveSeedMode save_mode;
     std::string room, name;
+    std::optional<std::string> cloud_account; // Set once the pre-host check is scheduled.
     bool content_enabled = dkr::session_content::next_enabled.load();
 };
 std::optional<OnlineHostRequest> g_online_mod_host_request;
@@ -773,14 +788,15 @@ int g_shortcut_capture_count = 0;
 std::chrono::steady_clock::time_point g_shortcut_capture_deadline{};
 std::string g_save_manager_status;
 bool g_play_offline_after_leave = false;
+struct AdventureView {
+    dkr::runtime::saves::SaveInfo info;
+    std::optional<dkr::runtime::saves::codec::SaveImage> image;
+};
 struct SaveManagerViewCache {
     bool valid = false;
     std::chrono::steady_clock::time_point next_refresh{};
-    dkr::runtime::saves::SaveInfo adventure;
+    std::array<AdventureView, 2> adventures{};
     std::array<dkr::runtime::saves::SaveInfo, dkr::runtime::saves::kControllerPakCount> controller_paks{};
-    std::vector<std::filesystem::path> adventure_backups;
-    std::optional<dkr::runtime::saves::codec::SaveImage> image;
-    std::string preview;
 };
 SaveManagerViewCache g_save_manager_view_cache;
 std::uint64_t g_save_cache_revision = 0;
@@ -796,32 +812,26 @@ const SaveManagerViewCache& CachedSaveManagerView() {
     if (pending.valid() && pending.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
         try {
             auto result = pending.get();
-            if (result.first == g_save_cache_revision) {
+            if (result.first == g_save_cache_revision)
                 g_save_manager_view_cache = std::move(result.second);
-            }
         } catch (const std::exception& e) {
             g_save_manager_status = e.what();
         }
     }
     if (!pending.valid() && (!g_save_manager_view_cache.valid || now >= g_save_manager_view_cache.next_refresh)) {
         pending = std::async(std::launch::async, [generation = g_save_cache_revision] {
+            namespace saves = dkr::runtime::saves;
             SaveManagerViewCache view;
-            view.adventure = dkr::runtime::saves::adventure_info();
-            dkr::runtime::saves::codec::SaveImage image;
-            std::string error;
-            if (view.adventure.valid && dkr::runtime::saves::load_adventure(image, error)) {
-                view.image = image;
-                for (unsigned i = 0; i < 3; ++i) {
-                    if (i)
-                        view.preview += " | ";
-                    const auto& s = image.slots[i];
-                    view.preview += "Slot " + std::to_string(i + 1) + ": " + s.name + " (" +
-                                    std::to_string(s.balloons[0]) + " balloons)";
-                }
+            for (const bool modded : {false, true}) {
+                auto& adventure = view.adventures[modded];
+                adventure.info = saves::adventure_info(modded);
+                saves::codec::SaveImage image;
+                std::string error;
+                if (adventure.info.valid && saves::load_adventure(image, error, modded))
+                    adventure.image = std::move(image);
             }
-            for (int i = 0; i < 4; ++i)
-                view.controller_paks[i] = dkr::runtime::saves::controller_pak_info(i);
-            view.adventure_backups = dkr::runtime::saves::adventure_backups();
+            for (int port = 0; port < saves::kControllerPakCount; ++port)
+                view.controller_paks[port] = saves::controller_pak_info(port);
             view.valid = true;
             view.next_refresh = std::chrono::steady_clock::now() + std::chrono::seconds(2);
             return std::pair{generation, std::move(view)};
@@ -835,8 +845,8 @@ bool g_online_compatibility_sync_requested = false;
 std::string g_controller_mapping_status;
 bool g_controller_mapping_popup_pending = false;
 bool g_controller_mapping_completion_saved = false;
-std::optional<dkr::runtime::saves::codec::SaveImage> g_save_builder_image;
 #include "shared_save_jobs.inl"
+#include "cloud_saves/jobs.inl"
 
 bool HandleInputCaptureEvent(SDL_Event* event);
 
@@ -1831,6 +1841,9 @@ void SaveSettings() {
         output << "online_local_view=" << unsigned(dkr::runtime::online_view::requested_layout.load()) << '\n';
         output << "online_racer_labels=" << unsigned(dkr::runtime::online_view::requested_labels.load()) << '\n';
         output << "online_label_size=" << dkr::runtime::online_view::requested_label_size.load() << '\n';
+        namespace speed = dkr::runtime::speedrunning;
+        for (std::size_t i = 0; i < speed::settings.size(); ++i)
+            output << speed::prefix << speed::settings[i].key << '=' << speed::options.get(speed::Option(i)) << '\n';
         output << "online_room_name=" << g_online_room_name << '\n';
         output << "online_host_control=" << g_online_host_control << '\n';
         output << "online_allow_spectators=" << (g_online_allow_spectators ? 1 : 0) << '\n';
@@ -1994,6 +2007,7 @@ bool LoadLegacyBindingSetting(const std::string& key, int number) {
 
 void LoadSettings() {
     dkr::library_ui::skip_launcher = false;
+    dkr::runtime::speedrunning::options.reset();
     dkr::localisation::detect_system_language();
     g_skip_intro = false;
     g_skip_intro_destination = 0;
@@ -2085,6 +2099,8 @@ void LoadSettings() {
                 dkr::runtime::online_view::requested_label_size = std::clamp(size, 75U, 150U);
             continue;
         }
+        if (dkr::runtime::speedrunning::options.parse(key, value))
+            continue;
         bool controller_key = false;
         for (std::size_t player = 0; player < dkr::runtime::input::kPlayerCount; ++player) {
             const std::string expected = "player" + std::to_string(player + 1U) + ".controller_key";
@@ -3227,7 +3243,7 @@ void ImportMagicCodeWithDialog() {
         g_code_library.import_file(std::move(source));
 }
 
-bool ImportAdventureWithDialog() {
+bool ImportAdventureWithDialog(bool modded) {
     if (SharedSaveBusy())
         return false;
     if (NFD_Init() != NFD_OKAY) {
@@ -3238,7 +3254,7 @@ bool ImportAdventureWithDialog() {
     const nfdfilteritem_t filters[] = {{"DKR Adventure save", "bin,eep"}};
     const auto dialog = NFD_OpenDialogU8(&result, filters, 1, nullptr);
     if (dialog == NFD_OKAY) {
-        g_shared_save_import = {std::filesystem::u8path(result), 0, 0};
+        g_shared_save_import = {std::filesystem::u8path(result), 0, 0, modded};
         NFD_FreePathU8(result);
     } else if (dialog == NFD_ERROR)
         g_save_manager_status = NFD_GetError();
@@ -3283,7 +3299,7 @@ bool ExportAdventureWithDialog(
     return exported;
 }
 
-bool ImportSaveBundleWithDialog() {
+bool ImportSaveBundleWithDialog(bool modded) {
     if (SharedSaveBusy())
         return false;
     if (NFD_Init() != NFD_OKAY) {
@@ -3294,7 +3310,7 @@ bool ImportSaveBundleWithDialog() {
     const nfdfilteritem_t filters[] = {{"DKR-R save bundle", "dkrsave"}};
     const auto dialog = NFD_OpenDialogU8(&result, filters, 1, nullptr);
     if (dialog == NFD_OKAY) {
-        g_shared_save_import = {std::filesystem::u8path(result), 1, 0};
+        g_shared_save_import = {std::filesystem::u8path(result), 1, 0, modded};
         NFD_FreePathU8(result);
     } else if (dialog == NFD_ERROR)
         g_save_manager_status = NFD_GetError();
@@ -3302,14 +3318,14 @@ bool ImportSaveBundleWithDialog() {
     return dialog == NFD_OKAY;
 }
 
-bool ExportSaveBundleWithDialog() {
+bool ExportSaveBundleWithDialog(bool modded) {
     if (NFD_Init() != NFD_OKAY) {
         g_save_manager_status = "The system file picker could not be initialized.";
         return false;
     }
     nfdchar_t* result = nullptr;
     const nfdfilteritem_t filters[] = {{"DKR-R save bundle", "dkrsave"}};
-    const nfdresult_t dialog = NFD_SaveDialogU8(&result, filters, 1, nullptr, "dkr-port-save-garage.dkrsave");
+    const nfdresult_t dialog = NFD_SaveDialogU8(&result, filters, 1, nullptr, modded ? "dkr-modded.dkrsave" : "dkr-vanilla.dkrsave");
     bool exported = false;
     if (dialog == NFD_OKAY) {
         auto destination = std::filesystem::u8path(result);
@@ -3319,7 +3335,7 @@ bool ExportSaveBundleWithDialog() {
         }
         std::string error;
         exported = BeginSharedSaveJob(
-            [destination](std::string& error) { return dkr::runtime::saves::export_bundle(destination, error); },
+            [destination, modded](std::string& error) { return dkr::runtime::saves::export_bundle(destination, error, modded); },
             "Save bundle exported.");
         g_save_manager_status = exported ? "Exporting save bundle..." : error;
     } else if (dialog == NFD_ERROR) {
@@ -3399,8 +3415,6 @@ bool BeginPaddedModal(const char* name, ImGuiWindowFlags flags = 0, const ImVec2
         return BeginPaddockModalWindow(name, flags | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
     }
 #endif
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, padding);
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 18.0F);
     // Fit smaller screens without changing normal-size layouts. Let the
     // dialog scroll if needed so its actions remain reachable by controller.
 #if !defined(__ANDROID__) && !defined(DKR_IOS)
@@ -3409,9 +3423,10 @@ bool BeginPaddedModal(const char* name, ImGuiWindowFlags flags = 0, const ImVec2
     ImGui::SetNextWindowSizeConstraints({0.0F, 0.0F},
                                         {std::max(screen.x - 24.0F, 1.0F), std::max(screen.y - 40.0F, 1.0F)});
 #endif
-    const bool visible = ImGui::BeginPopupModal(name, nullptr, flags);
-    ImGui::PopStyleVar(2);
-    return visible;
+    if (!ImGui::IsPopupOpen(name))
+        return ImGui::BeginPopupModal(name, nullptr, flags);
+    const dkr::runtime::ui::ScopedDialogStyle style(padding, 18.0F);
+    return ImGui::BeginPopupModal(name, nullptr, flags);
 }
 
 void DrawTexturePackImportModal() {
@@ -6270,6 +6285,21 @@ bool OnlineNotificationActive() {
     return InviteUiVisible() || g_online_notifications.current(std::chrono::steady_clock::now()) != nullptr;
 }
 
+void DrawSavingProgress() {
+    const auto* viewport = ImGui::GetMainViewport();
+    const ImVec2 position{viewport->WorkPos.x + 16.F, viewport->WorkPos.y + viewport->WorkSize.y - 52.F};
+    const auto caption = dkr::localisation::source("Saving Progress");
+    const auto type = PaddockReading(14.F, true, 1.3F);
+    auto* draw = ImGui::GetForegroundDrawList();
+    draw->AddRectFilled(position, {position.x + PaddockMeasure(type, caption) + 43.F, position.y + 36.F},
+                        PaddockCol(0x092737, 224), 8.F);
+    const float angle = float(std::fmod(ImGui::GetTime(), 1.0)) * 6.2831853F;
+    draw->PathArcTo({position.x + 16.F, position.y + 18.F}, 6.F, angle, angle + 4.6F, 16);
+    draw->PathStroke(PaddockCol(0x67DCC3), 0, 1.8F);
+    PaddockDrawRun(draw, type, {position.x + 30.F, position.y + (36.F - type.line) * 0.5F},
+                   PaddockCol(0xFFF6DA), caption.data(), caption.data() + caption.size());
+}
+
 void DrawOnlineNotification() {
     DrawInviteUi();
     const auto now = std::chrono::steady_clock::now();
@@ -7825,6 +7855,7 @@ void EndSettingsDialog();
 bool SettingsDropdown(const char*, std::string_view, int*, std::initializer_list<const char*>, float, bool,
                       std::string_view);
 void DrawPlayUpdateButton(float);
+#include "cloud_saves/play_ui.inl"
 #include "runtime_play_ui.inl"
 #include "runtime_online_ui.inl"
 #include "invite_ui.inl"
@@ -8164,6 +8195,21 @@ void dkr::runtime::ui::configure(const std::filesystem::path& config_directory) 
     dkr::runtime::netplay::session().configure_artifact_directory(config_directory / "netplay" / "replays");
     RefreshCrtFilters();
     LoadSettings();
+    if (trial::exporting_video()) {
+        using namespace ultramodern::renderer;
+        auto graphics = get_graphics_config();
+        graphics.rr_option = RefreshRate::Manual;
+        graphics.rr_manual_value = 60;
+        dkr::runtime::enhancements::set_texture_lod_bias_hundredths(0);
+        dkr::runtime::enhancements::set_generated_mipmaps_requested(true);
+        dkr::runtime::enhancements::set_anisotropy_level(16);
+        dkr::runtime::enhancements::set_presentation_profile(
+            dkr::runtime::enhancements::PresentationProfile::Modern);
+        dkr::display::preference.aspect = dkr::display::Aspect::Wide;
+        dkr::display::preference.height = 0;
+        dkr::display::publish();
+        set_graphics_config(graphics);
+    }
     if (!g_shared_online_policy_loaded)
         g_online_save_seed_mode = int(dkr::runtime::saves::OnlineSaveSeedMode::ContinuePreviousSession);
     dkr::store::installations().configure(g_config_directory, DKR_RELEASE_VERSION, mod_worker);
@@ -8205,9 +8251,46 @@ void dkr::runtime::ui::persist_graphics_api_fallback() {
     std::fprintf(stderr, "[boot][settings] unavailable graphics API recovered to Automatic\n");
 }
 
+namespace {
+using TransitionFrame = std::unique_ptr<SDL_Surface, decltype(&SDL_FreeSurface)>;
+TransitionFrame run_return_frame(nullptr, SDL_FreeSurface);
+bool run_return_cover_shown = false;
+
+TransitionFrame CaptureTransitionFrame(SDL_Renderer* renderer) {
+    TransitionFrame frame(nullptr, SDL_FreeSurface);
+    int width = 0, height = 0;
+    if (!SDL_GetRendererOutputSize(renderer, &width, &height) && width > 0 && width <= 8192 && height > 0 &&
+        height <= 4320) {
+        frame.reset(SDL_CreateRGBSurfaceWithFormat(0, width, height, 32, SDL_PIXELFORMAT_RGBA32));
+        if (frame && SDL_RenderReadPixels(renderer, nullptr, SDL_PIXELFORMAT_RGBA32, frame->pixels, frame->pitch))
+            frame.reset();
+    }
+    return frame;
+}
+} // namespace
+
+void dkr::runtime::ui::show_run_return_cover(bool force) {
+    if (!run_return_cover_shown && run_return_frame && (force || trial::launcher_return_opacity() >= 1.F)) {
+        dkr::runtime::platform::show_startup_cover(run_return_frame.get(), true);
+        run_return_cover_shown = true;
+    }
+}
+
 dkr::runtime::ui::StartupResult dkr::runtime::ui::run_startup_screen(SDL_Window* window,
                                                                      const std::filesystem::path& preselected_rom,
                                                                      bool software_failure_recovery) {
+    if (trial::take_restart_request() && g_previous_time_trial_request) {
+        g_time_trial_request = std::exchange(g_previous_time_trial_request, std::nullopt);
+    } else {
+        if (g_previous_time_trial_request && g_previous_time_trial_request->mode == trial::Mode::Record) {
+            ApplyReplayRetention(trial::last_result());
+            g_open_speedrunning_result = true;
+            if (!RunPreference(RunOption::RememberSetup))
+                g_run_setup = {};
+        }
+        g_previous_time_trial_request.reset();
+        DeleteRankedPlayback(std::exchange(g_ranked_playback_file, {}));
+    }
     StartupResult result{};
     dkr::runtime::startup::prepare_launch(false, false, false);
     if (window == nullptr) {
@@ -8322,6 +8405,18 @@ dkr::runtime::ui::StartupResult dkr::runtime::ui::run_startup_screen(SDL_Window*
     ImGui_ImplSDL2_InitForSDLRenderer(window, renderer);
     ImGui_ImplSDLRenderer2_Init(renderer);
     dkr::store::service().gameplay(false);
+    std::string cloud_sync_attempted;
+    const auto request_cloud_sync = [&](bool force, dkr::cloud_saves::SyncScope scope = dkr::cloud_saves::SyncScope::All) {
+        if (SharedSaveBusy())
+            return false;
+        const auto account = EnabledCloudSaveAccount();
+        if (account.empty() || (!force && cloud_sync_attempted == account) || !RunCloudSaveSync(account, scope))
+            return false;
+        if (scope == dkr::cloud_saves::SyncScope::All)
+            cloud_sync_attempted = account;
+        return true;
+    };
+    bool cloud_return_pending = !preselected_rom.empty();
     g_mod_store_renderer = renderer;
     g_store_in_game = false;
     g_character_portrait_renderer = renderer;
@@ -8411,6 +8506,8 @@ dkr::runtime::ui::StartupResult dkr::runtime::ui::run_startup_screen(SDL_Window*
     }
 
     int page = 0;
+    if (!dkr::runtime::time_trial::last_result().message.empty())
+        page = dkr::library_ui::LeaderboardsPage;
     int last_rendered_page = -1;
     int sidebar_selection = 0;
     bool focus_content = true;
@@ -8419,6 +8516,18 @@ dkr::runtime::ui::StartupResult dkr::runtime::ui::run_startup_screen(SDL_Window*
                                                     dkr::library_ui::startup_screen_seen, !preselected_rom.empty(),
                                                     software_failure_recovery);
     dkr::library_ui::LauncherFade launch_fade;
+    TransitionFrame trial_handoff_image(nullptr, SDL_FreeSurface);
+    TransitionFrame next_return_frame(nullptr, SDL_FreeSurface);
+    bool return_frame_captured = false;
+    std::unique_ptr<SDL_Texture, decltype(&SDL_DestroyTexture)> return_fade(
+        run_return_cover_shown && run_return_frame ? SDL_CreateTextureFromSurface(renderer, run_return_frame.get())
+                                                  : nullptr,
+        SDL_DestroyTexture);
+    if (return_fade)
+        SDL_SetTextureBlendMode(return_fade.get(), SDL_BLENDMODE_BLEND);
+    run_return_frame.reset();
+    run_return_cover_shown = false;
+    double return_fade_started = -1;
     dkr::library_ui::runtime_intro.clear();
     bool online_start_pending = false;
     bool launch_requested = false;
@@ -8429,7 +8538,13 @@ dkr::runtime::ui::StartupResult dkr::runtime::ui::run_startup_screen(SDL_Window*
     bool request_restart_popup = false;
     while (running) {
         g_legacy_imports.tick();
-        dkr::runtime::saves::set_online_save_protection(dkr::runtime::netplay::session().active());
+        const bool lobby_active = dkr::runtime::netplay::session().active();
+        dkr::runtime::saves::set_online_save_protection(lobby_active);
+        if (cloud_return_pending) {
+            using dkr::cloud_saves::SyncScope;
+            if (request_cloud_sync(true, lobby_active ? SyncScope::PublishHostedOnline : SyncScope::All))
+                cloud_return_pending = false;
+        }
         if (g_play_offline_after_leave && !dkr::runtime::netplay::session().active()) {
             g_play_offline_after_leave = false;
             launch_requested = true;
@@ -8625,10 +8740,9 @@ dkr::runtime::ui::StartupResult dkr::runtime::ui::run_startup_screen(SDL_Window*
         g_online_mod_identity = rom_ready ? online_manifest_identity : dkr::runtime::rom::Identity{};
         PumpOnlineMods();
         PumpInviteLauncher(rom_ready, online_manifest.has_value());
-        if (rom_ready && !online_start_pending && dkr::runtime::netplay::session().consume_launch_request()) {
+        if (rom_ready && !online_start_pending && !SharedSaveBusy() &&
+            dkr::runtime::netplay::session().consume_launch_request()) {
             dkr::runtime::startup_performance::mark("launcher-online-launch-requested");
-            if (SharedSaveBusy())
-                continue;
             online_start_pending = true;
         }
         if (online_start_pending && !dkr::runtime::netplay::session().active()) {
@@ -8644,8 +8758,8 @@ dkr::runtime::ui::StartupResult dkr::runtime::ui::run_startup_screen(SDL_Window*
         }
         constexpr int launcher_page_count = kMenuPageCount;
         constexpr int launcher_sidebar_count = kMenuPageCount + 3;
-        if (page >= launcher_page_count) {
-            page = 0;
+        if (!dkr::library_ui::is_content_page(page)) {
+            page = kPagePlay;
         }
         const auto launcher_events_started = std::chrono::steady_clock::now();
         launcher_profile.add(LauncherProfile::Services, launcher_services_started, launcher_events_started);
@@ -8786,8 +8900,9 @@ dkr::runtime::ui::StartupResult dkr::runtime::ui::run_startup_screen(SDL_Window*
 
         {
             const auto preparation = g_mod_launch.snapshot();
-            const bool busy = dkr::crash_reports::view().consent.choice == -1 || g_legacy_imports.snapshot().busy ||
-                              g_code_library.view()->busy || g_vehicle_library.view()->busy ||
+            const bool busy = SharedSaveBusy() || dkr::crash_reports::view().consent.choice == -1 ||
+                              g_legacy_imports.snapshot().busy || g_code_library.view()->busy ||
+                              g_vehicle_library.view()->busy ||
                               bool(g_vehicle_library.view()->pending) || dkr::store::installations().view()->busy;
             const auto action =
                 online_start_pending
@@ -8804,25 +8919,61 @@ dkr::runtime::ui::StartupResult dkr::runtime::ui::run_startup_screen(SDL_Window*
                 std::fprintf(stderr,
                              "[launcher][automatic-start] showing launcher for selection, cancellation or recovery\n");
         }
+        const bool trial_fade_finished =
+            g_time_trial_request && launch_fade.started() && launch_fade.finished(PaddockClock());
+        const bool capture_return_frame = trial_fade_finished && !return_frame_captured;
+        if (trial_fade_finished && !capture_return_frame) {
+            auto trial = std::move(*g_time_trial_request);
+            g_time_trial_request.reset();
+            if (dkr::runtime::netplay::session().active()) {
+                g_time_trial_message = "Leave your lobby to start Time Trial.";
+            } else if (!rom_ready) {
+                g_time_trial_message = "Select a US v1.0 or US v1.1 ROM in Play first.";
+            } else if (const auto trial_rom = TimeTrialRom(trial, selected_rom, rom_catalog);
+                       !trial_rom.empty() && LaunchTimeTrial(trial)) {
+                g_time_trial_message.clear();
+                result.start_game = true;
+                result.rom_path = trial_rom;
+                dkr::runtime::startup::prepare_launch(false, false, false, dkr::runtime::startup::Destination{});
+                dkr::library_ui::runtime_intro.begin(false, launcher_theme.seconds());
+                dkr::runtime::platform::show_startup_cover(trial_handoff_image.get());
+                run_return_frame = std::move(next_return_frame);
+                dkr::runtime::time_trial::enable_launcher_return();
+                g_ranked_podium_started = -1;
+                g_theatre_controls = true;
+                g_theatre_inputs = RunPreference(RunOption::ReplayInputs) != 0;
+                g_theatre_controller_corner = -1;
+                g_theatre_activity = SDL_GetTicks64();
+                std::fprintf(stderr, "[startup][time-trial] shared starting screen\n");
+                g_previous_time_trial_request = std::move(trial);
+                running = false;
+                continue;
+            }
+            trial_handoff_image.reset();
+            next_return_frame.reset();
+            return_frame_captured = false;
+            DeleteRankedPlayback(std::exchange(g_ranked_playback_file, {}));
+        }
         if (launch_requested && dkr::crash_reports::view().consent.choice == -1)
             launch_requested = false;
-        if (launch_requested) {
+        if (launch_requested && !SharedSaveBusy()) {
             launch_requested = false;
-            if (!dkr::runtime::netplay::session().active() && !dkr::store::installations().view()->busy &&
+            if (!dkr::runtime::netplay::session().active() && !OnlineModSelectionLocked() &&
+                !dkr::store::installations().view()->busy &&
                 dkr::store::installations().view()->ready && !g_legacy_imports.snapshot().busy &&
                 !g_code_library.view()->busy && !g_mod_launch.snapshot().modal) {
                 mod_launch_rom = selected_rom;
-                if (!SharedSaveBusy()) {
-                    if (!automatic_start.active()) {
-                        automatic_start.manual(AutomaticStartHasMods());
-                        std::fprintf(stderr, "[startup][manual] shared starting screen\n");
-                    }
-                    g_mod_launch.start(g_config_directory, mod_launch_rom, false);
+                if (!automatic_start.active()) {
+                    automatic_start.manual(AutomaticStartHasMods());
+                    std::fprintf(stderr, "[startup][manual] shared starting screen\n");
                 }
+                request_cloud_sync(true);
+                g_mod_launch.start(g_config_directory, mod_launch_rom, false);
             }
         }
         if (const auto prepared = g_mod_launch.snapshot();
-            prepared.modal && prepared.prepared && !prepared.busy && launch_fade.finished(PaddockClock())) {
+            prepared.modal && prepared.prepared && !prepared.busy && !SharedSaveBusy() &&
+            launch_fade.finished(PaddockClock())) {
             // The modal owns the selection while preparing; do not admit a
             // local bank if an online session began in the meantime.
             if (dkr::runtime::netplay::session().active()) {
@@ -8830,8 +8981,6 @@ dkr::runtime::ui::StartupResult dkr::runtime::ui::run_startup_screen(SDL_Window*
                 rom_status = "Custom launch cancelled because an online lobby became active.";
             } else {
                 dkr::runtime::startup_performance::mark("launcher-local-launch-requested");
-                if (SharedSaveBusy())
-                    continue;
                 result.start_game = true;
                 result.rom_path = mod_launch_rom;
                 result.mods = prepared.prepared;
@@ -8900,7 +9049,23 @@ dkr::runtime::ui::StartupResult dkr::runtime::ui::run_startup_screen(SDL_Window*
         // The opaque cloud backdrop (or opaque missing-asset fallback) covers
         // this entire undecorated window. Drawing ImGui's background underneath
         // it wastes a full software-rendered viewport every frame.
-        if (online_start_pending && launch_fade.started()) {
+        if (capture_return_frame) {
+            DrawAutomaticStart(automatic_start, launcher_background, renderer, launcher_background_scroll,
+                               bounded_software_return, launcher_theme.theme(), launcher_theme.seconds(), nullptr,
+                               false, true);
+        } else if (g_time_trial_request && launch_fade.started()) {
+            dkr::mods::ModLaunchView trial_status;
+            trial_status.stage = g_time_trial_request->mode == trial::Mode::Watch ? "Opening replay..."
+                               : !g_time_trial_request->ghost.empty() ? "Loading ghost..."
+                                                                  : "Starting run...";
+            if (DrawAutomaticStart(automatic_start, launcher_background, renderer, launcher_background_scroll,
+                                   bounded_software_return, launcher_theme.theme(), launcher_theme.seconds(),
+                                   &trial_status)) {
+                g_time_trial_request.reset();
+                DeleteRankedPlayback(std::exchange(g_ranked_playback_file, {}));
+                launch_fade.clear();
+            }
+        } else if (online_start_pending && launch_fade.started()) {
             if (DrawAutomaticStart(automatic_start, launcher_background, renderer, launcher_background_scroll,
                                    bounded_software_return, launcher_theme.theme(), launcher_theme.seconds(), nullptr,
                                    true)) {
@@ -8921,6 +9086,12 @@ dkr::runtime::ui::StartupResult dkr::runtime::ui::run_startup_screen(SDL_Window*
                                           launcher_theme.seconds(), dkr::launcher_themes::preferences.calendar);
             if (launcher_profile.enabled())
                 ImGui::GetWindowDrawList()->AddCallback(LauncherDrawProfileRange::end, &background_profile);
+            if (const int requested = std::exchange(g_page_navigation_request, -1);
+                dkr::library_ui::is_content_page(requested)) {
+                focus_content |= page != requested;
+                page = requested;
+                sidebar_selection = dkr::library_ui::sidebar_parent(page);
+            }
 #if defined(__ANDROID__) || defined(DKR_IOS)
             dkr::runtime::mobile::menu(page, false, request_restart_popup, request_quit_popup);
             dkr::runtime::mobile::begin_content();
@@ -8959,11 +9130,6 @@ dkr::runtime::ui::StartupResult dkr::runtime::ui::run_startup_screen(SDL_Window*
                 sidebar_layout.item_spacing_y, sidebar_layout.action_section_gap, sidebar_layout.action_gap,
                 kSidebarOrder.size() - 3);
             ImGui::SetCursorPosY(sidebar_position.navigation);
-            if (g_page_navigation_request >= 0) {
-                page = g_page_navigation_request;
-                sidebar_selection = page;
-                g_page_navigation_request = -1;
-            }
             ImGui::PushItemFlag(ImGuiItemFlags_NoNav, true);
             ++g_race_button_sidebar;
             LibraryNavigationCheckRoute(false, page);
@@ -9111,6 +9277,9 @@ dkr::runtime::ui::StartupResult dkr::runtime::ui::run_startup_screen(SDL_Window*
             DrawLauncherFade(launch_fade, PaddockClock());
         PumpDialogJob();
         PumpSharedSaveJob();
+        if (!launch_requested && !automatic_start.active() && !online_start_pending && !OnlineModSelectionLocked() &&
+            !dkr::runtime::netplay::session().active())
+            request_cloud_sync(false);
         PumpModStoreLauncher();
         DrawTexturePackImportModal();
         DrawPaddockLegacyModImportModal();
@@ -9174,17 +9343,43 @@ dkr::runtime::ui::StartupResult dkr::runtime::ui::run_startup_screen(SDL_Window*
 #endif
         RenderLauncherDrawData(renderer, launcher_draw_data, launcher_profile, launcher_panel_cache,
                                bounded_software_return);
+        if (capture_return_frame) {
+            // Prepare the matching cover off-screen while the normal start
+            // frame stays visible. The game and launcher never share textures.
+            next_return_frame = CaptureTransitionFrame(renderer);
+            return_frame_captured = true;
+            continue;
+        }
         // SDL's software backend normally executes its queued drawing inside
         // Present. Flush only in the opt-in profiler to separate those costs.
         if (launcher_profile.enabled())
             SDL_RenderFlush(renderer);
         const auto launcher_draw_finished = std::chrono::steady_clock::now();
-        if (!launch_requested && !automatic_start.active() && !online_start_pending)
+        if (!launch_requested && !automatic_start.active() && !online_start_pending && !g_time_trial_request)
             launch_fade.clear();
-        if ((launch_requested && !automatic_start.active()) || (online_start_pending && !launch_fade.started()))
+        if (!g_time_trial_request)
+            trial_handoff_image.reset();
+        if (g_time_trial_request && launch_fade.started() && !trial_handoff_image &&
+            launch_fade.opacity(PaddockClock()) < .25F) {
+            trial_handoff_image = CaptureTransitionFrame(renderer);
+        }
+        if ((launch_requested && !automatic_start.active()) ||
+            ((online_start_pending || g_time_trial_request) && !launch_fade.started()))
             launch_fade.capture(renderer, PaddockClock());
         LibraryCaptureHandoff(renderer, launch_fade, automatic_start.active());
-        LauncherLayoutCheckCapture(renderer);
+        LauncherLayoutCheckCapture(renderer, page);
+        if (return_fade) {
+            const double now = PaddockClock();
+            if (return_fade_started < 0)
+                return_fade_started = now;
+            const double opacity = 1.0 - std::clamp((now - return_fade_started) / .24, 0.0, 1.0);
+            if (opacity > 0) {
+                SDL_SetTextureAlphaMod(return_fade.get(), static_cast<Uint8>(255 * opacity));
+                SDL_RenderCopy(renderer, return_fade.get(), nullptr, nullptr);
+            } else {
+                return_fade.reset();
+            }
+        }
         SDL_RenderPresent(renderer);
         const auto launcher_present_finished = std::chrono::steady_clock::now();
         launcher_present_microseconds += static_cast<std::uint64_t>(
@@ -9192,6 +9387,7 @@ dkr::runtime::ui::StartupResult dkr::runtime::ui::run_startup_screen(SDL_Window*
                 .count());
         ++launcher_rendered_frames;
         if (launcher_rendered_frames == 1U) {
+            dkr::runtime::platform::finish_run_return_cover();
             if (software_failure_recovery &&
                 !(SDL_GetWindowFlags(window) & (SDL_WINDOW_HIDDEN | SDL_WINDOW_MINIMIZED))) {
                 SDL_RaiseWindow(window);
@@ -9259,6 +9455,7 @@ dkr::runtime::ui::StartupResult dkr::runtime::ui::run_startup_screen(SDL_Window*
     ReleaseCharacterPortraits();
     ReleaseModStoreTextures();
     launch_fade.clear();
+    return_fade.reset();
     SDL_DestroyRenderer(renderer);
     const auto launcher_elapsed_microseconds = std::chrono::duration_cast<std::chrono::microseconds>(
                                                    std::chrono::steady_clock::now() - launcher_animation_epoch)
@@ -9335,6 +9532,28 @@ void dkr::runtime::ui::detach(RT64::Application& application) {
     }
 }
 
+bool dkr::runtime::ui::draw_replay_video_inputs(RT64::Application& application) {
+    if (application.presentQueue == nullptr || application.framebufferGraphicsWorker == nullptr)
+        return false;
+    if (application.presentQueue->inspector == nullptr)
+        attach(application);
+    auto* inspector = application.presentQueue->inspector.get();
+    if (inspector == nullptr)
+        return false;
+    inspector->newFrame(application.framebufferGraphicsWorker.get());
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4{.035F, .10F, .17F, 1.F});
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 10.F);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, {10.F, 8.F});
+    const auto state = dkr::runtime::time_trial::progress();
+    if (state.adventure != dkr::runtime::time_trial::Adventure::None)
+        DrawTimeTrialHud(true);
+    DrawReplayInputViewer(state, true);
+    ImGui::PopStyleVar(2);
+    ImGui::PopStyleColor();
+    inspector->endFrame();
+    return true;
+}
+
 void dkr::runtime::ui::draw(RT64::Application& application) {
     // Publish only an atomic value; the raster worker snapshots it into the
     // next pass's push constants. No GPU resources or samplers are rebuilt.
@@ -9345,6 +9564,9 @@ void dkr::runtime::ui::draw(RT64::Application& application) {
     if (application.presentQueue == nullptr || application.framebufferGraphicsWorker == nullptr) {
         return;
     }
+    if (dkr::runtime::time_trial::exporting_video())
+        // Capture builds only the controller overlay before each authored present.
+        return;
     PumpFriendPresence();
     if (!g_overlay_visible.load())
         LibraryCancelAnalogueCapture();
@@ -9358,6 +9580,7 @@ void dkr::runtime::ui::draw(RT64::Application& application) {
         (dkr::runtime::netplay::session().runtime_view().active &&
          dkr::runtime::netplay::session().runtime_view().state == dkr::runtime::netplay::ConnectionState::Loading);
     const bool show_overlay = g_overlay_visible.load(std::memory_order_acquire);
+    const bool show_time_trial = dkr::runtime::time_trial::active();
     const bool show_fps = g_fps_overlay_enabled && dkr::runtime::enhancements::modern_presentation_enabled();
     const bool show_crt = g_crt_enabled && g_crt_strength > 0.0F &&
                           dkr::runtime::enhancements::modern_presentation_enabled() && g_crt_filter_index >= 0 &&
@@ -9373,6 +9596,7 @@ void dkr::runtime::ui::draw(RT64::Application& application) {
         online_session_view.launch_countdown_active && online_session_view.launch_countdown_remaining_ms > 0U;
     const bool show_online_waiting = OnlineWaitingActive(online_session_view);
     const bool show_achievement_toast = AchievementToastVisible();
+    const bool show_saving_progress = !show_overlay && dkr::cloud_saves::progress_writes.visible();
     const bool show_mipmap_loading = RT64::mipLoadingVisible();
     const bool show_camera_tuning = CameraTuningVisible();
     const bool show_session_chat =
@@ -9383,11 +9607,12 @@ void dkr::runtime::ui::draw(RT64::Application& application) {
 #if defined(__ANDROID__) || defined(DKR_IOS)
         false && // Touch Menu remains available, even when all other overlays are off.
 #endif
-        !show_starting_game && !show_achievement_toast && !show_overlay && !show_fps && !show_crt &&
+        !show_starting_game && !show_achievement_toast && !show_saving_progress && !show_overlay && !show_fps &&
+        !show_crt &&
         !show_online_error && !show_online_failure_modal && !show_online_notification && !show_network &&
         !show_controller_input && !show_online_countdown && !show_online_waiting && !show_mipmap_loading &&
-        !show_camera_tuning && !show_session_chat && !keep_owned_ui && !dkr::sdk2::tools_open.load() &&
-        !dkr::sdk2::debug_available()) {
+        !show_camera_tuning && !show_session_chat && !show_time_trial && !keep_owned_ui &&
+        !dkr::sdk2::tools_open.load() && !dkr::sdk2::debug_available()) {
         if (application.presentQueue->inspector != nullptr) {
             detach(application);
         }
@@ -9402,7 +9627,8 @@ void dkr::runtime::ui::draw(RT64::Application& application) {
     if (application.presentQueue->inspector == nullptr) {
         return;
     }
-    if (show_starting_game || show_overlay || show_camera_tuning || dkr::chat::typing.load() ||
+    if (show_starting_game || show_overlay || dkr::runtime::time_trial::watching() || show_camera_tuning ||
+        dkr::chat::typing.load() ||
         dkr::runtime::invites::dialog()) {
         dkr::runtime::platform::update_ui_gamepad_navigation();
     }
@@ -9440,7 +9666,7 @@ void dkr::runtime::ui::draw(RT64::Application& application) {
         dkr::runtime::hud::set_viewport_extent(hud_viewport_width, hud_viewport_height);
     }
     ApplyStyle();
-    if (DrawRuntimeStartingGame()) {
+    if (DrawRuntimeReturningFromRun() || DrawRuntimeStartingGame()) {
         DrawOnlineFailureModal();
         if (show_online_error)
             DrawOnlineErrorNotification();
@@ -9484,7 +9710,14 @@ void dkr::runtime::ui::draw(RT64::Application& application) {
         } else if (sidebar_action == 2) {
             request_quit_popup = true;
         }
-        const bool focus_selected_page = g_overlay_focus_requested.exchange(false, std::memory_order_acq_rel);
+        bool focus_selected_page = g_overlay_focus_requested.exchange(false, std::memory_order_acq_rel);
+        if (const int requested = std::exchange(g_page_navigation_request, -1);
+            dkr::library_ui::is_content_page(requested)) {
+            focus_selected_page |= g_overlay_page.load(std::memory_order_relaxed) != requested;
+            g_overlay_page.store(requested, std::memory_order_relaxed);
+            sidebar_selection = dkr::library_ui::sidebar_parent(requested);
+            g_overlay_sidebar_selection.store(sidebar_selection, std::memory_order_release);
+        }
 #if defined(__ANDROID__) || defined(DKR_IOS)
         int mobile_page = g_overlay_page.load(std::memory_order_relaxed);
         dkr::runtime::mobile::menu(mobile_page, true, request_restart_popup, request_quit_popup);
@@ -9523,12 +9756,6 @@ void dkr::runtime::ui::draw(RT64::Application& application) {
         ImGui::SetCursorPosY(sidebar_position.navigation);
         // The sidebar is a shoulder-button rail. Excluding its widgets from
         // ImGui navigation keeps the D-pad entirely inside the content panel.
-        if (g_page_navigation_request >= 0) {
-            sidebar_selection = g_page_navigation_request;
-            g_overlay_page = sidebar_selection;
-            g_overlay_sidebar_selection.store(sidebar_selection, std::memory_order_release);
-            g_page_navigation_request = -1;
-        }
         ImGui::PushItemFlag(ImGuiItemFlags_NoNav, true);
         ++g_race_button_sidebar;
         LibraryNavigationCheckOverlayRoute();
@@ -9688,6 +9915,16 @@ void dkr::runtime::ui::draw(RT64::Application& application) {
 #endif
     DrawPinnedAchievement();
     DrawAchievementToast();
+    if (show_saving_progress)
+        DrawSavingProgress();
+    if (show_time_trial && !show_overlay) {
+        DrawTimeTrialHud();
+        if (!show_starting_game && dkr::runtime::time_trial::watching())
+            DrawReplayTheatre();
+    }
+    if (show_time_trial)
+        DrawRankedPodium();
+    DrawSpeedrunningRestartConfirmation();
     dkr::store::overlay::end();
     inspector->endFrame();
 }
@@ -9703,6 +9940,14 @@ void dkr::runtime::ui::update_camera_mouse() {
 bool dkr::runtime::ui::handle_runtime_event(SDL_Event* event) {
     if (event == nullptr) {
         return false;
+    }
+    if (dkr::runtime::time_trial::watching() && HandleTheatreInput(*event))
+        return true;
+    if (trial::restart_confirmation_pending() &&
+        ((event->type == SDL_KEYDOWN && event->key.keysym.scancode == SDL_SCANCODE_ESCAPE) ||
+         (event->type == SDL_CONTROLLERBUTTONDOWN && event->cbutton.button == SDL_CONTROLLER_BUTTON_B))) {
+        trial::confirm_restart(false);
+        return true;
     }
     if (dkr::library_ui::runtime_intro_visible.load() &&
         ((event->type == SDL_KEYDOWN && event->key.keysym.scancode == SDL_SCANCODE_ESCAPE) ||
@@ -9788,8 +10033,8 @@ bool dkr::runtime::ui::handle_runtime_event(SDL_Event* event) {
         (event->type == SDL_CONTROLLERDEVICEREMOVED ||
          (event->type == SDL_WINDOWEVENT && event->window.event == SDL_WINDOWEVENT_FOCUS_LOST)))
         dkr::runtime::hud::editor::interrupt_move();
-    if (!dkr::runtime::hud::editor::active() && event->type == SDL_KEYDOWN && event->key.repeat == 0 &&
-        event->key.keysym.scancode == SDL_SCANCODE_ESCAPE) {
+    if (!dkr::runtime::time_trial::watching() && !dkr::runtime::hud::editor::active() && event->type == SDL_KEYDOWN &&
+        event->key.repeat == 0 && event->key.keysym.scancode == SDL_SCANCODE_ESCAPE) {
         toggle_overlay();
         return true;
     }
@@ -9847,7 +10092,9 @@ bool dkr::runtime::ui::handle_runtime_event(SDL_Event* event) {
 }
 
 bool dkr::runtime::ui::input_capture_active() {
-    return dkr::library_ui::runtime_intro_visible.load() || dkr::chat::captures_game_input() ||
+    return dkr::library_ui::runtime_intro_visible.load() || dkr::runtime::time_trial::watching() ||
+           trial::restart_confirmation_pending() ||
+           dkr::chat::captures_game_input() ||
 #if defined(__ANDROID__) || defined(DKR_IOS)
            dkr::runtime::mobile::editing() ||
 #endif

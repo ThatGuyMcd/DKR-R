@@ -354,7 +354,7 @@
 
   function header() {
     const u=user();
-    return '<button type="button" class="dkr-brand" data-action="store" aria-label="DKR-R Mod Library home">'+image('logo','Diddy Kong Racing Recompiled','dkr-logo')+'<span class="dkr-brand-copy"><strong>Mod Library</strong><span>Made by the community</span></span></button><nav class="dkr-header-nav" aria-label="Main navigation"><button type="button" class="dkr-navlink" data-action="store"'+(s.view==='store'?' aria-current="page"':'')+'>Library</button><button type="button" class="dkr-navlink" data-action="online"'+(s.view==='online'?' aria-current="page"':'')+'>Online</button><button type="button" class="dkr-navlink" data-action="speedruns"'+(s.view==='speedruns'?' aria-current="page"':'')+'>Leaderboards</button><button type="button" class="dkr-navlink" data-action="request">Request a mod</button>'+externalLink(INVITE,icon('messages-square')+'Join Discord','quiet')+(isStaff()?button('moderation',icon('shield-check')+'Moderation','quiet'):'')+(u?button('account',icon('user-round')+esc(u.displayName||'My account'),'gold'):button('login',icon('user-round')+'Sign in','gold'))+'</nav>';
+    return '<button type="button" class="dkr-brand" data-action="store" aria-label="DKR-R Mod Library home">'+image('logo','Diddy Kong Racing Recompiled','dkr-logo')+'<span class="dkr-brand-copy"><strong>Mod Library</strong><span>Made by the community</span></span></button><nav class="dkr-header-nav" aria-label="Main navigation"><button type="button" class="dkr-navlink" data-action="store"'+(s.view==='store'?' aria-current="page"':'')+'>Library</button><button type="button" class="dkr-navlink" data-action="online"'+(s.view==='online'?' aria-current="page"':'')+'>Online</button><button type="button" class="dkr-navlink" data-action="speedruns"'+(s.view==='speedruns'?' aria-current="page"':'')+'>Leaderboards</button><button type="button" class="dkr-navlink" data-action="request">Request a mod</button>'+externalLink(INVITE,icon('messages-square')+'Join Discord','quiet')+(isStaff()?button('moderation',icon('shield-check')+'Moderation','quiet'):'')+'<span class="dkr-notification-slot" data-notification-slot>'+Notifications.markup()+'</span>'+(u?button('account',icon('user-round')+esc(u.displayName||'My account'),'gold'):button('login',icon('user-round')+'Sign in','gold'))+'</nav>';
   }
   function footer() { return '<span>DKR-R Mod Library <span class="dkr-muted">· Community creations, one starting grid.</span></span><div class="dkr-row"><a href="'+REPO+'" target="_blank" rel="noopener noreferrer">DKR-R project</a>'+textButton('help','Install help')+textButton('staff-login','Moderator login')+'<a href="privacy.html">Privacy</a></div>'; }
   function modcard(item) {
@@ -473,6 +473,14 @@
   }
 
   const Racing = window.DKRRacingUI.create({root, config, Auth, view:()=>s.view, user, isStaff, esc, icon, button, pagehead, requireSignedIn, go, renderIcons});
+  const Notifications = window.DKRNotificationsUI.create({
+    root, user, esc, icon, button, renderIcons,
+    read:cursor=>D.getNotifications(cursor),
+    mark:(operation,body)=>D.markNotifications(operation,body),
+    signIn:()=>go('login',{loginMode:'player',returnTo:{view:s.view}}),
+    navigate:event=>event.type === 'run' ? Racing.openRunList(event.staff ? 'review' : 'mine',event.itemId) :
+      go(event.staff ? 'review-request' : 'request-status',{requestId:event.itemId}),
+  });
 
   const Community = window.DKRCommunityUI.create({root,state:()=>s,store:()=>D,esc,icon,button,banner,empty,categories:C.categories,category,image,dateText,user,isStaff,render,go,flash,perform});
 
@@ -758,7 +766,7 @@
       }
     }
     if(Auth&&Auth.signoutPending&&!Auth.completionWindow){main.insertAdjacentHTML('afterbegin',banner(esc(Auth.signoutWarning||'Sign-out could not be confirmed. Reconnect and finish signing out to remove remembered access from this device.')+'<div class="dkr-spaced">'+button('retry-signout','Finish signing out','quiet')+'</div>','error'));}
-    renderIcons();applyBusy();if(focus)focusPage();Community.mounted();Racing.mounted();
+    renderIcons();applyBusy();if(focus)focusPage();Community.mounted();Racing.mounted();Notifications.mounted();
   }
   async function go(view,data,refresh) {
     if(view!==s.view){captureListingForm();if(Uploads&&Uploads.state.running&&uploadMatchesContext(uploadTarget,false))Uploads.pause();s.uploadOpenKind='';s.uploadJobsShown=false;s.uploadError='';s.uploadConnection='';}
@@ -811,6 +819,7 @@
     try {
       if(await workflowAction(action,id,target))return;
       if(await Racing.action(action,id,target))return;
+      if(await Notifications.action(action,id))return;
       if(action==='store'){await go('store');return;}
       if(action==='category'){s.category=id;s.tag='all';s.limit=6;s.view='store';clearFlash();render();restoreFocus(action,id);return;}
       if(action==='tag'){s.tag=id;s.limit=6;clearFlash();render();restoreFocus(action,id);return;}

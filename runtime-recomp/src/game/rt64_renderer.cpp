@@ -8,6 +8,8 @@
 #include "online_stability/battle_view.hpp"
 #include "vehicle_binding.hpp"
 #include "rt64_renderer.hpp"
+#include "time_trial/session.hpp"
+#include "time_trial/theatre_frames.hpp"
 #include "camera_rt64.hpp"
 #include "revision_addresses.hpp"
 #include "netplay/online_input_broker.hpp"
@@ -524,7 +526,7 @@ dkr::runtime::RT64Renderer::RT64Renderer(std::uint8_t* rdram, ultramodern::rende
         // PresentEarly uses historical VIs during DL decode and ignores the
         // explicit updateScreen below. That native scheduler policy must not
         // choose an obsolete buffer after an owned scene/rollback boundary.
-        application_->enhancementConfig.presentation.mode = PresentationMode(owned_mode_);
+        application_->enhancementConfig.presentation.mode = PresentationMode(owned_mode_ || time_trial::exporting_video());
         dkr::runtime::startup_performance::report("rt64-application-create", application_started_at);
     };
     create_application();
@@ -707,7 +709,7 @@ bool dkr::runtime::RT64Renderer::update_config(const ultramodern::renderer::Grap
 void dkr::runtime::RT64Renderer::enable_instant_present() {
     std::scoped_lock presentation_lock(presentation_mutex_);
     if (application_ != nullptr) {
-        application_->enhancementConfig.presentation.mode = PresentationMode(owned_mode_);
+        application_->enhancementConfig.presentation.mode = PresentationMode(owned_mode_ || time_trial::exporting_video());
         application_->updateEnhancementConfig();
     }
 }
@@ -722,9 +724,29 @@ void dkr::runtime::RT64Renderer::send_dl(const OSTask* task, std::uint8_t* rdram
 #else
     std::scoped_lock presentation_lock(presentation_mutex_);
 #endif
-    if (application_ == nullptr || rdram_snapshot == nullptr) {
+    if (application_ == nullptr || rdram_snapshot == nullptr)
         return;
+    if (time_trial::watching()) {
+        if (const auto stamp = time_trial::theatre_graphics_stamp(task->t.data_ptr)) {
+            if (!theatre_frames_)
+                theatre_frames_ = std::make_unique<time_trial::TheatreFrames>(time_trial::exporting_full_game_video());
+            if (theatre_frames_->append(*task, *stamp,
+                                        std::span<const std::uint8_t, time_trial::TheatreFrames::ImageBytes>(
+                                            rdram_snapshot, time_trial::TheatreFrames::ImageBytes))) {
+                time_trial::theatre_buffered(stamp->progress.updates);
+            } else {
+                time_trial::theatre_archive_error();
+            }
+            return;
+        }
+        if (theatre_frames_)
+            return;
     }
+    render_dl_locked(task, rdram_snapshot);
+}
+
+void dkr::runtime::RT64Renderer::render_dl_locked(const OSTask* task, std::uint8_t* rdram_snapshot,
+                                                  const presentation::ReplayPresentation* replay) {
     ApplyDisplayRequest(*application_, true);
     dkr::runtime::telemetry::record_graphics_task();
     RT64::MipWaitFeedbackScope mipFeedback([this] { present_mipmap_loading(*application_); });
@@ -733,7 +755,7 @@ void dkr::runtime::RT64Renderer::send_dl(const OSTask* task, std::uint8_t* rdram
     // them. DKR relies on that during scene transitions and can free texture
     // allocations while the host graphics queue is still pending. Parse this
     // task from the submission-time snapshot, then restore live RDRAM for VI.
-    dkr::runtime::presentation::TaskIdentityScope identity_scope(rdram_snapshot, task->t.data_ptr);
+    dkr::runtime::presentation::TaskIdentityScope identity_scope(rdram_snapshot, task->t.data_ptr, replay);
     const bool detail_requested = enhancements::maximum_detail_enabled() && !detail::ordinary_events().empty();
     std::uint8_t* decode_bytes = rdram_snapshot;
     const bool camera_requested = bool(camera::activation());
@@ -749,6 +771,15 @@ void dkr::runtime::RT64Renderer::send_dl(const OSTask* task, std::uint8_t* rdram
     render_provenance::Scope provenance(
         {rdram_snapshot, 0x800000}, {decode_bytes, decode_bytes == rdram_snapshot ? 0x800000U : camera_decoder_.size()},
         task->t.data_ptr);
+    online_view::Pass* ghost_names = nullptr;
+    if (!replay) {
+        if (auto ghost = time_trial::ghost_nameplate(rdram_snapshot)) {
+            if (!ghost_nameplate_pass_)
+                ghost_nameplate_pass_ = std::make_unique<online_view::Pass>();
+            ghost_nameplate_pass_->prepare_ghost(std::move(*ghost), camera_decoder_, presentation::task_scene_generation());
+            ghost_names = ghost_nameplate_pass_.get();
+        }
+    }
     static std::atomic_flag provenance_notice = ATOMIC_FLAG_INIT;
     if (!provenance_notice.test_and_set(std::memory_order_relaxed))
         std::fprintf(
@@ -803,18 +834,18 @@ void dkr::runtime::RT64Renderer::send_dl(const OSTask* task, std::uint8_t* rdram
 #if defined(__ANDROID__)
             {
                 android_frame_budget::Scope decodeTiming(android_frame_budget::Region::Decoder);
-                f3ddkr_.process(*application_, *task, nullptr, nullptr, detail_requested ? &ordinary_models : nullptr,
+                f3ddkr_.process(*application_, *task, nullptr, ghost_names, detail_requested ? &ordinary_models : nullptr,
                                 camera_requested ? camera_pass_.get() : nullptr);
             }
             android_frame_budget::report();
 #else
-        f3ddkr_.process(*application_, *task, nullptr, nullptr, detail_requested ? &ordinary_models : nullptr,
+        f3ddkr_.process(*application_, *task, nullptr, ghost_names, detail_requested ? &ordinary_models : nullptr,
                         camera_requested ? camera_pass_.get() : nullptr);
 #endif
             record_track_performance(rdram_snapshot, start);
         } else {
             track_capture_.count = 0; // A later opt-in capture must not span the idle gap.
-            f3ddkr_.process(*application_, *task, nullptr, nullptr, detail_requested ? &ordinary_models : nullptr,
+            f3ddkr_.process(*application_, *task, nullptr, ghost_names, detail_requested ? &ordinary_models : nullptr,
                             camera_requested ? camera_pass_.get() : nullptr);
         }
 #if defined(__ANDROID__)
@@ -892,6 +923,84 @@ void dkr::runtime::RT64Renderer::record_track_performance(std::uint8_t* snapshot
     capture.count = 0U;
 }
 
+bool dkr::runtime::RT64Renderer::present_theatre_frame(std::chrono::steady_clock::time_point now) {
+    if (!theatre_frames_ || !theatre_frames_->last() || !time_trial::watching())
+        return false;
+    if (time_trial::theatre_take_audio_reset())
+        platform::clear_theatre_audio();
+    const auto next = time_trial::theatre_next_frame(now);
+    if (!next)
+        return false;
+    const auto* packet = theatre_frames_->load(*next);
+    if (!packet) {
+        time_trial::theatre_archive_error();
+        return false;
+    }
+    const auto previous = time_trial::progress().updates;
+    if (!time_trial::theatre_presented(packet->stamp.progress, *next))
+        return false;
+
+    auto& origin = *application_->core.VI_ORIGIN_REG;
+    const auto live = origin;
+    if (time_trial::exporting_video()) {
+        if (!ui::draw_replay_video_inputs(*application_)) {
+            time_trial::theatre_archive_error();
+            return false;
+        }
+
+        // Bind the archived display list and exact VI to this capture interval.
+        // Let the dedicated present thread hand off each swap independently.
+        origin = presentation::retail_ntsc_vi_origin(packet->stamp.framebuffer);
+        const auto vi = [&] {
+            CanonicalViPresentationScope vi_scope(*application_);
+            return application_->core.decodeVI();
+        }();
+        origin = live;
+        struct Capture {
+            unsigned frame;
+            unsigned pictures = 0;
+            bool ok = true;
+        } result{*next};
+        RT64::PresentQueue::OfflineCapture capture{
+            *next * 2 - 1, &result,
+            [](void* context, std::uint32_t index) {
+                auto& result = *static_cast<Capture*>(context);
+                result.ok = result.ok && index == result.pictures && time_trial::export_video_picture(result.frame, index);
+                ++result.pictures;
+            }};
+        auto& queue = *application_->presentQueue;
+        queue.offlineCapture.store(&capture, std::memory_order_release);
+        application_->state->offlineCaptureVI = &vi;
+        render_dl_locked(&packet->task, theatre_frames_->image(), packet->stamp.sidecar.get());
+        application_->state->updateScreen(vi, true);
+        queue.waitForPresentId(application_->state->presentId);
+        queue.waitForIdle();
+        application_->state->offlineCaptureVI = nullptr;
+        queue.offlineCapture.store(nullptr, std::memory_order_release);
+
+        if (!result.ok || !result.pictures || !time_trial::export_video_audio(*next, time_trial::theatre_take_audio())) {
+            time_trial::theatre_archive_error();
+            return false;
+        }
+        return true;
+    }
+
+    render_dl_locked(&packet->task, theatre_frames_->image(), packet->stamp.sidecar.get());
+    origin = presentation::retail_ntsc_vi_origin(packet->stamp.framebuffer);
+    {
+        CanonicalViPresentationScope vi_scope(*application_);
+        application_->updateScreen();
+    }
+    origin = live;
+    dkr::runtime::ui::draw(*application_);
+    if (time_trial::theatre_take_audio_reset())
+        platform::clear_theatre_audio();
+    auto samples = time_trial::theatre_take_audio();
+    if (!samples.empty() && *next > previous)
+        platform::queue_theatre_audio(samples, time_trial::theatre().speed, previous, *next);
+    return true;
+}
+
 void dkr::runtime::RT64Renderer::update_screen() {
 #if defined(__ANDROID__)
     if (dkr::runtime::graphics_health::failed())
@@ -915,6 +1024,7 @@ void dkr::runtime::RT64Renderer::update_screen() {
             application_->sharedQueueResources->totalPresentations.load(std::memory_order_relaxed);
         if (completed > 0 && !first_successful_presentation_reported_) {
             first_successful_presentation_reported_ = true;
+            dkr::runtime::platform::startup_frame_presented();
 #if defined(__ANDROID__)
             dkr::runtime::graphics_health::first_presentation.store(true);
 #endif
@@ -960,6 +1070,10 @@ void dkr::runtime::RT64Renderer::update_screen() {
     // the settings UI from mutating renderer-owned caches concurrently.
     dkr::runtime::texture_packs::apply_pending(*application_,
                                                dkr::runtime::enhancements::modern_presentation_enabled());
+    if (theatre_frames_ && theatre_frames_->last() && time_trial::watching()) {
+        present_theatre_frame(std::chrono::steady_clock::now());
+        return;
+    }
     {
         CanonicalViPresentationScope vi_scope(*application_);
         application_->updateScreen();
@@ -971,7 +1085,8 @@ void dkr::runtime::RT64Renderer::update_screen() {
     // next overlay frame after the game present keeps UI work out of the
     // original graphics-completion critical section.
     dkr::runtime::ui::draw(*application_);
-    last_wait_presentation_ = std::chrono::steady_clock::now();
+    if (!time_trial::theatre_holding_frame())
+        last_wait_presentation_ = std::chrono::steady_clock::now();
     observed_wait_generation_ = dkr::runtime::netplay::online_wait_generation();
     observed_overlay_visible_ = dkr::runtime::ui::overlay_visible();
 }
@@ -982,13 +1097,22 @@ void dkr::runtime::RT64Renderer::service_online_wait_presentation() {
         return;
 #endif
     constexpr auto kWaitPresentationInterval = std::chrono::milliseconds(33);
-    if (!dkr::runtime::netplay::online_wait_active()) {
+    const bool waiting = dkr::runtime::netplay::online_wait_active();
+    const bool replay = time_trial::watching();
+    const bool restart = time_trial::restart_confirmation_pending();
+    if (!waiting && !replay && !restart) {
         wait_replay_deferred_logged_ = false;
         return;
     }
 
     std::unique_lock presentation_lock(presentation_mutex_, std::try_to_lock);
     if (!presentation_lock.owns_lock())
+        return;
+    if (application_ && present_theatre_frame(std::chrono::steady_clock::now()))
+        return;
+    if (time_trial::exporting_video())
+        return;
+    if (replay && !waiting && !time_trial::theatre_holding_frame() && !time_trial::theatre().buffering)
         return;
     const bool queue_ready = application_ != nullptr && application_->state != nullptr &&
                              application_->workloadQueue != nullptr && application_->presentQueue != nullptr &&
@@ -1053,7 +1177,7 @@ void dkr::runtime::RT64Renderer::service_online_wait_presentation() {
         application_->state->debuggerInspector.paused = previous_pause;
         const auto replay_elapsed =
             std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - replay_started);
-        if (replay_elapsed >= std::chrono::milliseconds(50) && replay_elapsed > slowest_wait_replay_) {
+        if (waiting && replay_elapsed >= std::chrono::milliseconds(50) && replay_elapsed > slowest_wait_replay_) {
             slowest_wait_replay_ = replay_elapsed;
             netplay::failure_recorder().record(netplay::FailureEventKind::ProgressWatchdog, 0U,
                                                static_cast<std::uint32_t>(replay_elapsed.count()), 0U,

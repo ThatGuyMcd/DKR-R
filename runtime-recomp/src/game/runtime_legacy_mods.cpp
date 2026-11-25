@@ -9,6 +9,7 @@
 #include "custom_records.hpp"
 #include "runtime_legacy_mods.hpp"
 #include "achievements.hpp"
+#include "time_trial/session.hpp"
 #include "vehicle_binding.hpp"
 #include "vehicle_world.hpp"
 #include "vehicle_lighting/road_wheels.h"
@@ -1950,7 +1951,7 @@ void install(legacy::ModWorld& world, std::uint8_t* ram) {
 
 extern "C" void dkr_achievements_observe(std::uint8_t* ram, unsigned revision) noexcept {
     using namespace dkr::runtime;
-    if (achievements::online_session())
+    if (achievements::online_session() || time_trial::preparing_ghost())
         return;
     try {
         auto sample = achievements::capture(ram, legacy::guest_memory_size(), revision);

@@ -2,9 +2,10 @@ const char* SessionModsCaption(bool enabled) {
     return enabled ? "Session mods: ON" : "Session mods: OFF";
 }
 constexpr float kPlayToolHeight = 40.F, kPlayToolGap = 8.F;
-void DrawPlayTools(float width) {
+void DrawPlayTools(float width, bool live) {
+    const char* speedrun_label = live ? "Leaderboards###play-leaderboards" : "Speedrunning###play-leaderboards";
     const std::array widths{PaddockImportButtonWidth("Achievements", true),
-                            PaddockImportButtonWidth("Leaderboards", true),
+                            PaddockImportButtonWidth(speedrun_label, true),
                             std::max(PaddockImportButtonWidth(SessionModsCaption(true), true),
                                      PaddockImportButtonWidth(SessionModsCaption(false), true)),
                             PaddockImportButtonWidth("Save Manager", true)};
@@ -26,7 +27,7 @@ void DrawPlayTools(float width) {
     };
     if (draw(0, "Achievements###play-achievements", 1))
         g_page_navigation_request = kPageAchievements;
-    if (draw(1, "Leaderboards###play-leaderboards", 4))
+    if (draw(1, speedrun_label, 4))
         g_page_navigation_request = dkr::library_ui::LeaderboardsPage;
     const bool enabled = dkr::session_content::next_enabled.load();
     const auto caption = std::string(SessionModsCaption(enabled)) + "###play-session-mods";
@@ -38,9 +39,4 @@ void DrawPlayTools(float width) {
         g_page_navigation_request = kPageSaveManager;
     ImGui::SetCursorScreenPos(at);
     ImGui::Dummy({width, float(rows) * kPlayToolHeight + float(rows - 1) * kPlayToolGap});
-}
-void DrawPlayToolBack(float) {
-    if (PaddockTextLink("Back to Play"))
-        g_page_navigation_request = kPagePlay;
-    PaddockGap(16.F);
 }

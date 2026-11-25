@@ -1,5 +1,35 @@
 # DKR-R changelog
 
+## 1.0.16 playtest 5 — 2026-11-25
+
+- Browse Achievements in the Badge Gallery with search, filters and individual
+  badge details.
+- Use the standard launcher tabs in Save Manager. Progress shows every editing
+  tool, including the Max Out actions. Files groups transfer and recovery tools.
+
+## 1.0.16 playtest 4 — 2026-11-25
+
+- Put Adventure slots beside the editor in Save Manager for both Vanilla and
+  Modded saves. Keep Progress, Unlocks, Records and Files in a single workspace.
+- Keep Apply Changes and Discard Changes visible while the editor scrolls.
+  Vanilla and Modded saves keep separate drafts, backups and Cloud Saves slots.
+
+## 1.0.16 playtest 3 — 2026-11-24
+
+- Give Speedrunning Options its own tab under Runs. Arrange related settings
+  across the available width and show HUD changes over an Ancient Lake
+  gameplay screenshot.
+- Enable Cloud Saves for signed-in players. The Play tab can turn sync on or
+  off beside the active save. Select the cloud icon to sync and check its status.
+- Use the cloud save when devices diverge and keep the replaced copy in local
+  save history. A device can upload progress made from the current cloud save.
+- Refresh Cloud Saves before a new Online lobby chooses its save. Sync again
+  when returning to the launcher, including hosted progress in an open lobby.
+- Show a brief Saving Progress indicator after a game save. Send changes to
+  cloud-synced saves in the background once the local write succeeds.
+- Give Session Mods its own Adventure save and sync it separately from Vanilla.
+  Existing Adventure progress stays in the Vanilla save.
+
 ## 1.0.16 playtest 1 — 2026-11-17
 
 - Bring our online work onto the latest contributor code. Keep the upstream

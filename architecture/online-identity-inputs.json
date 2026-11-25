@@ -42,7 +42,7 @@
     "patches/n64recomp/0003-null-statement-before-instruction-hooks.patch": "f864ffd285ff4b09f2a3f4e453e5f0e5b2c39e345bc05dd88f47a46b01d3dac7",
     "runtime-recomp/dkr.us.v77.recomp-policy.json": "c4deefd55aca1dc1af1391a86d5df366624dabed2827a0fab055e8ffad8cd702",
     "runtime-recomp/dkr.us.v80.recomp-policy.json": "b8a89ed014f6e6a7f1113adf72fe8c92b1f8cf8323ac4c35de00a258c28adb9b",
-    "runtime-recomp/guest-hooks/hooks.toml": "8a59c63567639bfc4b27f0eb7c83d9a8c3846e09d88b4021eb18d77c864761f8",
+    "runtime-recomp/guest-hooks/hooks.toml": "a1e443751fe3e39876ae843992e9b3a2a79956e5d4fb152ce4c36821d153f98e",
     "runtime-recomp/legacy-character-menu.v77.recomp-fragment.json": "82db39e16f1e30eff1851d74eaf443cd962a2b65517d95f531f4cc0924357ce0",
     "runtime-recomp/legacy-character-menu.v80.recomp-fragment.json": "36a304eca1e8e889216e931b52a1838b993261bb16e39c2372731b8dad6afb90",
     "runtime-recomp/legacy-characters.v77.recomp-fragment.json": "bf7c193ef8c7c3737720da9bec4c8c9fe4e2eb13b92d2b8b50e68ebba7f93274",
@@ -108,11 +108,11 @@
     "runtime-recomp/src/game/party_release.hpp": "0f364dfe23f991223547679858ca894056974d891040527a2c6e0ea6065e3676",
     "runtime-recomp/src/game/party_runtime.cpp": "bc72a11cf8e128929e60184a90f3e028600b28ec005f8501ccdadaf582b0ebeb",
     "runtime-recomp/src/game/party_runtime.hpp": "f71d5b873f71fd24000c43833171967fa40860468f2ee6f50367ac1c1c60b404",
-    "runtime-recomp/src/game/runtime_save_routing.cpp": "837917b9ede8d0f9cadd86edaa325da50c7e88a6c34242758f18228112737890",
-    "runtime-recomp/src/game/runtime_save_routing.hpp": "cb3ae802050f29e38def0d42c60c01345be2cc46a515a95e9c50d49a06cf6879",
-    "runtime-recomp/src/game/save_manager.cpp": "e9f129814e79576fd2369c19734d83aeff04c979068ce2cf204998f3e278f662",
-    "runtime-recomp/src/game/save_manager.hpp": "c004fb91343bebc9afb2361f4d4988cd28603ff94830d98daf2f01542053801c",
-    "runtime-recomp/src/game/save_storage.hpp": "ca3a5457b5f7a6341473661e10a662fa590f64bf240053648a4a120a7838bc78",
+    "runtime-recomp/src/game/runtime_save_routing.cpp": "5ff3de1c1cec5b401b5a83348845621690e839922617a44681fc4323c9e0a297",
+    "runtime-recomp/src/game/runtime_save_routing.hpp": "ede6f9dbaaefa85a66b795434290d996563380b3292612e33680fe891ff956ea",
+    "runtime-recomp/src/game/save_manager.cpp": "f0b6978a8656cc610a783fb2cbce1a4aa20701d92e4d438529af5bf9fcc6549e",
+    "runtime-recomp/src/game/save_manager.hpp": "c500856477ae48fc35b4894469a7d6b55c0785a416a3ba6b0401701ed6315037",
+    "runtime-recomp/src/game/save_storage.hpp": "15051bb636fdc60535c3b2a3e9daa93d47496b1b27a063b483ceb1969140ff1a",
     "runtime-recomp/src/game/track_select_draw_guest.h": "053e11b284c433b88b19470534003519ad3d16bc3e625ce4bcc2b5f4f172041e",
     "runtime-recomp/symbols/achievement_symbols.toml": "565d8e8c96549fc69e47d741753766e535187241275b87d54b546cd133df69f2",
     "runtime-recomp/symbols/audio_queue_symbols.toml": "6f0a404ec4901866bb680d02c37f19ecabf81b2e3079e046eac7d52b345bee8e",
@@ -134,6 +134,7 @@
     "runtime-recomp/symbols/revision_addresses.toml": "f86967949aaa21cae2a2ef804968e7d6341c6d771ff8a4afd197dfbebf872d97",
     "runtime-recomp/symbols/scenery_symbols.toml": "d291719ffa176a7073de3e6c48fa4cff73584cedb8e0d8a2ceda2be72dbe4f14",
     "runtime-recomp/symbols/startup_symbols.toml": "e4bf2f3fc699742f73ad2ac84445e0651b480bef53f26675454a7090d91ef7d2",
+    "runtime-recomp/symbols/time_trial_symbols.toml": "cff8034acdb874dc87e28432e557d98845d72e66d97a6c136106817cdb3a89e2",
     "runtime-recomp/symbols/title_text_symbols.toml": "e0ae1ea2c67d97949bfc3b51776fa7b874b1fac2d63d5351d2897a8a5103b354",
     "runtime-recomp/symbols/vehicle_symbols.toml": "2582392e1618d17eaebfb721ea046918acb524fe025dcba94aa5d6ab5886992f",
     "runtime-recomp/symbols/water_symbols.toml": "dcfb86d7645abda20caa1fea159db4b064f32246589979e6c10653ac91ce4484",
@@ -207,6 +208,6 @@
   },
   "last_update": {
     "identity_changed": false,
-    "reason": "Add bounded checkpoint delivery diagnostics only; no message format, simulation, admission or queue policy changes."
+    "reason": "The offline save editor now selects Vanilla or Modded Adventure. The online path, seeds, guest data and simulation are unchanged."
   }
 }

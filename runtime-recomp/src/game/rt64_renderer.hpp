@@ -26,6 +26,15 @@ class Registration;
 } // namespace dkr::runtime::netplay::experimental
 
 namespace dkr::runtime {
+namespace presentation {
+struct ReplayPresentation;
+}
+namespace time_trial {
+class TheatreFrames;
+}
+namespace online_view {
+class Pass;
+}
 struct OwnedDecodeScratch;
 namespace camera {
 class RenderPass;
@@ -63,6 +72,10 @@ class RT64Renderer final : public ultramodern::renderer::RendererContext {
 #endif
 
   private:
+    void render_dl_locked(const OSTask* task, std::uint8_t* rdram_snapshot,
+                          const presentation::ReplayPresentation* replay = nullptr);
+    bool present_theatre_frame(std::chrono::steady_clock::time_point now);
+    std::unique_ptr<time_trial::TheatreFrames> theatre_frames_;
     void record_track_performance(std::uint8_t* snapshot, track_performance::Clock::time_point start);
     track_performance::Capture track_capture_{};
     std::chrono::steady_clock::time_point last_android_report_{};
@@ -70,6 +83,7 @@ class RT64Renderer final : public ultramodern::renderer::RendererContext {
     std::unique_ptr<RT64::Application> application_;
     F3DDKRRT64Bridge f3ddkr_;
     std::unique_ptr<camera::RenderPass> camera_pass_;
+    std::unique_ptr<online_view::Pass> ghost_nameplate_pass_;
     std::vector<std::uint8_t> camera_decoder_;
     std::uint64_t present_count_ = 0;
     std::uint64_t interpolated_present_count_ = 0;

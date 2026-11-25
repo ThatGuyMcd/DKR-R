@@ -1,0 +1,155 @@
+diff --git a/src/hle/rt64_present_queue.cpp b/src/hle/rt64_present_queue.cpp
+--- a/src/hle/rt64_present_queue.cpp
++++ b/src/hle/rt64_present_queue.cpp
+@@ -96,6 +96,7 @@
+         FramebufferManager &fbManager = ext.sharedResources->framebufferManager;
+         RenderTargetManager &targetManager = ext.sharedResources->renderTargetManager;
+         const bool usingMSAA = (targetManager.multisampling.sampleCount > 1);
++        const auto *capture = offlineCapture.load(std::memory_order_acquire);
+         hlslpp::float2 resolutionScale;
+         EnhancementConfiguration::Presentation::Mode presentationMode;
+         bool removeBlackBorders;
+@@ -363,6 +364,16 @@
+                         inspector->draw(commandList);
+                     }
+                     
++                    if (capture != nullptr) {
++                        const uint32_t tag = capture->firstTag + i;
++                        const int32_t width = static_cast<int32_t>(ext.swapChain->getWidth());
++                        const int32_t height = static_cast<int32_t>(ext.swapChain->getHeight());
++                        const RenderRect rect(width - 4, height - 4, width, height);
++                        const RenderColor color((tag & 255U) / 255.0f, ((tag >> 8) & 255U) / 255.0f,
++                            (0xA5U ^ (tag >> 16)) / 255.0f);
++                        commandList->clearColor(0, color, &rect, 1);
++                    }
++
+                     commandList->barriers(RenderBarrierStage::NONE, RenderTextureBarrier(swapChainTexture, RenderTextureLayout::PRESENT));
+                     commandList->end();
+                     const RenderCommandList *commandList = ext.presentGraphicsWorker->commandList.get();
+@@ -413,6 +424,9 @@
+                 if (swapChainValid && (framesToPresent > 1) && ((i + 1) < framesToPresent)) {
+                     ext.sharedResources->totalInterpolatedPresentations.fetch_add(
+                         1, std::memory_order_relaxed);
++                }
++                if (swapChainValid && (capture != nullptr)) {
++                    capture->presented(capture->context, static_cast<uint32_t>(i));
+                 }
+             }
+         }
+diff --git a/src/hle/rt64_present_queue.h b/src/hle/rt64_present_queue.h
+--- a/src/hle/rt64_present_queue.h
++++ b/src/hle/rt64_present_queue.h
+@@ -58,6 +58,14 @@
+         VIHistory viHistory;
+         bool presentWaitEnabled = false;
+ 
++        // A synchronous capture consumer reads each tagged swap before the next one can overwrite it.
++        struct OfflineCapture {
++            uint32_t firstTag;
++            void *context;
++            void (*presented)(void *context, uint32_t index);
++        };
++        std::atomic<OfflineCapture *> offlineCapture{ nullptr };
++
+         PresentQueue();
+         ~PresentQueue();
+         void reset();
+diff --git a/src/hle/rt64_state.cpp b/src/hle/rt64_state.cpp
+--- a/src/hle/rt64_state.cpp
++++ b/src/hle/rt64_state.cpp
+@@ -1781,7 +1781,21 @@
+         const bool presentEarly = !ext.presentQueue->viewRDRAM && (ext.enhancementConfig->presentation.mode == EnhancementConfiguration::Presentation::Mode::PresentEarly);
+         workload.earlyPresentApproved = false;
+         workload.earlyPresentColorAddress = 0;
+-        if (presentEarly && (workload.fbPairCount > 0)) {
++        if ((offlineCaptureVI != nullptr) && offlineCaptureVI->visible()) {
++            const VI &vi = *offlineCaptureVI;
++            for (int32_t f = workload.fbPairCount - 1; f >= 0; f--) {
++                const FramebufferPair &pair = workload.fbPairs[f];
++                if ((pair.colorImage.address == vi.fbAddress()) &&
++                    (pair.colorImage.width == vi.fbSize().x) && (pair.colorImage.siz == vi.fbSiz()) &&
++                    pair.earlyPresentCandidate())
++                {
++                    workload.earlyPresentApproved = true;
++                    workload.earlyPresentColorAddress = pair.colorImage.address;
++                    break;
++                }
++            }
++        }
++        else if (presentEarly && (workload.fbPairCount > 0)) {
+             thread_local std::unordered_set<uint32_t> approvalColorImageAddressSet;
+             approvalColorImageAddressSet.clear();
+ 
+@@ -1963,7 +1977,11 @@
+             // CPU changes directly to it and recreating them in the render thread at low resolution.
+             RenderWorker *worker = ext.framebufferGraphicsWorker;
+             Framebuffer *screenFb = framebufferManager.find(screenFbAddress);
+-            if (screenFb != nullptr) {
++            // The archived replay's matched framebuffer already contains this
++            // presentation. Live RDRAM belongs to the replay producer and
++            // must not overwrite the first RT64 target in the capture pair.
++            const bool replayColorTarget = (offlineCaptureVI != nullptr) && !present.colorImageAddresses.empty();
++            if ((screenFb != nullptr) && !replayColorTarget) {
+                 // Check compatibility of the high resolution framebuffer with the VI first.
+                 // Ensure both the siz and width are the same.
+                 if ((screenFbSize.x == screenFb->width) && (screenFbSiz == screenFb->siz)) {
+diff --git a/src/hle/rt64_state.h b/src/hle/rt64_state.h
+--- a/src/hle/rt64_state.h
++++ b/src/hle/rt64_state.h
+@@ -148,6 +148,8 @@
+         void fullSyncFramebufferPairTiles(Workload &workload, FramebufferPair &fbPair, uint32_t &loadOpCursor, uint32_t &rdpTileCursor);
+         void listProcessBegin();
+         void listProcessEnd();
++        // The replay archive owns its VI rather than deriving it from display history.
++        const VI *offlineCaptureVI = nullptr;
+         void updateScreen(const VI &newVI, bool fromEarlyPresent);
+         void updateMultisampling();
+         void inspect();
+diff --git a/src/hle/rt64_workload_queue.cpp b/src/hle/rt64_workload_queue.cpp
+--- a/src/hle/rt64_workload_queue.cpp
++++ b/src/hle/rt64_workload_queue.cpp
+@@ -222,7 +222,8 @@
+             workloadConfig.targetRate = ext.sharedResources->userConfig.refreshRateTarget;
+ 
+             // Limit the target rate to the rate detected by the swap chain.
+-            if ((ext.sharedResources->swapChainRate > 0) && (workloadConfig.targetRate > ext.sharedResources->swapChainRate)) {
++            if ((ext.presentQueue->offlineCapture.load(std::memory_order_acquire) == nullptr) &&
++                (ext.sharedResources->swapChainRate > 0) && (workloadConfig.targetRate > ext.sharedResources->swapChainRate)) {
+                 workloadConfig.targetRate = ext.sharedResources->swapChainRate;
+             }
+ 
+@@ -916,6 +917,7 @@
+                 ElapsedTimer workloadTimer;
+                 workloadProfiler.start();
+                 threadConfigurationUpdate(workload.viFbSize, workloadConfig);
++                const bool offlineCapture = ext.presentQueue->offlineCapture.load(std::memory_order_acquire) != nullptr;
+ 
+                 // FIXME: This is a very hacky way to find out if we need to advance the frame if the workload was paused for the first time.
+                 if (!workload.paused || (!gameFrames[curFrameIndex].workloads.empty() && (gameFrames[curFrameIndex].workloads[0] != (uint32_t)processCursor))) {
+@@ -1019,7 +1021,7 @@
+                     displayFrames = uint32_t((logicalTicks - displayTicks) / workload.viOriginalRate);
+                     deltaTimeMs = 1.0f / float(workloadConfig.targetRate);
+ 
+-                    if ((displayFrames > 1) && frameReduction) {
++                    if (!offlineCapture && (displayFrames > 1) && frameReduction) {
+                         displayTicks += workload.viOriginalRate;
+                         displayFrames--;
+                         frameReduction = false;
+@@ -1081,7 +1083,7 @@
+                 int64_t renderTimeTotalMicro = 0;
+                 for (uint32_t frame = 0; (frame < displayFrames) && !skipWorkloadNow; frame++) {
+                     // Evaluate if this frame should be skipped. Measure the current time and compare it to what frame is estimated should be have been rendered by now.
+-                    if ((frame > 0) && (originalTimeMicro > 0)) {
++                    if (!offlineCapture && (frame > 0) && (originalTimeMicro > 0)) {
+                         const int64_t currentTimeMicro = workloadTimer.elapsedMicroseconds() - setupTimeMicro;
+                         const int64_t expectedTimeMicro = frame * maxTimePerFrameMicro;
+                         const int64_t measuredFrameMicro = renderTimeTotalMicro / framesRendered;
+@@ -1147,7 +1149,7 @@
+                     if (generateInterpolatedFrames && (usingMSAA || (frame > 0))) {
+                         {
+                             std::scoped_lock<std::mutex> cursorLock(cursorMutex);
+-                            skipWorkloadNow = ((frame + 1) < displayFrames) && (writeCursor != threadCursor);
++                            skipWorkloadNow = !offlineCapture && ((frame + 1) < displayFrames) && (writeCursor != threadCursor);
+                         }
+ 
+                         {

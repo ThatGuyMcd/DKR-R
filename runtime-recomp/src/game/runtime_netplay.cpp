@@ -22,6 +22,7 @@
 #include "online_roster_policy.hpp"
 #include "magic_code_policy.hpp"
 #include "presentation_random_policy.hpp"
+#include "time_trial/session.hpp"
 #include "revision_addresses.hpp"
 #include "runtime_magic_codes.hpp"
 #include "runtime_platform.hpp"
@@ -1962,7 +1963,8 @@ bool physical_input_poll_allowed() {
 
 void begin_presentation_random_scope() {
     const RuntimeSessionView view = g_session.runtime_view();
-    if (host_authority_requested(view) && g_rollback_gameplay_ready.load(std::memory_order_acquire)) {
+    if (time_trial::active() ||
+        (host_authority_requested(view) && g_rollback_gameplay_ready.load(std::memory_order_acquire))) {
         ++g_presentation_random_scope_depth;
     }
 }

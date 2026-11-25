@@ -238,6 +238,10 @@
         {
           "path": "patches/rt64/0021-macos-runtime-msl-shaders.patch",
           "sha256": "2916492f9aefa6fccbe9bcf664ef30624f310f11be3f807305ce5ee819adf736"
+        },
+        {
+          "path": "patches/rt64/0022-offline-replay-present-capture.patch",
+          "sha256": "d123d62b4a414657b7b31b91e3dfdbc7cc5ed9454821acdc932342ab6c02bac7"
         }
       ]
     },

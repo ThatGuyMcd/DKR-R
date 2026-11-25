@@ -95,15 +95,21 @@ std::string StoreSummary(const StoreJson& item) {
     }
     return value;
 }
-int StoreTabLine(const std::vector<std::string>& labels, int selected, float width, const char* id) {
+int StoreTabLine(const std::vector<std::string>& labels, int selected, float width, const char* id,
+                 bool prefer_single_row = false) {
     if (labels.empty())
         return 0;
     selected = std::clamp(selected, 0, int(labels.size()) - 1);
+    float normal_width = 8.F * static_cast<float>(labels.size() - 1);
+    if (prefer_single_row)
+        for (const auto& label : labels)
+            normal_width += PaddockSectionTabWidth(label.c_str());
+    const bool compact = prefer_single_row && normal_width > width;
     ImGui::PushID(id);
     const auto start = ImGui::GetCursorScreenPos();
     float x = 0, y = 0, row_height = 0;
     for (int i = 0; i < int(labels.size()); ++i) {
-        const float size = std::min(width, PaddockSectionTabWidth(labels[i].c_str()));
+        const float size = std::min(width, PaddockSectionTabWidth(labels[i].c_str(), compact));
         if (x > 0 && x + size > width) {
             x = 0;
             y += row_height + 8;
@@ -111,12 +117,12 @@ int StoreTabLine(const std::vector<std::string>& labels, int selected, float wid
         }
         ImGui::SetCursorScreenPos({start.x + x, start.y + y});
         ImGui::PushID(i);
-        if (PaddockSectionTab((labels[i] + "###tab").c_str(), i == selected, size))
+        if (PaddockSectionTab((labels[i] + "###tab").c_str(), i == selected, size, compact))
             selected = i;
         StoreControlFocus();
         row_height = std::max(row_height, ImGui::GetItemRectSize().y);
         ImGui::PopID();
-        x += size + 8;
+        x += size + (compact ? 4.F : 8.F);
     }
     ImGui::SetCursorScreenPos({start.x, start.y + y + row_height + 16});
     ImGui::PopID();

@@ -227,7 +227,7 @@ void DrawOlPartyStart(float width, const OnlineFrame& frame) {
         if (host || watcher) {
             ImGui::SetCursorScreenPos(pair ? ImVec2{at.x + button + 10.F, at.y} : ImVec2{at.x, at.y + 62.F});
             const bool disabled = OlPartyChanging(frame) || (!host && watcher && !live);
-            const bool waiting_ready = g_ol_party.save_ready &&
+            const bool waiting_ready = !SharedSaveBusy() && g_ol_party.save_ready &&
                                        std::count_if(frame.view.room.players.begin(), frame.view.room.players.end(),
                                                      [](const auto& p) { return p.occupied; }) >= 2 &&
                                        std::none_of(frame.view.room.players.begin(), frame.view.room.players.end(),

@@ -1,6 +1,7 @@
 #include "session_content/policy.hpp"
 #include "../shared_saves.hpp"
 #include "legacy_mod_launch.hpp"
+#include "personal_adventure_paths.hpp"
 #include "vehicle_binding.hpp"
 #include "legacy_track_catalog.hpp"
 #include "../dkr_save_codec.hpp"
@@ -65,11 +66,15 @@ std::shared_ptr<const PreparedModLaunch> prepare_mod_launch(const std::filesyste
                                                             const DetailedLaunchProgress& detailed) {
     auto out = std::make_shared<PreparedModLaunch>();
     out->content_enabled = dkr::session_content::preparing();
-    if (!online && !out->content_enabled)
-        return out;
     // The offline catalog is never consulted for online launches. The lobby's
     // separately verified, frozen RuntimeResources supply online assets.
     if (online)
+        return out;
+    namespace saves = dkr::runtime::saves;
+    out->save_subfolder = saves::personal_adventure_subfolder(out->content_enabled);
+    out->save_path = saves::personal_adventure_path(config, out->content_enabled);
+    out->pak_directory = config;
+    if (!out->content_enabled)
         return out;
     std::string personal_error;
     if (!dkr::runtime::saves::shared::prepare(config, personal_error))
@@ -117,9 +122,6 @@ std::shared_ptr<const PreparedModLaunch> prepare_mod_launch(const std::filesyste
             const auto identity = "dkr-offline-code-session-1\n" + out->fingerprint + "\n" + out->code->identity;
             out->fingerprint = sha256(View(reinterpret_cast<const std::uint8_t*>(identity.data()), identity.size()));
         }
-        out->save_subfolder.clear();
-        out->save_path = config / "saves" / "dkr.us.v77.bin";
-        out->pak_directory = config;
         std::string save_error;
         if (!dkr::runtime::saves::shared::prepare(config, save_error))
             throw Error(save_error);

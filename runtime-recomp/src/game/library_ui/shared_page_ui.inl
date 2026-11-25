@@ -59,14 +59,12 @@ void DrawSharedUiPage(float width, int page, bool live, const PlayPageContext* l
         DrawSoundPage(width, live);
     else if (page == kPageControls)
         DrawControlsPage(width, live);
-    else if (page == kPageSaveManager) {
-        DrawPlayToolBack(width);
+    else if (page == kPageSaveManager)
         DrawSaveManagerPage(width, live);
-    } else if (page == kPageAchievements) {
-        DrawPlayToolBack(width);
+    else if (page == kPageAchievements)
         DrawAchievementsPage(width);
-    } else if (page == dkr::library_ui::LeaderboardsPage) {
-        DrawLeaderboardsPage(width, entered);
+    else if (page == dkr::library_ui::LeaderboardsPage) {
+        DrawLeaderboardsPage(width, entered, live);
     } else if (page == kPageOnlineMp)
         DrawOnlinePage(width, !live, live || play->rom_ready);
     else if (page == kPageModLibrary)
@@ -92,6 +90,7 @@ void DrawSharedUiPage(float width, int page, bool live, const PlayPageContext* l
         ImGui::SetScrollY(ImGui::GetScrollMaxY());
     LibrarySurfaceProbe(live, page, width, ImGui::GetCursorPosY() - top);
     g_launcher_rom = previous;
-    if (page != kPagePlay)
+    const bool save_workspace = page == kPageSaveManager && (g_saves_page.scope == 0 || g_saves_page.scope == 2);
+    if (page != kPagePlay && !save_workspace)
         ImGui::Dummy({0.F, 54.F});
 }

@@ -961,22 +961,22 @@ inline bool PaddockTextLink(const char* label) {
     return press.pressed;
 }
 
-inline float PaddockSectionTabWidth(const char* label) {
-    const PaddockType type = PaddockSign(19.0F, 1.4F);
-    return std::ceil(7.0F + 9.0F + PaddockMeasure(type, label, PaddockLabelEnd(label)) + 32.0F + 4.0F);
+inline float PaddockSectionTabWidth(const char* label, bool compact = false) {
+    const PaddockType type = PaddockSign(compact ? 14.0F : 19.0F, 1.4F);
+    return std::ceil(PaddockMeasure(type, label, PaddockLabelEnd(label)) + (compact ? 26.0F : 52.0F));
 }
 
-inline float PaddockSectionTabHeight() {
-    return std::ceil(PaddockSign(19.0F, 1.4F).line + 20.0F + 4.0F);
+inline float PaddockSectionTabHeight(bool compact = false) {
+    return std::ceil(PaddockSign(compact ? 14.0F : 19.0F, 1.4F).line + 24.0F);
 }
 
 // A launcher-lettered tab with a turning chevron (.mods-section-nav button).
 // `stretch` > 0 widens it, label left-aligned (.texture-disclosure).
-inline bool PaddockSectionTab(const char* label, bool open, float stretch = 0.0F) {
-    const PaddockType type = PaddockSign(19.0F, 1.4F);
+inline bool PaddockSectionTab(const char* label, bool open, float stretch = 0.0F, bool compact = false) {
+    const PaddockType type = PaddockSign(compact ? 14.0F : 19.0F, 1.4F);
     const char* end = PaddockLabelEnd(label);
-    const float width = std::max(PaddockSectionTabWidth(label), stretch);
-    const float height = PaddockSectionTabHeight();
+    const float width = std::max(PaddockSectionTabWidth(label, compact), stretch);
+    const float height = PaddockSectionTabHeight(compact);
     const PaddockPress press = PaddockBeginPress(label, {width, height});
     const float opened = PaddockEase(PaddockTween(PaddockKey("open", press.id), open, 0.2F, 0.2F));
     ImDrawList* draw = ImGui::GetWindowDrawList();
@@ -995,10 +995,10 @@ inline bool PaddockSectionTab(const char* label, bool open, float stretch = 0.0F
     PaddockPanel(draw, press.min, press.max, panel);
     const ImU32 text = PaddockApply(state(0xFFF2C8, 0xFFF7DC, 0xFFF5D5));
     const float content_top = press.min.y + 12.0F;
-    const float chevron_x = press.min.x + 18.0F + 3.5F - 2.0F * (1.0F - opened);
+    const float chevron_x = press.min.x + (compact ? 8.0F : 18.0F) + 3.5F - 2.0F * (1.0F - opened);
     const float chevron_y = content_top + type.line * 0.5F - 2.0F * opened;
     PaddockChevron(draw, {chevron_x, chevron_y}, -45.0F + 90.0F * opened, 7.0F, text, 1.5F);
-    const float text_x = press.min.x + 18.0F + 7.0F + 9.0F;
+    const float text_x = press.min.x + (compact ? 18.0F : 34.0F);
     PaddockDrawRun(draw, type, {text_x, content_top + 2.0F}, PaddockCol(0x031623), label, end);
     PaddockDrawRun(draw, type, {text_x, content_top}, text, label, end);
     PaddockEndPress(press, 12.0F);
@@ -1039,6 +1039,7 @@ inline bool PaddockSwitch(const char* id, bool* value, const char* on_label, con
         24.0F + 12.0F + std::ceil(std::max(PaddockMeasure(type, on_label), PaddockMeasure(type, off_label)));
     const PaddockPress press = PaddockBeginPress(id, {width, 42.0F});
     if (description != nullptr && ImGui::IsItemHovered()) {
+        const dkr::runtime::ui::ScopedDialogStyle style({12.0F, 8.0F}, 10.0F);
         ImGui::SetTooltip("%s", description);
     }
     bool changed = false;
@@ -1113,14 +1114,14 @@ inline bool PaddockCheckbox(const char* id, const char* label, bool* value, floa
 
 enum class PaddockFieldResult { None, Edited, GamepadActivated };
 
-// A fixed-size keyboard affordance leaves room for the editable text instead
-// of squeezing a word button into narrow fields.
-inline bool PaddockKeyboardButton() {
-    const auto press = PaddockBeginPress("##keyboard", {44, 44});
+// The keyboard icon keeps its width in narrow fields.
+inline bool PaddockKeyboardButton(float height = 44.0F) {
+    const auto press = PaddockBeginPress("##keyboard", {44.0F, height});
     auto* draw = ImGui::GetWindowDrawList();
     PaddockFill(draw, press.min, press.max, PaddockRound(8), PaddockCol(press.hovered ? 0x234E65 : 0x173A4E));
     PaddockStroke(draw, press.min, press.max, PaddockRound(8), PaddockCol(0x476373), 1);
-    const ImVec2 a{press.min.x + 9, press.min.y + 13}, b{press.max.x - 9, press.max.y - 12};
+    const float centre = (press.min.y + press.max.y) * 0.5F;
+    const ImVec2 a{press.min.x + 9, centre - 9}, b{press.max.x - 9, centre + 10};
     draw->AddRect(a, b, PaddockCol(0xFFF0C2), 3);
     for (int y = 0; y < 2; ++y)
         for (int x = 0; x < 5; ++x) {
@@ -1131,6 +1132,7 @@ inline bool PaddockKeyboardButton() {
     PaddockEndPress(press, 8, 1);
     if (press.hovered || press.focused) {
         const auto item = GImGui->LastItemData;
+        const dkr::runtime::ui::ScopedDialogStyle style({12.0F, 8.0F}, 10.0F);
         ImGui::SetTooltip("On-screen keyboard");
         GImGui->LastItemData = item;
     }

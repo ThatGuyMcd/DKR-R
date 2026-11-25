@@ -140,3 +140,24 @@ bool DrawRuntimeStartingGame() {
     }
     return true;
 }
+
+bool DrawRuntimeReturningFromRun() {
+    const auto alpha = dkr::runtime::time_trial::launcher_return_opacity();
+    if (alpha <= 0.F)
+        return false;
+    BeginMainWindow("DKR-R Returning", ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoInputs);
+    auto* draw = ImGui::GetWindowDrawList();
+    const int first = draw->VtxBuffer.Size;
+    const double seconds = ImGui::GetTime();
+    DrawRuntimeStartupClouds(seconds);
+    dkr::launcher_themes::weather(draw, ImGui::GetWindowPos(), ImGui::GetWindowSize(), dkr::launcher_themes::displayed,
+                                  seconds, dkr::launcher_themes::preferences.calendar);
+    DrawStartingContent({}, false, false, seconds, true);
+    for (int i = first; i < draw->VtxBuffer.Size; ++i) {
+        auto& colour = draw->VtxBuffer[i].col;
+        const unsigned opacity = (colour >> IM_COL32_A_SHIFT) & 255U;
+        colour = (colour & ~IM_COL32_A_MASK) | (unsigned(opacity * alpha) << IM_COL32_A_SHIFT);
+    }
+    ImGui::End();
+    return true;
+}

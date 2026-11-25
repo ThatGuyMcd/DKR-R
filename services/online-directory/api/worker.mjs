@@ -1,6 +1,8 @@
+import { handleNotifications, cleanupNotifications } from './notification_api.mjs';
 import { handleSpeedrun, cleanupSpeedruns } from './speedrun_api.mjs';
 import library, { HttpError } from './library_api.mjs';
 import { handleLauncherProfile, launcherVerifiedSocial } from './profile_api.mjs';
+import { handleCloudSaves } from './cloud_saves_api.mjs';
 import { handleCommunity, communityCatalogue, cleanupCommunity } from './community_api.mjs';
 
 // Account totals change slowly. Coalesce concurrent reads and keep one
@@ -51,15 +53,20 @@ async function publicOnline(request, env, url) {
 export default {
   scheduled(event,env,ctx) {
     ctx.waitUntil(cleanupCommunity(env).catch(() => {}));
+    ctx.waitUntil(cleanupNotifications(env).catch(() => { console.error('Notification cleanup failed.'); }));
     ctx.waitUntil(cleanupSpeedruns(env).catch(() => { console.error('Speedrun cleanup failed.'); }));
     return library.scheduled(event,env,ctx);
   },
   async fetch(request, env, ctx) {
     try {
+      const notifications = await handleNotifications(request, env);
+      if (notifications) return notifications;
       const community = await handleCommunity(request, env, ctx);
       if (community) return community;
       const speedrun = await handleSpeedrun(request, env);
       if (speedrun) return speedrun;
+      const cloudSaves = await handleCloudSaves(request, env);
+      if (cloudSaves) return cloudSaves;
       const profile = await handleLauncherProfile(request, env);
       if(profile)return profile;
       const url=new URL(request.url);

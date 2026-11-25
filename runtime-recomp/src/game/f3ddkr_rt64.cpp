@@ -6,6 +6,7 @@
 #include "camera_rt64.hpp"
 #include "f3ddkr_execution_policy.hpp"
 #include "postrace_viewport_rt64.hpp"
+#include "time_trial/session.hpp"
 
 #include "interpolation_state_policy.hpp"
 #include "hud_layout_policy.hpp"
@@ -253,7 +254,7 @@ std::uint32_t PhysicalAddress(RT64::RSP& rsp, std::uint32_t address) {
 
 void SelectInterpolationGroup(RT64::RSP& rsp, std::uint32_t id, bool interpolate_vertices = false,
                               bool interpolate_texcoords = false, bool interpolate_tiles = false,
-                              std::uint8_t aspect_mode = G_EX_ASPECT_AUTO, bool preserve_vertex_interpolation = false,
+                              std::uint8_t aspect_mode = G_EX_ASPECT_AUTO, bool preserve_identity = false,
                               std::uint8_t water_scroll_tag = 0U, bool native_visual = false) {
     auto current_menu = ReadU32(rsp.state->RDRAM, current_menu_id_address());
 #if defined(DKR_WATER_QUALIFICATION)
@@ -266,7 +267,7 @@ void SelectInterpolationGroup(RT64::RSP& rsp, std::uint32_t id, bool interpolate
 #endif
     interpolate_tiles = dkr::runtime::interpolation::effective_tile_interpolation(interpolate_tiles, current_menu);
     const bool task_interpolation_allowed = dkr::runtime::presentation::task_interpolation_allowed();
-    if (!task_interpolation_allowed && !preserve_vertex_interpolation) {
+    if (!task_interpolation_allowed && !preserve_identity) {
         id = G_EX_ID_IGNORE;
         interpolate_vertices = false;
         interpolate_texcoords = false;
@@ -445,6 +446,7 @@ struct dkr::runtime::F3DDKRRT64Bridge::StateData {
     std::size_t hud_alignment_depth = 0U;
     struct HudWidgetScope {
         hud::groups::Transform transform;
+        std::uint32_t motion_identity = presentation::kIgnoredIdentity;
     };
     std::array<HudWidgetScope, 4> hud_widgets{};
     std::size_t hud_widget_depth = 0;
@@ -1303,8 +1305,12 @@ void dkr::runtime::F3DDKRRT64Bridge::FinishShadowScope(RT64::State* state) {
         // the shadow owner remains the same. The fixed canonical stream and
         // distributed dormant positions make that a bounded geometry morph;
         // topology diagnostics must never toggle interpolation for the page.
-        const bool interpolate_page_vertices =
+        const bool has_shadow_identity =
             dkr::runtime::presentation::shadow_page_vertex_interpolation(shadow_group.identity);
+        // Sequential export interpolates the camera and kart, so their
+        // canonical shadow vertices must move on the same sub-frame too.
+        const bool interpolate_page_vertices =
+            has_shadow_identity && (!time_trial::watching() || time_trial::exporting_video());
 
         if (ShadowTraceEnabled() && page_drawn &&
             (!interpolate_page_vertices || page_history.topology_signature != topology_signature)) {
@@ -1409,7 +1415,7 @@ void dkr::runtime::F3DDKRRT64Bridge::FinishShadowScope(RT64::State* state) {
         SelectInterpolationGroup(rsp,
                                  dkr::runtime::presentation::make_shadow_page_group_identity(
                                      shadow_group.identity, page, history->interpolation_epoch),
-                                 interpolate_page_vertices, false, false, shadow_aspect, interpolate_page_vertices, 0U,
+                                 interpolate_page_vertices, false, false, shadow_aspect, has_shadow_identity, 0U,
                                  data.camera_shadow.has_value());
         rsp.modelViewProjChanged = true;
         auto& workload = state->ext.workloadQueue->workloads[state->ext.workloadQueue->writeCursor];
@@ -2077,11 +2083,16 @@ void dkr::runtime::F3DDKRRT64Bridge::ApplyPresentationMarkers(RT64::State* state
     for (std::size_t index = 0U; index < markers.count; ++index) {
         const auto& marker = markers.markers[index];
         if (marker.kind == PresentationMarkerKind::CameraWorldBegin ||
-            marker.kind == PresentationMarkerKind::CameraWorldEnd)
+            marker.kind == PresentationMarkerKind::CameraWorldEnd) {
+            if (auto* online = active_->data_->online_view)
+                online->ghost_world_boundary(*state, marker.token, marker.kind == PresentationMarkerKind::CameraWorldEnd);
             continue;
+        }
         if (active_->data_->camera && active_->data_->camera->replaced_command(std::uint32_t(command - rdram_begin)) &&
-            marker.kind != PresentationMarkerKind::SplitViewport && marker.kind != PresentationMarkerKind::HudPass &&
-            marker.kind != PresentationMarkerKind::HudWidget && marker.kind != PresentationMarkerKind::HudRect)
+            marker.kind != PresentationMarkerKind::SplitViewport &&
+            marker.kind != PresentationMarkerKind::PostraceFullViewport &&
+            marker.kind != PresentationMarkerKind::HudPass && marker.kind != PresentationMarkerKind::HudWidget &&
+            marker.kind != PresentationMarkerKind::HudRect)
             continue;
         if (marker.kind == PresentationMarkerKind::TrackSelectPreview) {
             auto& data = *active_->data_;
@@ -2121,6 +2132,10 @@ void dkr::runtime::F3DDKRRT64Bridge::ApplyPresentationMarkers(RT64::State* state
                 auto& scope = data.hud_widgets[data.hud_widget_depth++];
                 scope.transform = data.online_view && data.online_view->focused_hud() ? hud::groups::Transform{}
                                                                                       : marker.hud_transform;
+                scope.motion_identity =
+                    marker.token != 0 ? presentation::normalise_identity(0x54544855U ^
+                                            (presentation::task_scene_generation() * 0x9E3779B9U) ^ marker.token)
+                                      : presentation::kIgnoredIdentity;
                 const auto& t = scope.transform;
                 state->rdp->pushScissor();
                 auto& clip = state->rdp->scissorRectStack[state->rdp->scissorStackSize - 1];
@@ -2670,13 +2685,40 @@ void dkr::runtime::F3DDKRRT64Bridge::HudTextureRect(RT64::State* state, RT64::Di
     const auto rect =
         hud::groups::transform_rectangle(t, ulx, uly, lrx, lry, static_cast<std::int16_t>(command->p1(16, 16)),
                                          static_cast<std::int16_t>(command->p1(0, 16)), data.hud_rect_bias);
-    state->rdp->drawTexRect(rect.ulx, rect.uly, rect.lrx, rect.lry, tile, s, uv, rect.dsdx, rect.dtdy, flip);
+    auto& rdp = *state->rdp;
+    const auto& active_clip = rdp.scissorRectStack[rdp.scissorStackSize - 1];
+    const bool expand_clip = time_trial::watching() && data.world_window_aspect > 4.F / 3.F &&
+                             active_clip.lry > active_clip.uly &&
+                             rdp.scissorStackSize < RDP_EXTENDED_STACK_SIZE &&
+                             !dkr::sdk2::hud_hidden.load(std::memory_order_relaxed);
+    if (expand_clip) {
+        // Widen the text rectangle's clip without changing the projection
+        // and clip used by the minimap, animated HUD sprites or scene.
+        const auto gutter =
+            static_cast<int>(std::lround(4.F * hud::fullscreen_gutter_authored(data.world_window_aspect)));
+        rdp.pushScissor();
+        const auto stack = rdp.scissorStackSize - 1;
+        auto& clip = rdp.scissorRectStack[stack];
+        clip.ulx = -gutter;
+        clip.lrx = rdp.colorImage.width * 4 + gutter;
+        rdp.extended.scissorLeftOriginStack[stack] = G_EX_ORIGIN_NONE;
+        rdp.extended.scissorRightOriginStack[stack] = G_EX_ORIGIN_NONE;
+        state->updateDrawStatusAttribute(RT64::DrawAttribute::Scissor);
+    }
+    rdp.drawTexRect(rect.ulx, rect.uly, rect.lrx, rect.lry, tile, s, uv, rect.dsdx, rect.dtdy, flip);
+    if (expand_clip) {
+        rdp.popScissor();
+        state->updateDrawStatusAttribute(RT64::DrawAttribute::Scissor);
+    }
     *display_list = command;
 }
 
 void dkr::runtime::F3DDKRRT64Bridge::TrackTextureRect(RT64::State* state, RT64::DisplayList** display_list) {
     auto* command = *display_list;
-    if (!active_->data_->track_ui_cover || command->w0 != 0xD5000001U || command->w1 != 0x54524354U) {
+    // The guest emits these signed rectangles in both presentation modes.
+    // The optional widescreen scope changes clipping, but Accurate mode and
+    // archived tasks can decode the packet with their current native scissor.
+    if (command->w0 != 0xD5000001U || command->w1 != 0x54524354U) {
         RejectTask(display_list);
         return;
     }
@@ -2685,7 +2727,8 @@ void dkr::runtime::F3DDKRRT64Bridge::TrackTextureRect(RT64::State* state, RT64::
     const auto lrx = std::int16_t(command->p1(16, 16)), lry = std::int16_t(command->p1(0, 16));
     ++command;
     RT64::ExtendedAlignment alignment{};
-    alignment.leftOrigin = alignment.rightOrigin = G_EX_ORIGIN_NONE;
+    if (active_->data_->track_ui_cover)
+        alignment.leftOrigin = alignment.rightOrigin = G_EX_ORIGIN_NONE;
     state->rdp->drawTexRect(ulx, uly, lrx, lry, 0, std::int16_t(command->p0(16, 16)), std::int16_t(command->p0(0, 16)),
                             std::int16_t(command->p1(16, 16)), std::int16_t(command->p1(0, 16)), false, alignment);
     *display_list = command;
@@ -2827,7 +2870,21 @@ void dkr::runtime::F3DDKRRT64Bridge::Vertex(RT64::State* state, RT64::DisplayLis
             !data.interpolation_groups.has_rejected_scope(),
         water::enhanced::requested_quality.load(std::memory_order_relaxed) == water::enhanced::Quality::Original);
 #endif
-    rsp.setVertex(kScratchVertexAddress, count, destination);
+    const auto hud_motion = data.hud_widget_depth ? data.hud_widgets[data.hud_widget_depth - 1].motion_identity
+                                                 : presentation::kIgnoredIdentity;
+    if (hud_motion != presentation::kIgnoredIdentity) {
+        auto& extended = rsp.extended;
+        auto& group = extended.modelMatrixIdStack[extended.modelMatrixIdStackSize - 1];
+        const auto previous_group = group;
+        SelectInterpolationGroup(rsp, hud_motion, true, false, false,
+                                 ActiveAspectMode(data.interpolation_groups, data.matrix_aspect_override_active,
+                                                  data.matrix_aspect_override));
+        rsp.setVertex(kScratchVertexAddress, count, destination);
+        group = previous_group;
+        extended.modelMatrixIdStackChanged = true;
+    } else {
+        rsp.setVertex(kScratchVertexAddress, count, destination);
+    }
 #if defined(DKR_ENHANCED_WATER)
     data.flow_loads += flow_scope.active();
     for (unsigned i = 0; i < count; ++i)

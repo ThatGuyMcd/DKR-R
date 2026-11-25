@@ -59,7 +59,7 @@ void DrawCameraTuningPanel() {
     const auto display = ImGui::GetIO().DisplaySize;
     ImGui::SetNextWindowSize({std::min(1120.F, display.x - 32.F), std::min(760.F, display.y - 32.F)},
                              ImGuiCond_Appearing);
-    if (!ImGui::Begin("MODERN CAMERA++", &open, ImGuiWindowFlags_NoCollapse)) {
+    if (!dkr::runtime::ui::begin_dialog_window("MODERN CAMERA++", &open, ImGuiWindowFlags_NoCollapse)) {
         ImGui::End();
         if (!open)
             camplus::editor_open.store(false);

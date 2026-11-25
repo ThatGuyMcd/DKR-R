@@ -2084,6 +2084,7 @@ struct LocatedPresentationMarker {
     std::uint32_t address;
     PresentationMarker marker;
 };
+
 std::vector<LocatedPresentationMarker> camera_world_boundaries();
 struct OwnedMatrixBinding {
     std::uint32_t address;
@@ -2094,6 +2095,15 @@ struct OwnedShadowBinding {
     std::uint16_t token;
     RigidShadowOwnerPolicy policy;
     ShadowOwnerMotionSample motion;
+};
+
+// Presentation metadata retained with the same RDRAM snapshot as the replay frame.
+struct ReplayPresentation {
+    std::vector<LocatedPresentationMarker> markers;
+    std::vector<OwnedMatrixBinding> matrices;
+    std::vector<OwnedShadowBinding> shadows;
+    std::uint32_t scene = 0;
+    double time = 0.0;
 };
 
 // DKR flips gSPTaskNum immediately after gfxtask_run_xbus returns. A renderer
@@ -2121,7 +2131,8 @@ PresentationMarkerList active_presentation_markers(std::uint32_t command_address
 // the same N64 display-list buffer.
 class TaskIdentityScope {
   public:
-    TaskIdentityScope(std::uint8_t* rdram_snapshot, std::uint32_t display_list_address);
+    TaskIdentityScope(std::uint8_t* rdram_snapshot, std::uint32_t display_list_address,
+                      const ReplayPresentation* replay = nullptr);
     // Private copied-image decode only. Does not consume the stable producer's
     // submission queue or install metadata from rewindable/live CPU globals.
     explicit TaskIdentityScope(std::span<const LocatedPresentationMarker> owned_markers);

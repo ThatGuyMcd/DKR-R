@@ -1201,6 +1201,7 @@ if(DKR_RUNTIME_BUILD_GENERATED OR DKR_RUNTIME_BUILD_RT64)
     endif()
     set(DKR_GAME_SOURCES
         src/game/runtime_code_mods.cpp
+        src/game/time_trial/session.cpp
         src/game/audio_equalizer.cpp
         # The policy's asset hooks call into these with or without RT64; the
         # table logic itself is DKRCustomTracksCore, via DKRLegacyModLaunch.
@@ -1319,6 +1320,18 @@ if(DKR_RUNTIME_BUILD_GENERATED OR DKR_RUNTIME_BUILD_RT64)
         list(APPEND DKR_GAME_SOURCES src/android/android_platform.cpp src/android/mobile_ui.cpp)
     endif()
     add_library(DKRPortGameCore OBJECT ${DKR_GAME_SOURCES})
+    if(TARGET file_to_c)
+        set(preview_source "${CMAKE_CURRENT_LIST_DIR}/assets/speedrunning/AncientLake.jpg")
+        set(preview_blob "${CMAKE_CURRENT_BINARY_DIR}/generated/speedrunning_hud_preview")
+        add_custom_command(
+            OUTPUT "${preview_blob}.c" "${preview_blob}.h"
+            COMMAND "${CMAKE_COMMAND}" -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/generated"
+            COMMAND file_to_c "${preview_source}" SpeedrunningHudPreview "${preview_blob}.c" "${preview_blob}.h"
+            DEPENDS "${preview_source}" file_to_c
+            VERBATIM
+        )
+        target_sources(DKRPortGameCore PRIVATE "${preview_blob}.c")
+    endif()
     dkr_guest_symbols(DKRPortGameCore)
     if(NOT DKR_RUNTIME_BUILD_GENERATED)
         # host-full-nogen compiles the shipped configuration, which always has
@@ -3181,6 +3194,8 @@ if(BUILD_TESTING)
     target_include_directories(DKRSaveStorageTests PRIVATE "${CMAKE_CURRENT_LIST_DIR}/src/game")
     add_test(NAME DKRSaveStorage COMMAND DKRSaveStorageTests)
 
+    add_executable(DKRAdventureReplayRulesTests tests/adventure_replay_rules_tests.cpp)
+    add_test(NAME DKRAdventureReplayRules COMMAND DKRAdventureReplayRulesTests)
     add_executable(DKRSaveCodecTests tests/dkr_save_codec_tests.cpp src/game/dkr_save_codec.cpp)
     target_include_directories(DKRSaveCodecTests PRIVATE "${CMAKE_CURRENT_LIST_DIR}/src/game")
     add_test(NAME DKRSaveCodec COMMAND DKRSaveCodecTests)

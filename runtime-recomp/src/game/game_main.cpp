@@ -28,6 +28,7 @@
 #include "save_manager.hpp"
 #include "runtime_save_routing.hpp"
 #include "startup_performance.hpp"
+#include "time_trial/session.hpp"
 #include "virtual_pak.hpp"
 #include "runtime_legacy_mods.hpp"
 #include "runtime_code_mods.hpp"
@@ -433,6 +434,16 @@ struct LaunchOptions {
     std::filesystem::path rom_path;
     std::filesystem::path config_directory;
     unsigned timeout_seconds = 0;
+    dkr::runtime::time_trial::Mode time_trial = dkr::runtime::time_trial::Mode::None;
+    std::filesystem::path replay_path;
+    std::filesystem::path ghost_replay;
+    std::filesystem::path ghost_export;
+    std::string time_trial_track;
+    std::filesystem::path time_trial_map;
+    dkr::runtime::time_trial::Adventure adventure = dkr::runtime::time_trial::Adventure::None;
+    unsigned time_trial_racer = dkr::runtime::time_trial::kDiddy;
+    const dkr::runtime::time_trial::Course* time_trial_course = &dkr::runtime::time_trial::kCourses.front();
+    dkr::runtime::time_trial::Vehicle time_trial_vehicle = dkr::runtime::time_trial::Vehicle::Car;
 #if defined(DKR_EXPERIMENTAL_RACE_TEST)
     std::filesystem::path bootstrap_output;
     std::filesystem::path owned_check_invite;
@@ -491,6 +502,77 @@ bool ParseLaunchOptions(int argc, char** argv, LaunchOptions& options, std::stri
             }
             options.owned_check_players = unsigned(value[0] - '0');
 #endif
+        } else if (argument == "--adventure-category") {
+            const char* value = require_value("--adventure-category");
+            if (!value)
+                return false;
+            options.adventure = dkr::runtime::time_trial::adventure_for(value);
+            if (options.adventure == dkr::runtime::time_trial::Adventure::None) {
+                error = "Choose any-percent, 100-percent or all-trophy-races.";
+                return false;
+            }
+        } else if (argument == "--time-trial-track" || argument == "--time-trial-map") {
+            const char* value = require_value(argv[index]);
+            if (!value)
+                return false;
+            if (argument == "--time-trial-track")
+                options.time_trial_track = value;
+            else
+                options.time_trial_map = std::filesystem::u8path(value);
+        } else if (argument == "--time-trial-ghost") {
+            const char* value = require_value("--time-trial-ghost");
+            if (!value)
+                return false;
+            options.ghost_replay = std::filesystem::u8path(value);
+        } else if (argument == "--export-time-trial-ghost") {
+            const char* value = require_value("--export-time-trial-ghost");
+            if (!value)
+                return false;
+            options.ghost_export = std::filesystem::u8path(value);
+        } else if (argument == "--time-trial-course") {
+            const char* value = require_value("--time-trial-course");
+            if (!value)
+                return false;
+            options.time_trial_course = dkr::runtime::time_trial::course_for(value);
+            if (!options.time_trial_course) {
+                error = "Choose a supported retail Time Trial course.";
+                return false;
+            }
+        } else if (argument == "--time-trial-vehicle") {
+            const char* value = require_value("--time-trial-vehicle");
+            if (!value)
+                return false;
+            namespace trial = dkr::runtime::time_trial;
+            const auto found = std::find(trial::kVehicleIds.begin(), trial::kVehicleIds.end(), std::string_view(value));
+            if (found == trial::kVehicleIds.end()) {
+                error = "Time Trial vehicle must be car, hovercraft or plane.";
+                return false;
+            }
+            options.time_trial_vehicle = static_cast<trial::Vehicle>(found - trial::kVehicleIds.begin());
+        } else if (argument == "--time-trial-racer") {
+            const char* value = require_value("--time-trial-racer");
+            if (!value)
+                return false;
+            if (value[0] < '0' || value[0] > '9' || value[1]) {
+                error = "Time Trial racer must be an ID from 0 to 9.";
+                return false;
+            }
+            options.time_trial_racer = unsigned(value[0] - '0');
+        } else if (argument == "--record-time-trial" || argument == "--self-test-time-trial" ||
+                   argument == "--verify-time-trial" || argument == "--watch-time-trial") {
+            using dkr::runtime::time_trial::Mode;
+            const char* value = require_value(argv[index]);
+            if (!value)
+                return false;
+            if (options.time_trial != Mode::None) {
+                error = "Select one Time Trial action.";
+                return false;
+            }
+            options.time_trial = argument == "--record-time-trial"      ? Mode::Record
+                                 : argument == "--self-test-time-trial" ? Mode::SelfTest
+                                 : argument == "--verify-time-trial"    ? Mode::Verify
+                                                                        : Mode::Watch;
+            options.replay_path = std::filesystem::u8path(value);
         } else if (argument == "--timeout") {
             const char* value = require_value("--timeout");
             if (value == nullptr) {
@@ -830,9 +912,44 @@ int DkrMain(int argc, char** argv) {
     // and portable roots must not accidentally select another profile later.
     const std::filesystem::path config_directory = std::filesystem::weakly_canonical(launch.config_directory);
     const unsigned timeout_seconds = launch.timeout_seconds;
+    namespace time_trial = dkr::runtime::time_trial;
+    if (launch.adventure != time_trial::Adventure::None && launch.time_trial != time_trial::Mode::Record) {
+        std::fprintf(stderr, "[adventure] --adventure-category requires --record-time-trial.\n");
+        return 2;
+    }
+    if (!launch.ghost_export.empty() && launch.time_trial != time_trial::Mode::Verify) {
+        std::fprintf(stderr, "[ghost] Export requires --verify-time-trial.\n");
+        return 2;
+    }
+    if (!launch.ghost_replay.empty() &&
+        ((launch.time_trial != time_trial::Mode::Record && launch.time_trial != time_trial::Mode::SelfTest) ||
+         launch.adventure != time_trial::Adventure::None || !launch.time_trial_track.empty())) {
+        std::fprintf(stderr, "[ghost] Select a practice recording. The ghost replay supplies the course and vehicle.\n");
+        return 2;
+    }
+    if (launch.time_trial != time_trial::Mode::None) {
+        const auto start_trial = [&] {
+            if (!launch.ghost_replay.empty())
+                return time_trial::start_ghost(launch.ghost_replay, launch.replay_path, rom_error,
+                                              launch.time_trial_racer, launch.time_trial, launch.time_trial_map);
+            return time_trial::start(launch.time_trial, launch.replay_path, rom_error, nullptr, launch.time_trial_racer,
+                                     *launch.time_trial_course, launch.time_trial_vehicle, launch.adventure,
+                                     launch.time_trial_track, launch.time_trial_map, launch.ghost_export);
+        };
+        if (rom_path.empty() || launch.config_directory.empty() || !config_directory.is_absolute() ||
+            std::filesystem::exists(config_directory) || !start_trial()) {
+            std::fprintf(stderr, "[time-trial] Requires a ROM, new absolute profile and absolute replay path. %s\n",
+                         rom_error.c_str());
+            return 2;
+        }
+    }
 #if defined(DKR_EXPERIMENTAL_RACE_TEST)
     const bool rollback_bootstrap = !launch.bootstrap_output.empty();
     const bool owned_check = !launch.owned_check_invite.empty();
+    if (time_trial::active() && (rollback_bootstrap || owned_check)) {
+        std::fprintf(stderr, "[time-trial] Time Trial accepts only an offline session.\n");
+        return 2;
+    }
     if (owned_check && (rollback_bootstrap || rom_path.empty() || !config_directory.is_absolute() ||
                         std::filesystem::exists(config_directory) || !launch.owned_check_invite.is_absolute() ||
                         timeout_seconds < 20 || timeout_seconds > 180)) {
@@ -864,6 +981,11 @@ int DkrMain(int argc, char** argv) {
     }
     dkr::runtime::startup_performance::mark("persistent-log-ready");
     dkr::crash_reports::start(config_directory, DKR_RELEASE_VERSION);
+    if (launch.time_trial != time_trial::Mode::None) {
+        // CLI trials require a disposable profile. Managed jobs have no user
+        // to answer this dialog, and render jobs must capture only the game.
+        dkr::crash_reports::choose(false, false);
+    }
     {
         dkr::runtime::startup_performance::ScopedPhase phase("rom-identity-cache-configure");
         dkr::runtime::rom::configure_identity_cache(config_directory);
@@ -902,7 +1024,8 @@ int DkrMain(int argc, char** argv) {
         dkr::runtime::startup_performance::ScopedPhase phase("pak-save-input-configure");
         dkr::runtime::pak::configure(config_directory);
         dkr::runtime::saves::configure(config_directory);
-        dkr::runtime::saves::configure_recovery_locations(RecoverySaveLocations(argv[0]));
+        if (!time_trial::active())
+            dkr::runtime::saves::configure_recovery_locations(RecoverySaveLocations(argv[0]));
         dkr::runtime::platform::configure_input(config_directory);
 #if DKR_RUNTIME_HAS_RT64
         // Custom tracks are user content beside the other imported assets, so
@@ -1249,7 +1372,13 @@ int DkrMain(int argc, char** argv) {
         .poll_input = dkr::runtime::platform::poll_input,
         .frame_boundary = dkr::runtime::netplay::on_frame_boundary,
         .physical_poll_allowed = []() { return dkr::runtime::netplay::physical_input_poll_allowed(); },
-        .get_input = dkr::runtime::platform::get_input,
+        .get_input = +[](int port, std::uint16_t* buttons, float* x, float* y) {
+            if (!time_trial::replaying())
+                return dkr::runtime::platform::get_input(port, buttons, x, y);
+            *buttons = 0;
+            *x = *y = 0.0F;
+            return port == 0;
+        },
         .set_rumble = dkr::runtime::platform::set_rumble,
         .get_connected_device_info = dkr::runtime::platform::get_connected_device_info,
     };
@@ -1301,6 +1430,8 @@ int DkrMain(int argc, char** argv) {
         .events_callbacks = events_callbacks,
         .save_write_allowed_callback =
             []() {
+                if (dkr::runtime::time_trial::active())
+                    return false;
 #if defined(DKR_EXPERIMENTAL_RACE_TEST)
                 if (dkr_experimental_bootstrap_active())
                     return false;
@@ -1336,10 +1467,11 @@ int DkrMain(int argc, char** argv) {
         // A lobby's accepted manifest, not later overlay preferences, owns
         // the simulation selection on every peer.
         const bool online_content = dkr::runtime::netplay::session().active();
-        const bool content_enabled = online_content && dkr::runtime::netplay::session().view().host
-                                         ? dkr::session_content::host_enabled.load()
-                                     : prepared_mods ? prepared_mods->content_enabled
-                                                     : dkr::session_content::next_enabled.load();
+        const bool content_enabled =
+            !time_trial::active() &&
+            (online_content && dkr::runtime::netplay::session().view().host ? dkr::session_content::host_enabled.load()
+             : prepared_mods                                                ? prepared_mods->content_enabled
+                             : dkr::session_content::next_enabled.load());
         dkr::crash_reports::Gameplay quiet_reports;
         dkr::session_content::Session content_session(content_enabled, online_content);
         dkr::session_content::Preparation content_preparation(content_enabled);
@@ -1350,7 +1482,8 @@ int DkrMain(int argc, char** argv) {
             online_magic_codes =
                 static_cast<std::uint32_t>(dkr::runtime::netplay::session().view().room.manifest.magic_codes_hash);
         }
-        dkr::runtime::magic_codes::begin_game_session(online_magic_codes);
+        dkr::runtime::magic_codes::begin_game_session(time_trial::active() ? std::optional<std::uint32_t>{0}
+                                                                           : online_magic_codes);
         dkr::runtime::netplay::reset_runtime_state();
         dkr::runtime::rev_a_asset_mutex::reset_statistics();
         dkr::runtime::legacy::begin_session(nullptr);
@@ -1423,7 +1556,20 @@ int DkrMain(int argc, char** argv) {
                 !dkr::runtime::saves::shared::prepare_development(config_directory, developer_folder, rom_error))
                 throw dkr::mods::Error(rom_error);
             selecting_save_owner = true;
-            if (dkr::runtime::spectators::party_enabled(&dkr::runtime::netplay::session())) {
+            if (time_trial::active()) {
+                using dkr::runtime::saves::ReplaySave;
+                const auto seed = time_trial::uses_completed_adventure_save()       ? ReplaySave::CompletedAdventure
+                                  : time_trial::uses_uninitialised_adventure_save() ? ReplaySave::MissingAdventure
+                                                                                   : ReplaySave::Blank;
+                if (!dkr::runtime::saves::prepare_time_trial_save_context(rom_error, seed))
+                    throw dkr::mods::Error(rom_error);
+                ultramodern::set_save_storage_callbacks({dkr::runtime::saves::runtime_save_path,
+                                                         dkr::runtime::saves::load_runtime_save,
+                                                         dkr::runtime::saves::commit_runtime_save});
+                dkr::runtime::pak::begin_session_directory({});
+                if (!dkr::runtime::saves::records::begin_memory({}, rom_error))
+                    throw dkr::mods::Error(rom_error);
+            } else if (dkr::runtime::spectators::party_enabled(&dkr::runtime::netplay::session())) {
                 auto party = dkr::runtime::spectators::party_link(&dkr::runtime::netplay::session());
                 std::vector<std::uint8_t> seed, shared_records;
                 bool owns_save = false;
@@ -1470,7 +1616,8 @@ int DkrMain(int argc, char** argv) {
                     std::fprintf(stderr, "[save][selected] owner=%s path=%s progress=%s\n",
                                  online_save.active    ? "online"
                                  : development_session ? "development"
-                                                       : "personal",
+                                 : content_enabled     ? "modded"
+                                                       : "vanilla",
                                  std::string(utf8.begin(), utf8.end()).c_str(),
                                  dkr::runtime::saves::shared::describe(path).c_str());
                 }
@@ -1478,15 +1625,18 @@ int DkrMain(int argc, char** argv) {
                                                          dkr::runtime::saves::load_runtime_save,
                                                          dkr::runtime::saves::commit_runtime_save});
                 dkr::runtime::pak::begin_session_directory(dkr::runtime::saves::runtime_pak_directory());
+                const auto records_directory = online_save.active
+                                                   ? dkr::runtime::saves::runtime_save_path().parent_path()
+                                                   : config_directory / "saves";
                 if (!dkr::runtime::saves::records::begin(
-                        development_session
-                            ? std::filesystem::path{}
-                            : dkr::runtime::saves::runtime_save_path().parent_path() / "custom-records-v1.bin",
+                        development_session ? std::filesystem::path{} : records_directory / "custom-records-v1.bin",
                         !development_session && (!online_save.active || online_save.host), rom_error))
                     throw dkr::mods::Error(rom_error);
             }
         } catch (const std::exception& error) {
             std::fprintf(stderr, "[legacy][launch] %s\n", error.what());
+            if (time_trial::active())
+                time_trial::retire();
 #if DKR_RUNTIME_HAS_RT64
             if (selecting_save_owner) {
                 // No guest producer exists yet. A locked/invalid route is a
@@ -1733,6 +1883,7 @@ int DkrMain(int argc, char** argv) {
             // X11 and Wayland compatibility while the recompiler owns its
             // worker.
             dkr::runtime::platform::pump_window_events(nullptr);
+            dkr::runtime::ui::show_run_return_cover();
             dkr::runtime::service_online_wait_presentation();
 #endif
             if (!timeout_requested && timeout_seconds != 0 &&
@@ -1748,6 +1899,10 @@ int DkrMain(int argc, char** argv) {
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
         }
         runtime_thread.join();
+#if DKR_RUNTIME_HAS_RT64
+        if (time_trial::active() && !time_trial::preparing_ghost())
+            dkr::runtime::ui::show_run_return_cover(true);
+#endif
         dkr::runtime::modern_camera::reset_session();
 #if defined(DKR_EXPERIMENTAL_RACE_TEST)
         if (owned_launch) {
@@ -1853,6 +2008,23 @@ int DkrMain(int argc, char** argv) {
             }
             return 5;
         }
+        const bool return_from_time_trial = time_trial::active();
+        if (time_trial::preparing_ghost() && time_trial::advance_ghost()) {
+            dkr::session_content::end();
+            continue;
+        }
+        if (return_from_time_trial)
+            time_trial::finish_interrupted_recording();
+        if (launch.time_trial == time_trial::Mode::Verify || launch.time_trial == time_trial::Mode::SelfTest ||
+            time_trial::exporting_video() ||
+            launch.adventure != time_trial::Adventure::None) {
+            const int status = time_trial::status();
+            time_trial::retire();
+            dkr::runtime::platform::shutdown();
+            return status;
+        }
+        if (return_from_time_trial)
+            time_trial::retire();
 #if DKR_RUNTIME_HAS_RT64
 #if defined(DKR_EXPERIMENTAL_RACE_TEST)
         if (owned_check) {
@@ -1860,8 +2032,8 @@ int DkrMain(int argc, char** argv) {
             return owned_failed ? 5 : 0;
         }
 #endif
-        if (lifecycle_request == dkr::runtime::ui::LifecycleRequest::StopGame || !mod_failure.empty() ||
-            !save_failure.empty() ||
+        if (return_from_time_trial || lifecycle_request == dkr::runtime::ui::LifecycleRequest::StopGame ||
+            !mod_failure.empty() || !save_failure.empty() ||
             (return_from_owned && lifecycle_request == dkr::runtime::ui::LifecycleRequest::None)) {
             if (!mod_failure.empty())
                 dkr::runtime::ui::report_mod_error("Custom content stopped safely: " + mod_failure);
@@ -1874,8 +2046,10 @@ int DkrMain(int argc, char** argv) {
                     ? std::string("The previous online game did not finish safely. Review its error before joining.")
                     : std::string{});
             dkr::runtime::ui::reset_lifecycle_request();
-            const bool software_launcher_return = dkr::runtime::launcher_surface_recovery(
-                owned_failed, return_from_owned, !mod_failure.empty() || !save_failure.empty());
+            const bool software_launcher_return =
+                return_from_time_trial ||
+                dkr::runtime::launcher_surface_recovery(owned_failed, return_from_owned,
+                                                        !mod_failure.empty() || !save_failure.empty());
             dkr::session_content::end();
             const auto startup = dkr::runtime::ui::run_startup_screen(
                 static_cast<SDL_Window*>(dkr::runtime::platform::sdl_window()), rom_path, software_launcher_return);

@@ -699,7 +699,7 @@ void DrawPlayPage(float available_width, const PlayPageContext& play, bool live 
         ImGui::PopStyleColor();
         ImGui::SetCursorScreenPos({content_left, y + actions_height + 14.F});
         ImGui::BeginGroup();
-        DrawPlaySaveSummary(content_inner, live);
+        DrawPlaySaveSummary(content_inner, live, launch_modal);
         ImGui::EndGroup();
         const float resume_bottom = ImGui::GetItemRectMax().y;
 
@@ -712,7 +712,7 @@ void DrawPlayPage(float available_width, const PlayPageContext& play, bool live 
         const float tools_y = std::max(resume_bottom, ImGui::GetItemRectMax().y) + 8.F;
         const float tools_width = std::max(1.F, width - 36.F);
         ImGui::SetCursorScreenPos({at.x + 18.F, tools_y + 10.F});
-        DrawPlayTools(tools_width);
+        DrawPlayTools(tools_width, live);
         const float final_height = ImGui::GetItemRectMax().y + 18.F - at.y;
         draw->AddLine({at.x + 18.F, tools_y}, {at.x + width - 18.F, tools_y}, PaddockCol(0x325365));
         if (side)

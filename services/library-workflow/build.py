@@ -236,7 +236,7 @@ def community(output: Path, archive: Path | None, baseline: Path | None, esbuild
             ],
             check=True,
         )
-    for schema in ("community_schema.sql", "speedrun_schema.sql"):
+    for schema in ("community_schema.sql", "speedrun_schema.sql", "notification_schema.sql"):
         shutil.copyfile(COMMUNITY_API / schema, private / schema)
     directory = ROOT / "services/online-directory"
     online = output / "ONLINE-WORKER"

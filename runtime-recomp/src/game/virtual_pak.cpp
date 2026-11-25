@@ -209,7 +209,7 @@ bool SavePakLocked(int channel, VirtualPak& pak) {
     WriteU32(bytes, 16U, Checksum(bytes));
 
     std::string error;
-    if (!dkr::runtime::saves::storage::write_atomic(PakPath(channel), bytes, ReadPakImage, error)) {
+    if (!dkr::runtime::saves::storage::write_progress(PakPath(channel), bytes, ReadPakImage, error)) {
         std::fprintf(stderr, "[save][pak] %s\n", error.c_str());
         return false;
     }
