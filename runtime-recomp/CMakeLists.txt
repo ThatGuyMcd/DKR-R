@@ -3603,6 +3603,10 @@ if(BUILD_TESTING)
             PASS_REGULAR_EXPRESSION "REGRESSION FAILURE: FIRST POST-LOAD RELEASE WAS DISCARDED"
             FAIL_REGULAR_EXPRESSION "regression checks passed"
     )
+    # The synthetic multi-peer runs perform much more work under CPU emulation.
+    if(CMAKE_CROSSCOMPILING AND CMAKE_CROSSCOMPILING_EMULATOR)
+        set_tests_properties(DKRRaceReleaseChecks DKRRaceReleaseBeforeChecks PROPERTIES TIMEOUT 240)
+    endif()
 
     add_executable(DKRSpectatorAdmissionTests tests/spectator_admission_tests.cpp)
     # Negative control: the same fixture compiles the production resident music
