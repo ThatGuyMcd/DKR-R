@@ -48,6 +48,41 @@ int main() {
     assert(controller_binding(0U, Action::OrbitUp) == kUnbound);
     assert(secondary_controller_binding(0U, Action::Z) == kUnbound);
 
+    // The v1.0.14 and v1.0.15 reload left the earlier action of each shared
+    // default unbound. The repair puts it back, one player at a time, and
+    // only while the damage is exactly what that reload left.
+    reset_defaults();
+    const int z_default = controller_binding(0U, Action::Z);
+    const int c_left_default = controller_binding(0U, Action::CLeft);
+    const auto unbind = [](std::size_t player) {
+        for (const Action action :
+             {Action::Z, Action::Accelerate, Action::CUp, Action::CDown, Action::CLeft, Action::CRight}) {
+            restore_controller_binding(player, action, kUnbound);
+        }
+    };
+    unbind(0U);
+    unbind(1U);
+    assert(repair_reload_unbound_defaults(0U, false) == 6U);
+    assert(controller_binding(0U, Action::Z) == z_default);
+    assert(controller_binding(0U, Action::CLeft) == c_left_default);
+    assert(controller_binding(1U, Action::Z) == kUnbound);
+    assert(repair_reload_unbound_defaults(0U, false) == 0U);
+    // An analogue driving layout owns the triggers: Z and Accelerate stay.
+    assert(repair_reload_unbound_defaults(1U, true) == 4U);
+    assert(controller_binding(1U, Action::Z) == kUnbound);
+    assert(controller_binding(1U, Action::Accelerate) == kUnbound);
+    assert(controller_binding(1U, Action::CLeft) == c_left_default);
+    // A second source on the action, or a partner moved off the shared
+    // source, is something the player did. Those two are left alone.
+    unbind(2U);
+    restore_secondary_controller_binding(2U, Action::Z, kSecondarySource);
+    restore_controller_binding(2U, Action::OrbitUp, kPlayerOneSource);
+    assert(repair_reload_unbound_defaults(2U, false) == 4U);
+    assert(controller_binding(2U, Action::Z) == kUnbound);
+    assert(controller_binding(2U, Action::CUp) == kUnbound);
+    assert(controller_binding(2U, Action::Accelerate) == controller_binding(0U, Action::Accelerate));
+    reset_defaults();
+
     // Global shortcuts are independent actions and support two-button chords.
     const ShortcutBinding overlay_shortcut{21, 22};
     const ShortcutBinding texture_shortcut{23, kUnbound};

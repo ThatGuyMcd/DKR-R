@@ -85,6 +85,44 @@ constexpr std::array<BindingPair, static_cast<std::size_t>(Action::Count)> kDefa
 constexpr std::array<BindingPair, static_cast<std::size_t>(Action::Count)> kDefaults{};
 #endif
 
+// The pairs of actions that share one default controller source, the earlier
+// one in the enum first. `trigger` marks the two that sit on a trigger.
+struct SharedDefault {
+    Action earlier;
+    Action later;
+    bool trigger;
+};
+constexpr std::array<SharedDefault, 6> kSharedDefaults{{
+    {Action::CUp, Action::OrbitUp, false},
+    {Action::CDown, Action::OrbitDown, false},
+    {Action::CLeft, Action::OrbitLeft, false},
+    {Action::CRight, Action::OrbitRight, false},
+    {Action::Z, Action::AnalogueBrake, true},
+    {Action::Accelerate, Action::AnalogueAccelerator, true},
+}};
+#if DKR_RUNTIME_HAS_RT64
+static_assert(
+    [] {
+        for (const SharedDefault& shared : kSharedDefaults) {
+            const int source = kDefaults[static_cast<std::size_t>(shared.earlier)].controller;
+            if (source == dkr::runtime::input::kUnbound ||
+                source != kDefaults[static_cast<std::size_t>(shared.later)].controller ||
+                shared.earlier >= shared.later) {
+                return false;
+            }
+        }
+        std::size_t sharing = 0;
+        for (std::size_t earlier = 0; earlier < kDefaults.size(); ++earlier) {
+            for (std::size_t later = earlier + 1; later < kDefaults.size(); ++later) {
+                sharing += kDefaults[earlier].controller != dkr::runtime::input::kUnbound &&
+                           kDefaults[earlier].controller == kDefaults[later].controller;
+            }
+        }
+        return sharing == kSharedDefaults.size();
+    }(),
+    "kSharedDefaults must list exactly the actions that share a default controller source");
+#endif
+
 using PlayerBindings = std::array<BindingPair, static_cast<std::size_t>(Action::Count)>;
 std::array<PlayerBindings, dkr::runtime::input::kPlayerCount> g_bindings{kDefaults, kDefaults, kDefaults, kDefaults};
 std::mutex g_binding_mutex;
@@ -578,6 +616,23 @@ void dkr::runtime::input::restore_controller_binding(std::size_t player, Action 
 void dkr::runtime::input::restore_secondary_controller_binding(std::size_t player, Action action, int source) {
     std::scoped_lock lock(g_binding_mutex);
     g_bindings[PlayerIndex(player)][Index(action)].controller_secondary = source;
+}
+
+std::size_t dkr::runtime::input::repair_reload_unbound_defaults(std::size_t player, bool keep_triggers) {
+    std::scoped_lock lock(g_binding_mutex);
+    PlayerBindings& bindings = g_bindings[PlayerIndex(player)];
+    std::size_t restored = 0;
+    for (const SharedDefault& shared : kSharedDefaults) {
+        BindingPair& lost = bindings[Index(shared.earlier)];
+        const int source = kDefaults[Index(shared.later)].controller;
+        if ((shared.trigger && keep_triggers) || lost.controller != kUnbound || lost.controller_secondary != kUnbound ||
+            bindings[Index(shared.later)].controller != source) {
+            continue;
+        }
+        lost.controller = kDefaults[Index(shared.earlier)].controller;
+        ++restored;
+    }
+    return restored;
 }
 
 void dkr::runtime::input::reset_defaults() {

@@ -114,6 +114,15 @@ void set_secondary_controller_binding(std::size_t player, Action action, int sou
 // table must not re-resolve them.
 void restore_controller_binding(std::size_t player, Action action, int source);
 void restore_secondary_controller_binding(std::size_t player, Action action, int source);
+// v1.0.14 and v1.0.15 reloaded the saved table through the set_* calls, so the
+// earlier action of each pair that shares a default source came back unbound:
+// Z, Accelerate and the four C buttons, for every player. Puts those defaults
+// back where a profile is still exactly as that reload left it: the action
+// unbound in both slots and its partner still on the shared source.
+// `keep_triggers` leaves Z and Accelerate alone, for a player whose analogue
+// driving layout took them off the triggers on purpose. Returns how many
+// bindings were restored.
+std::size_t repair_reload_unbound_defaults(std::size_t player, bool keep_triggers);
 void reset_defaults();
 void reset_defaults(std::size_t player);
 void copy_bindings(std::size_t source_player, std::size_t target_player);
