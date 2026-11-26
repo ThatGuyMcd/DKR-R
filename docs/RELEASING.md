@@ -73,10 +73,10 @@ draft the GitHub release at the tag, upload, verify the hashes, publish.
 ## macOS
 
 `./Build-macOS.sh --rom-v77 ... --rom-v80 ... --notarize` builds from
-`build/prepared` and writes the notarised package; `build.py --platform
-macos` is the same build with the release record. Integrated rollback is off
-on Apple (see "Rollback on Apple" in docs/fold-in/open-items.md), and macOS
-isn't in the update manifest yet.
+`build/prepared` and writes the notarised package. To build and record
+evidence using the release preset, run `build.py --platform macos`. Both
+paths enable integrated rollback. The update manifest covers Windows and
+Linux. See [cross-architecture play](CROSS-ARCHITECTURE.md) for test results.
 
 ## When the pins move
 

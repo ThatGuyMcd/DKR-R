@@ -247,6 +247,35 @@ class InputLockTests(unittest.TestCase):
 
 
 class EvidenceTests(unittest.TestCase):
+    def test_codemodel_uses_release_configuration(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            build = Path(tmp)
+            reply = build / ".cmake/api/v1/reply"
+            reply.mkdir(parents=True)
+            model = {
+                "paths": {"source": str(build)},
+                "configurations": [
+                    {"name": "Debug", "targets": [{"jsonFile": "debug.json"}]},
+                    {"name": "Release", "targets": [{"jsonFile": "release.json"}]},
+                ],
+            }
+            (reply / "index-probe.json").write_text(json.dumps({"reply": {"codemodel-v2": {"jsonFile": "model.json"}}}))
+            (reply / "model.json").write_text(json.dumps(model))
+            for config in ("debug", "release"):
+                target = {
+                    "name": "Game",
+                    "sources": [{"path": "game.cpp", "compileGroupIndex": 0}],
+                    "compileGroups": [{"language": "CXX", "defines": [{"define": config.upper()}]}],
+                }
+                (reply / f"{config}.json").write_text(json.dumps(target))
+            norm = evidence.Paths(build, build / "prepared")
+            expected = {"Game": {"sources": {"$BUILD/game.cpp": ["CXX", "RELEASE"]}}}
+            self.assertEqual(evidence.codemodel(build, norm), expected)
+            model["configurations"].pop()
+            (reply / "model.json").write_text(json.dumps(model))
+            with self.assertRaisesRegex(SystemExit, "no Release configuration"):
+                evidence.codemodel(build, norm)
+
     def test_machine_paths_become_placeholders(self):
         norm = evidence.Paths(Path("/work/tree/build/release-linux"), Path("/work/tree/build/prepared"))
         self.assertEqual(norm("/work/tree/build/prepared/owned-v77/x.c"), "$PREPARED/owned-v77/x.c")

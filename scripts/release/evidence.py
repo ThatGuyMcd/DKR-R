@@ -55,7 +55,10 @@ def codemodel(build: Path, norm: Paths) -> dict[str, Json]:
     model = json.loads((reply / index["reply"]["codemodel-v2"]["jsonFile"]).read_text(encoding="utf-8"))
     source = Path(model["paths"]["source"])
     targets: dict[str, Json] = {}
-    for entry in model["configurations"][0]["targets"]:
+    release = next((config for config in model["configurations"] if config["name"] == "Release"), None)
+    if release is None:
+        raise SystemExit(f"evidence: no Release configuration in the CMake File API reply under {build}")
+    for entry in release["targets"]:
         target = json.loads((reply / entry["jsonFile"]).read_text(encoding="utf-8"))
         groups = target.get("compileGroups", [])
         sources: dict[str, list[str]] = {}

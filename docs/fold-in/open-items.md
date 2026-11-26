@@ -11,7 +11,8 @@
    (`runtime-recomp/CMakeLists.txt` says so where the define used to be set).
    Was dropping it a bug, or intended? Turning it back on is a behaviour
    change for after the fold.
-2. **Launcher copy.** 71 reviewed strings are superseded by v1.0.11; see
+2. **Launcher copy.** The inventory test marks 90 reviewed strings as
+   superseded, including the 71 listed in
    [launcher-copy-review.md](launcher-copy-review.md).
 
 3. **Road-wheel hooks in the camera scene kernel: ported, needs an in-game
@@ -27,8 +28,7 @@
    macOS; nothing has run the hooks in a race. Still to do: a playtest with a
    custom character on the original car, Camera++ and look-behind on, checking
    the tyres are lit and no display-list task is rejected. Online identity is
-   unchanged. `scripts/fold/prepared.py` still compares the kernel bytes with
-   the old reference and isn't run in CI, so it will report this difference.
+   unchanged. This is a gameplay acceptance item.
 
 4. **`DKRQuickJoinLifecycle` is intermittent** on the Linux host presets
    (amd64 under emulation on the devops Mac). Alone it fails about half its
@@ -41,53 +41,19 @@
    parallel load the same way, and it was the one failure before the fold
    too. Behaviour fixes belong after B10.
 
-## PR-2 merge blockers (non-Linux coverage)
+## Completed platform checks
 
-The gate is Linux x86_64 only. These close only when the `windows` and
-`android` CI jobs build the folded tree and pass on the PR:
-
-- MSVC compile flags of the shipped TUs (`/bigobj`, `/EHs /EHc-`,
-  `/fp:strict`, `/FI` forced includes) and the Windows stage chain.
-- The stage patches on the Android chain (five files take `android-*` stages
-  first) and the `DKRPortGameCore` object library inside the Android
-  `SHARED` `DKRPortGame`.
-
-The jobs that close them are `windows-full-nogen` (`build-windows.yml`: the
-`host-full-nogen` preset under MSVC) and `android-folded` (`build-android.yml`:
-an NDK r29 arm64 configure and build of `runtime-recomp/` with RT64 on). Both
-build RT64 with its stage chain and stage patches and every `DKRPortGameCore`
-TU, without payloads. They need the sparse `extern/dkr-decomp/ver/symbols`
-checkout (`prepare-dependencies` `decomp-symbols`) and, on Android, the new
-`android-full` dependency profile. actionlint and zizmor are clean locally.
-**Neither job has run yet**; they first run when PR 2 opens.
-
-Also blocking B10 (the merge), from B9b: a dry-run release from a test tag
-on a fork, built on the devops Mac and a second machine, with
-`scripts/release/evidence.py compare` between the two builds and against the
-v1.0.10 evidence (sources, definitions, identity values).
-
-C5 has restored every pending release check (see Release tooling);
-`required_checks.toml` has no `pending` entry left.
-
-Also blocking: a real Windows run of `Prepare-DKR-Runtime.ps1` (both ROMs,
-WSL) followed by `Build-DKR-R-Windows.ps1`, by ThatGuyMcd or Steve. Windows is
-the platform that ships; the scripts only parse-checked here.
-
-Known before they run:
-
-- `android-folded` was red before B6. A local run in the CI image (NDK r29,
-  same flags) applied every stage patch the Android chain takes. Then 7
-  first-party TUs failed on libc++ gaps v1.0.11 never hit: missing
-  `std::atomic<std::shared_ptr>`, `std::to_string` of a 128-bit file-clock
-  count, and `curl/curl.h`. B6 fixes them portably (`portability.json`), and
-  the same local run now builds.
-- Android doesn't configure `DKR_EXPERIMENTAL_RACE_TEST`, so it doesn't take
-  `0001-render-stability` and `0003-present-queue-pacer` (they sit on the
-  rollback chain). Android releases are discontinued, so that stays open.
-- The new jobs install Python 3.12 with the pinned `actions/setup-python`;
-  `windows-full-nogen` also checks for 3.11 or newer as a backstop.
-- Adding `decomp-symbols` to the source cache key invalidates the existing
-  dependency caches once.
+- `windows-full-nogen` and `android-folded` passed on the
+  [fold PR](https://github.com/ThatGuyMcd/DKR-R/pull/108). They compile the
+  folded runtime and renderer with MSVC and Android NDK r29, respectively.
+- [Windows prepare and build](https://github.com/ThatGuyMcd/DKR-R/pull/114)
+  ran on a clean Windows 11 machine with WSL2 and Visual Studio Build Tools.
+  Both ROM revisions booted. A later Windows prepare reproduced the
+  [release input lock](https://github.com/ThatGuyMcd/DKR-R/pull/145).
+- C5 restored every pending release fixture. The
+  [v1.0.16 release PR](https://github.com/ThatGuyMcd/DKR-R/pull/196) records
+  245 passing release tests each on Windows x64, Linux x86_64 and Linux ARM64
+  under QEMU. The two-machine comparison remains open under [Release path](#release-path-b9b).
 
 ## Removed or renamed entrypoints
 
@@ -197,8 +163,6 @@ What the deleted release-prep scripts did, for B9b:
   `vehicle_texture_profile.hpp`, and `tests/historical/vehicle_original_textures/`
   holds the pre-v1.0.10 answer. Nothing old is vendored.
 
-- The layers' remaining check targets and the "Before" negative controls
-  move to C5 with the other promoted fixtures; the fold doesn't port them.
 - `DKRSpectatorAdmissionBeforeChecks` and `DKRRaceReleaseBeforeChecks` compile
   the same fixtures and the same production TUs (`resident_music.cpp`,
   `party_runtime.cpp`) with one decision header replaced by its pre-repair
@@ -213,9 +177,8 @@ What the deleted release-prep scripts did, for B9b:
 
 ## For B6 (native macOS)
 
-- `apply_closure.py` respelled absolute staged includes inside `#if` branches
-  no Linux TU takes (Apple, Windows, Android) by path alone. No configure has
-  compiled them, so B6 and the Windows configure are their first check.
+- `apply_closure.py` respelled staged includes in Apple, Windows and Android
+  branches by path. The platform builds then checked those branches.
 
 - Five TUs held a `std::atomic<std::shared_ptr<const T>>`, which libc++
   (Apple, Android) doesn't implement. They use main's
@@ -228,14 +191,9 @@ What the deleted release-prep scripts did, for B9b:
 ## Dependency stage patches (B3)
 
 - The 11 dependency transforms are six registered stage patches
-  (`patches/rt64/staged/`, `patches/n64-modern-runtime/staged/`), derived by
-  `scripts/fold/dependency_stages.py` from the Linux chain output and applied
-  after that chain. The gate checks them on Linux. Windows takes the same
-  CMake branches for these files, so its chain input should be the same, but
-  nobody has configured it. Android stages five of the files further
-  (`android-*` stages), and the shipped layers applied on top of whatever the
-  chain produced, so the Android `git apply` is unverified until the
-  `android` job runs.
+  under `patches/rt64/staged/` and `patches/n64-modern-runtime/staged/`.
+  The Linux fold gate verified its stage chain. Windows and Android compile
+  coverage is recorded under [Completed platform checks](#completed-platform-checks).
 - `0001-render-stability` and `0003-present-queue-pacer` are diffs against
   the rollback stages of `rt64_state`, `rt64_workload_queue` and
   `rt64_present_queue`. v1.0.11 only shipped that chain
@@ -258,13 +216,10 @@ What the deleted release-prep scripts did, for B9b:
   and `Camera.cmake` derives its hook stubs from the prepared kernel, so
   `DKR_CAMERA_SHADOW_KERNEL_V*` is gone. `DKR_CAMERA_KERNEL_V*` is a
   prepared input from `scripts/camera_scene_kernel.py` (B8a).
-- `scripts/gen_guest_symbols.py` generates the four pure symbol headers
-  (achievement, polish, vehicle, render heap) into `<build>/generated/symbols`.
-  `title_text_rt64.hpp` and `credits_sky_rt64.hpp` keep their tables inline,
-  among hand-written code; `gen_guest_symbols_tests.py` checks the tables
-  against the pinned decomp table. Splitting those tables into generated
-  `.inc` files is cleanup for after equivalence (it would cost a level 1
-  delta now).
+- `scripts/gen_guest_symbols.py` writes the symbol headers to
+  `<build>/generated/symbols`. The title text and credits sky tables
+  [moved to generated headers](https://github.com/ThatGuyMcd/DKR-R/pull/148)
+  after the fold. The tests check their original values for both revisions.
 - The polish header reads `gRareCopyrightString`, which only the decomp symbol
   table has, so a `host-full-nogen` configure needs
   `extern/dkr-decomp/ver/symbols`. That's the sparse "symbols" dependency
@@ -285,21 +240,15 @@ What the deleted release-prep scripts did, for B9b:
 
 ## Release path (B9b)
 
-- Releases build locally: CI has no ROM-derived inputs and there's no tag
-  workflow, so CI only runs the ROM-free gates on pushes and PRs. A
-  dry-run release from a test tag (devops Mac and a second machine) with
-  `evidence.py compare` between them is still to do; it's a B10 criterion,
-  together with comparing against the v1.0.10 evidence.
+- Releases build locally with ROM-derived inputs. The original B9b evidence
+  item still needs a record of the dry run from a test tag on two machines
+  and a comparison with v1.0.10 covering sources, definitions and identities.
 - The release presets don't set `DKR_WERROR`: `cmake/Warnings.cmake` isn't
   wired to any target yet, so the option would do nothing (Phase C).
 - Tag scheme (open question 5), settled: `Version<VERSION>`, as published so
   far and as old clients' updater expects. A switch to `v<VERSION>` changes
   behaviour for old clients, so it isn't part of the fold; it's a possible
   C10 item.
-- `runtime-recomp/build-inputs.lock.json` was written from this machine's
-  `build/prepared` (the inputs the gate's prepared level matched to v1.0.11).
-  A Windows prepare must reproduce the same digests; that's part of the
-  Windows blocker above.
 
 ## For Phase C
 
@@ -326,7 +275,8 @@ What the deleted release-prep scripts did, for B9b:
   (`docs/contracts/ONLINE_IDENTITY.md`). The gate compares identity defines
   exactly, and `online_identity_tests.py` pins the values.
 - `cmake/OwnedContentIdentity.cmake` no longer feeds any identity; only
-  `owned_content_identity_tests.py` still runs it. B8 deletes both.
+  `owned_content_identity_tests.py` still runs it. Removing both remains a
+  cleanup item.
 - `DKR_LOBBY_STABILITY_CONTRACT` was already a committed literal
   (`src/game/build_contract.hpp`). Moving it into `legacy_identity.hpp`
   would cost a level 1 delta now, so that waits for Phase C.
@@ -351,10 +301,9 @@ Their authored guest inputs moved from `patches/save-layout/` and
 - One prepare path per platform: `Prepare-DKR-Runtime.ps1` and
   `Prepare-DKR-Runtime-macOS.sh` both check the ROMs and compose the payloads
   through `scripts/compose_payloads.py`, then run `prepare_payloads.py`; the
-  Windows build defaults to `build\prepared`. **The PS1 is unverified**: no
-  Windows host here, and no CI job runs it (it needs ROMs and WSL). It parses
-  under pwsh 7.4; `windows-full-nogen` covers the CMake side only. The macOS
-  script's payloads came out byte-identical to the previous ones.
+  Windows build defaults to `build\prepared`. See
+  [Completed platform checks](#completed-platform-checks) for the Windows
+  prepare and input-lock results.
 - The save-layout and portrait stages still rewrite copies of
   `funcs_*.c`, which AGENTS.md reserves for `guest-hooks/hooks.toml`. They
   stay stages because the owned engine is generated from their output and

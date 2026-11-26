@@ -1,6 +1,5 @@
-name: Fold equivalence
-# ROM-free check of main against the recorded current-main checkpoint
-# (scripts/fold/current_main.py). Run on request.
+name: Historical fold checkpoint
+# Run on a historical ref matching the checkpoint (see docs/fold-in/REFERENCE.md).
 on:
   workflow_dispatch:
 permissions:
@@ -19,5 +18,5 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
-      - name: Current-main source checkpoint
+      - name: Check the recorded fold source closure
         run: python3 scripts/fold/current_main.py
