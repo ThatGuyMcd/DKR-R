@@ -150,6 +150,7 @@ runtime-recomp/src/game/runtime_texture_packs.cpp
 runtime-recomp/src/game/runtime_ui.cpp
 runtime-recomp/src/game/store_vehicle_adapter.cpp
 runtime-recomp/src/game/texture_dump.cpp
+runtime-recomp/src/game/time_trial/session.cpp
 runtime-recomp/src/game/updates/update_bootstrap_win.cpp
 runtime-recomp/src/game/vehicle_rt64.cpp
 runtime-recomp/src/game/vehicle_world.cpp
