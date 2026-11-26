@@ -145,11 +145,11 @@ of the 736 canonical source dependencies selected by that configure. It
 retains every historical closure path and adds 26 current dependencies.
 `python3 scripts/fold/current_main.py` checks it without private inputs. It
 pins include spellings as well as tokens, ignores comments/whitespace, and
-has no regeneration command. The `fold-equivalence` workflow runs it only on
-request (`workflow_dispatch`); ordinary follow-up PRs use the
-contributor/platform checks. It is a historical checkpoint: main has changed
-those sources on purpose since the fold, so it is expected to report
-differences there.
+has no regeneration command. Run it from a checkout of the fold merge
+commit `4e70f15f` to check the historical source closure. The workflow is
+manual, and its display name on main is **Historical fold checkpoint**.
+On current main the script reports source changes since the fold. Follow-up
+PRs use the contributor and platform checks.
 
 This checkpoint records the source comparison's two noncompiled metadata
 exceptions and its retained private input limitation. It does not claim a

@@ -86,6 +86,7 @@ jobs:
       CCACHE_DIR: ${{ github.workspace }}/build/ccache
       CCACHE_MAXSIZE: 500M
       CCACHE_COMPILERCHECK: content
+      TIDY_BUILD_DIR: build/host-full-nogen
     defaults:
       run:
         shell: bash
@@ -117,30 +118,35 @@ jobs:
           count="$(wc -l <"$RUNNER_TEMP/changed.txt")"
           echo "count=$count" >>"$GITHUB_OUTPUT"
           echo "$count changed first-party C/C++ files"
+          if [[ "$count" != 0 ]] || ! git diff --quiet "$merge_base" HEAD -- .github/workflows/tooling.yml .github/tidy-skip.txt; then
+            echo 'build=true' >>"$GITHUB_OUTPUT"
+          fi
       - name: Install LLVM 18 and build tools
-        if: steps.changes.outputs.count != '0'
-        run: sudo apt-get update && sudo apt-get install -y clang-18 clang-tidy-18 cmake ninja-build ccache libcurl4-openssl-dev
+        if: steps.changes.outputs.build == 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang-18 clang-tidy-18 cmake ninja-build ccache libcurl4-openssl-dev \
+            libgtk-3-dev libsdl2-dev libvulkan-dev
       - name: Prepare pinned runtime dependencies
-        if: steps.changes.outputs.count != '0'
+        if: steps.changes.outputs.build == 'true'
         uses: ./.github/actions/prepare-dependencies # zizmor: ignore[self-repository] -- actionlint 1.7.12 compatibility; checkout uses this workflow revision.
       - name: Restore compiler cache
-        if: steps.changes.outputs.count != '0'
+        if: steps.changes.outputs.build == 'true'
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: build/ccache
           key: ccache-tidy-v1-clang-18-${{ github.sha }}
           restore-keys: ccache-tidy-v1-clang-18-
-      # Generated headers come from the build, so tidy needs a built tree, not
-      # just a configured one.
-      - name: Configure and build host preset with clang-18
-        if: steps.changes.outputs.count != '0'
+      # Build the folded runtime, including the renderer and its generated headers.
+      - name: Configure and build host-full-nogen with clang-18
+        if: steps.changes.outputs.build == 'true'
         working-directory: runtime-recomp
         run: |
-          cmake --preset host -DCMAKE_C_COMPILER=clang-18 -DCMAKE_CXX_COMPILER=clang++-18 \
+          cmake --preset host-full-nogen -DCMAKE_C_COMPILER=clang-18 -DCMAKE_CXX_COMPILER=clang++-18 \
             -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
-          cmake --build --preset host --parallel
+          cmake --build --preset host-full-nogen --parallel
       - name: Save compiler cache
-        if: ${{ success() && steps.changes.outputs.count != '0' }}
+        if: ${{ success() && steps.changes.outputs.build == 'true' }}
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: build/ccache
@@ -148,16 +154,16 @@ jobs:
       - name: Changed translation units must have a compile command
         if: steps.changes.outputs.count != '0'
         run: |
-          python3 - "$RUNNER_TEMP/changed.txt" <<'EOF'
+          python3 - "$RUNNER_TEMP/changed.txt" "$TIDY_BUILD_DIR/compile_commands.json" <<'EOF'
           import json, os, sys
           root = os.getcwd()
-          database = json.load(open("build/host/compile_commands.json"))
+          database = json.load(open(sys.argv[2]))
           compiled = {os.path.relpath(os.path.realpath(os.path.join(e["directory"], e["file"])), root) for e in database}
           skipped = {line.strip() for line in open(".github/tidy-skip.txt") if line.strip() and not line.startswith("#")}
           changed = [line.strip() for line in open(sys.argv[1]) if line.strip().endswith((".c", ".cc", ".cpp"))]
           missing = [path for path in changed if path not in compiled and path not in skipped]
           for path in missing:
-              print(f"::error file={path}::not built by the host preset, so clang-tidy cannot check it; build it in host or add it to .github/tidy-skip.txt")
+              print(f"::error file={path}::no compile command in host-full-nogen; build it in that preset or explain the exception in .github/tidy-skip.txt")
           sys.exit(1 if missing else 0)
           EOF
       - name: clang-tidy on changed lines
@@ -165,12 +171,11 @@ jobs:
         env:
           MERGE_BASE: ${{ steps.changes.outputs.merge-base }}
         run: |
-          # Translation units the host preset doesn't compile have no compile
-          # command (tidy-skip.txt lists them), so they stay out of the run.
-          python3 - "$RUNNER_TEMP/changed.txt" >"$RUNNER_TEMP/tidy-files.txt" <<'EOF'
+          # Only pass translation units with a compile command to clang-tidy.
+          python3 - "$RUNNER_TEMP/changed.txt" "$TIDY_BUILD_DIR/compile_commands.json" >"$RUNNER_TEMP/tidy-files.txt" <<'EOF'
           import json, os, sys
           root = os.getcwd()
-          database = json.load(open("build/host/compile_commands.json"))
+          database = json.load(open(sys.argv[2]))
           compiled = {os.path.relpath(os.path.realpath(os.path.join(e["directory"], e["file"])), root) for e in database}
           for line in open(sys.argv[1]):
               path = line.strip()
@@ -179,7 +184,7 @@ jobs:
           EOF
           set +e
           python3 scripts/tidy_changed.py diff --merge-base "$MERGE_BASE" --files "$RUNNER_TEMP/tidy-files.txt" |
-            python3 /usr/lib/llvm-18/share/clang/clang-tidy-diff.py -p1 -path build/host \
+            python3 /usr/lib/llvm-18/share/clang/clang-tidy-diff.py -p1 -path "$TIDY_BUILD_DIR" \
               -clang-tidy-binary clang-tidy-18 -iregex '.*\.(c|cc|cpp|h|hpp)' -j 4 -quiet >"$RUNNER_TEMP/tidy.log" 2>&1
           set -e
           sed -nE "s#^($PWD/)?([^:]+):([0-9]+):([0-9]+): (warning|error): (.*)\$#::\5 file=\2,line=\3,col=\4::\6#p" "$RUNNER_TEMP/tidy.log"
