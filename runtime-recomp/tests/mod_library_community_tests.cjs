@@ -165,7 +165,7 @@ async function websiteTests(mf, db) {
     ensureSession: async () => {}, onChange: fn => { listeners.add(fn); return () => listeners.delete(fn); } };
   w.fetch = (url, options = {}) => mf.dispatchFetch(url, { method: options.method || 'GET', body: options.body, redirect: 'manual', headers: { ...options.headers, Origin: origin } });
   w.lucide = { createIcons() {} };
-  for (const name of ['api-store.js', 'community-store.js', 'community-ui.js', 'racing-ui.js']) w.eval(fs.readFileSync(path.join(source, 'assets', name), 'utf8'));
+  for (const name of ['api-store.js', 'community-store.js', 'community-ui.js', 'racing-ui.js', 'notifications-ui.js']) w.eval(fs.readFileSync(path.join(source, 'assets', name), 'utf8'));
   const originalCreate = w.createLibraryAPI;
   w.createLibraryAPI = function (...args) { D = originalCreate(...args); return D; };
   w.eval(fs.readFileSync(path.join(source, 'assets/app.js'), 'utf8'));
