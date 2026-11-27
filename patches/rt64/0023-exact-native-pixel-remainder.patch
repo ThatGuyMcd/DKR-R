@@ -1,0 +1,19 @@
+diff --git a/src/shaders/RasterPS.hlsl b/src/shaders/RasterPS.hlsl
+--- a/src/shaders/RasterPS.hlsl
++++ b/src/shaders/RasterPS.hlsl
+@@ -117,7 +117,14 @@
+     if (!renderFlagUpscale2D(rp.flags)) {
+         float2 screenPos = floor(vertexPosition.xy);
+         screenPos.x += FbParams.horizontalMisalignment;
+-        lowResUV -= fmod(screenPos.xy, FbParams.resolutionScale.yy) * float2(ddxVertexUV.x, ddyVertexUV.y);
++        // fmod() is lowered to frac(x / y) * y. A driver that divides through an
++        // approximate reciprocal can land an exact multiple just below the
++        // integer, turning a remainder of zero into almost a whole native pixel.
++        // The first column or row of each native pixel then samples the previous
++        // texel, which wraps at the leading edge of sliced UI sprites.
++        const float2 nativeScale = FbParams.resolutionScale.yy;
++        const float2 nativeRemainder = screenPos.xy - floor((screenPos.xy + 0.5f) / nativeScale) * nativeScale;
++        lowResUV -= nativeRemainder * float2(ddxVertexUV.x, ddyVertexUV.y);
+     }
+     
+     int tileIndex0 = 0;
