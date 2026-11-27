@@ -29,11 +29,19 @@ stick scrolls that page. The stick mapping stays the same in LB / RB mode,
 which also lets the D-pad navigate the page. The D-pad cannot move both the
 sidebar and page at once. The choice is saved and works in the launcher and
 in-game overlay. Scrolling targets the active dialog when one is open.
-The left stick stays in the main panel; it cannot select the sidebar navigation
-switch. Change that switch with the pointer.
+The left stick stays in the main panel. To change the sidebar navigation
+setting with a controller, use the active sidebar buttons to highlight the
+switch, then press A/Cross. While a dialog is open, the D-pad and left stick
+both navigate the dialog.
 
-Pick your ROM and start from **Play**. Desktop portable mode selects a separate
-data location on the next launch; it does not move your existing profile.
+On a new profile, answer the crash reporting prompt to reach **Play**.
+**Browse for ROM** opens a controller-friendly browser with folder history and
+common locations. Choose a supported ROM to put focus on **Start Game**.
+During a race, Back/View opens the overlay.
+On **Play**, press and release A/Cross on **Return to the race** to resume.
+See [ROM setup](ROM_SETUP.md) for the browser controls.
+
+Desktop portable mode selects a separate data location on the next launch; it does not move your existing profile.
 The **Language** dropdown beneath Portable mode changes the launcher and
 in-game overlay immediately. **Automatic** follows the system's preferred UI
 language, with English fallback. The choice is stored with the current profile;
@@ -143,7 +151,7 @@ The footer reaches both panel edges and the button is narrower and centred.
 It receives initial focus when a ROM is ready without trapping controller focus.
 The scrollbar appears only when needed, against the right edge. The scroll area
 uses the parent panel's background rather than an extra opaque layer.
-Play shows Community Spotlight above this card.
+Play shows Community Spotlight above this card after a ROM is ready.
 Play and Installed Mods also show the Mod Library's
 featured mods, with artwork, creator credits and a link to the mod's details.
 

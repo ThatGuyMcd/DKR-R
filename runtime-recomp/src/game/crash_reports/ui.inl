@@ -55,6 +55,8 @@ void DrawCrashReportingConsent() {
     DetailText(dkr::localisation::text("support.reporting.later"), width, kSetMuted);
     const bool narrow = width < 540.F;
     const auto button_width = narrow ? width : (width - 12.F) * .5F;
+    if (ImGui::IsWindowAppearing())
+        ImGui::GetCurrentContext()->NavDisableHighlight = false;
     if (DetailRaceButton(dkr::localisation::text("support.reporting.decline").data(), button_width) &&
         choose(false, false))
         ImGui::CloseCurrentPopup();

@@ -858,7 +858,7 @@ RomSelectResult DrawRomSelect(const char* id, float width, bool compact, bool di
     if (picked < 0)
         return RomSelectResult::None;
     if (picked >= static_cast<int>(rom.rom_catalog.size())) {
-        OpenRomBrowser(rom.selected_rom);
+        OpenRomBrowser(rom.selected_rom, press.id, {press.min, press.max});
         return RomSelectResult::Add;
     }
     if (picked == current)

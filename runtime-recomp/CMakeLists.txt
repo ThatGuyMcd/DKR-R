@@ -2867,6 +2867,15 @@ if(BUILD_TESTING)
     target_link_libraries(DKRNetplayAdverseNetworkTests PRIVATE DKRNetplayCore)
     add_test(NAME DKRNetplayAdverseNetwork COMMAND DKRNetplayAdverseNetworkTests)
 
+    add_executable(DKRRomBrowserTests tests/rom_browser_tests.cpp)
+    target_include_directories(DKRRomBrowserTests PRIVATE "${CMAKE_CURRENT_LIST_DIR}/src/game")
+    if(MSVC)
+        target_compile_options(DKRRomBrowserTests PRIVATE /UNDEBUG)
+    else()
+        target_compile_options(DKRRomBrowserTests PRIVATE -UNDEBUG)
+    endif()
+    add_test(NAME DKRRomBrowser COMMAND DKRRomBrowserTests)
+
     add_executable(
         DKRRomRevisionTests
         tests/rom_revision_tests.cpp
