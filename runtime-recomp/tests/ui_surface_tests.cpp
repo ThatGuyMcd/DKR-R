@@ -171,6 +171,21 @@ void RomBrowserControllerCase(dkr::library_ui::SidebarInput mode) {
     press(ImGuiKey_GamepadFaceDown);
     assert((selection_attempts == std::vector{invalid, valid}));
     assert(!browser.open && ready && !started && GImGui->NavId == start);
+    // A lone Alt tap must not toggle ImGui's menu layer and strand focus
+    // outside the content.
+    io.AddKeyEvent(ImGuiMod_Alt, true);
+    io.AddKeyEvent(ImGuiKey_LeftAlt, true);
+    frame();
+    io.AddKeyEvent(ImGuiMod_Alt, false);
+    io.AddKeyEvent(ImGuiKey_LeftAlt, false);
+    frame();
+    frame();
+    assert(GImGui->NavId == start && !started);
+    // Cancel with nothing to cancel keeps the selection.
+    press(ImGuiKey_GamepadFaceRight);
+    assert(GImGui->NavId == start && !started);
+    press(ImGuiKey_Escape);
+    assert(GImGui->NavId == start && !started);
     press(ImGuiKey_GamepadFaceDown);
     assert(started);
     ImGui::DestroyContext();

@@ -94,6 +94,22 @@ void LibraryNavigationHook(ImGuiContext* context, ImGuiContextHook* hook) {
         LibraryNavigationScroll(state);
         return;
     }
+    // These surfaces have no menu bar. Left unowned, a lone Alt tap makes
+    // ImGui toggle its menu layer, which focuses the root window and drops
+    // the content's nav selection.
+    const ImGuiID owner = ImHashStr("library-navigation");
+    ImGui::SetKeyOwner(ImGuiMod_Alt, owner);
+    // With nothing to cancel, ImGui's own cancel leaves the flattened content
+    // and clears its selection. Keep focus where it is instead. Dialogs, active
+    // widgets and children entered on purpose still get their cancel.
+    const ImGuiWindow* nav = context->NavWindow;
+    const bool entered_child =
+        nav && (nav->Flags & ImGuiWindowFlags_ChildWindow) != 0 && (nav->Flags & ImGuiWindowFlags_NavFlattened) == 0;
+    if (!context->ActiveId && !context->OpenPopupStack.Size && context->NavLayer == ImGuiNavLayer_Main &&
+        !entered_child) {
+        ImGui::SetKeyOwner(ImGuiKey_GamepadFaceRight, owner);
+        ImGui::SetKeyOwner(ImGuiKey_Escape, owner);
+    }
     const int connected =
         PlayLaunchLayoutCheck() ? 1 : dkr::library_ui::navigation_connected.load(std::memory_order_relaxed);
     if (connected > 0)
