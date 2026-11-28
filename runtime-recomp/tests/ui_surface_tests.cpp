@@ -1,4 +1,7 @@
 #include "library_ui/surface_policy.hpp"
+#include "library_ui/rom_browser.hpp"
+#include "temporary_directory.hpp"
+#include <fstream>
 #include "library_ui/navigation_icons.hpp"
 #include "launcher_themes/button_pattern_ui.hpp"
 #include "imgui_internal.h"
@@ -13,7 +16,7 @@ std::atomic<bool> g_overlay_visible{true};
 bool blocked = false;
 bool captured = false;
 bool LibrarySidebarInputBlocked() {
-    return blocked;
+    return blocked || GImGui->OpenPopupStack.Size != 0;
 }
 bool LibraryContentInputCaptured() {
     return captured;
@@ -23,6 +26,171 @@ bool PlayLaunchLayoutCheck() {
 }
 int g_launcher_layout_step = 0;
 #include "library_ui/navigation_input.inl"
+// Run the actual dialog with ImGui's gamepad event path. This fixture
+// replaces filesystem validation and launcher styling; it needs no ROM.
+constexpr ImVec4 kWarm{1.F, .75F, .25F, 1.F};
+std::string PathUtf8(const std::filesystem::path& path) {
+    const auto value = path.u8string();
+    return {value.begin(), value.end()};
+}
+struct PaddockType {
+    ImFont* font;
+};
+PaddockType PaddockReading(float, bool, float) {
+    return {ImGui::GetFont()};
+}
+std::string PaddockEllipsize(PaddockType, const std::string& text, float) {
+    return text;
+}
+bool BeginPaddedModal(const char* name, ImGuiWindowFlags flags) {
+    return ImGui::BeginPopupModal(name, nullptr, flags);
+}
+bool BeginPaddedChild(const char* id, ImVec2 size, bool border, ImGuiWindowFlags flags, ImVec2 padding) {
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, padding);
+    const bool visible = ImGui::BeginChild(id, size, border, flags);
+    ImGui::PopStyleVar();
+    return visible;
+}
+#include "library_ui/rom_browser_ui.inl"
+
+void RomBrowserControllerCase(dkr::library_ui::SidebarInput mode) {
+    using namespace dkr::library_ui;
+    const TemporaryDirectory scratch("dkrr-rom-browser-controller");
+    const auto& root = scratch.path();
+    const auto folder = root / "Folder";
+    const auto invalid = root / "Invalid.Z64";
+    const auto valid = root / "Valid.V64";
+    std::filesystem::create_directory(folder);
+    std::ofstream(invalid).put('x');
+    std::ofstream(valid).put('x');
+    for (int index = 100; index < 132; ++index)
+        std::ofstream(root / ("Z" + std::to_string(index) + ".z64")).put('x');
+
+    ImGui::CreateContext();
+    auto& io = ImGui::GetIO();
+    io.IniFilename = nullptr;
+    io.DisplaySize = {1024, 600};
+    io.DeltaTime = 1.F / 60;
+    io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad | ImGuiConfigFlags_NavEnableKeyboard;
+    unsigned char* pixels;
+    int w, h;
+    io.Fonts->GetTexDataAsRGBA32(&pixels, &w, &h);
+    sidebar_input = mode;
+    navigation_connected = 1;
+    navigation_buttons = 0;
+    navigation_press_edges = 0;
+    for (unsigned axis = 0; axis < 4; ++axis)
+        record_navigation_axis(axis, 0);
+    LibraryInstallNavigationHook(false);
+
+    RomBrowserState browser;
+    bool ready = false, started = false;
+    ImGuiID opener = 0, start = 0;
+    std::vector<std::filesystem::path> selection_attempts;
+    const auto frame = [&](bool initial = false) {
+        ImGui::NewFrame();
+        assert(LibraryTakeSidebarStep(false) == 0);
+        ImGui::SetNextWindowPos({0, 0});
+        ImGui::SetNextWindowSize({800, 570});
+        ImGui::Begin("Launcher", nullptr, ImGuiWindowFlags_NoSavedSettings);
+        ImGui::BeginChild("Play", {760, 530}, true, ImGuiWindowFlags_NavFlattened);
+        LibraryNavigationContentWindow();
+        if (initial || (ready && start == 0))
+            GImGui->NavDisableHighlight = false;
+        if (initial)
+            ImGui::SetKeyboardFocusHere();
+        const bool opened = ImGui::Button("Browse for ROM");
+        opener = ImGui::GetItemID();
+        if (opened) {
+            browser.folders.open(root, {});
+            browser.opener = ImGui::GetCurrentWindow();
+            browser.opener_id = opener;
+            browser.opener_scope = ImGui::GetCurrentFocusScope();
+            browser.opener_bounds = {ImGui::GetItemRectMin(), ImGui::GetItemRectMax()};
+            browser.open = true;
+            browser.message.clear();
+        }
+        if (ready && start == 0)
+            ImGui::SetKeyboardFocusHere();
+        ImGui::BeginDisabled(!ready);
+        started |= ImGui::Button("Start Game");
+        if (ready)
+            start = ImGui::GetItemID();
+        ImGui::EndDisabled();
+        ImGui::EndChild();
+        if (browser.open)
+            ready |= DrawRomBrowser(browser, ready, [&](const std::optional<std::filesystem::path>& candidate) {
+                assert(candidate);
+                selection_attempts.push_back(*candidate);
+                if (candidate == valid)
+                    return true;
+                browser.message = "The selected file was rejected.";
+                return false;
+            });
+        ImGui::End();
+        ImGui::Render();
+    };
+    const auto press = [&](ImGuiKey key) {
+        if (key == ImGuiKey_GamepadDpadDown) {
+            record_navigation_button(1, true);
+            record_navigation_press(1);
+        }
+        io.AddKeyEvent(key, true);
+        frame();
+        if (key == ImGuiKey_GamepadDpadDown)
+            record_navigation_button(1, false);
+        io.AddKeyEvent(key, false);
+        frame();
+        frame();
+    };
+
+    frame(true);
+    frame();
+    assert(GImGui->NavId == opener);
+    press(ImGuiKey_GamepadFaceDown);
+    assert(browser.open && browser.folders.directory() == root);
+    press(ImGuiKey_GamepadFaceDown);
+    assert(browser.folders.directory() == folder);
+    press(ImGuiKey_GamepadFaceRight);
+    assert(browser.open && browser.folders.directory() == root);
+    press(ImGuiKey_GamepadFaceRight);
+    assert(!browser.open && GImGui->NavId == opener && !ready);
+    press(ImGuiKey_GamepadFaceDown);
+    for (int index = 0; index < 34; ++index)
+        press(ImGuiKey_GamepadDpadDown);
+    press(ImGuiKey_GamepadFaceDown);
+    assert(selection_attempts == std::vector{root / "Z131.z64"});
+    press(ImGuiKey_GamepadFaceRight);
+    selection_attempts.clear();
+    press(ImGuiKey_GamepadFaceDown);
+    press(ImGuiKey_GamepadDpadDown);
+    press(ImGuiKey_GamepadFaceDown);
+    assert(selection_attempts == std::vector{invalid});
+    assert(browser.open && !browser.message.empty() && !ready);
+    press(ImGuiKey_GamepadDpadDown);
+    press(ImGuiKey_GamepadFaceDown);
+    assert((selection_attempts == std::vector{invalid, valid}));
+    assert(!browser.open && ready && !started && GImGui->NavId == start);
+    // A lone Alt tap must not toggle ImGui's menu layer and strand focus
+    // outside the content.
+    io.AddKeyEvent(ImGuiMod_Alt, true);
+    io.AddKeyEvent(ImGuiKey_LeftAlt, true);
+    frame();
+    io.AddKeyEvent(ImGuiMod_Alt, false);
+    io.AddKeyEvent(ImGuiKey_LeftAlt, false);
+    frame();
+    frame();
+    assert(GImGui->NavId == start && !started);
+    // Cancel with nothing to cancel keeps the selection.
+    press(ImGuiKey_GamepadFaceRight);
+    assert(GImGui->NavId == start && !started);
+    press(ImGuiKey_Escape);
+    assert(GImGui->NavId == start && !started);
+    press(ImGuiKey_GamepadFaceDown);
+    assert(started);
+    ImGui::DestroyContext();
+}
+
 void PinnedContentScrollCase(bool live, dkr::library_ui::SidebarInput mode) {
     using namespace dkr::library_ui;
     ImGui::CreateContext();
@@ -479,6 +647,8 @@ int main() {
             NavigationInteractionCase(live, mode);
             PinnedContentScrollCase(live, mode);
         }
+    for (auto mode : {SidebarInput::Shoulders, SidebarInput::Dpad})
+        RomBrowserControllerCase(mode);
     std::cout
         << "Shared sidebar routing: polling deduplication, content isolation, sticks, modal/release gates and all 20 bounded seasonal tiles passed\n";
 }

@@ -46,6 +46,7 @@
 #include "analog_driving/settings.hpp"
 #include "look_behind/policy.hpp"
 #include "file_picker/client.hpp"
+#include "library_ui/rom_browser.hpp"
 #include "diagnostics.hpp"
 #include "online_directory.hpp"
 #include "linux_keyring.hpp"
@@ -850,27 +851,11 @@ bool g_controller_mapping_completion_saved = false;
 
 bool HandleInputCaptureEvent(SDL_Event* event);
 
-struct BrowserEntry {
-    std::filesystem::path path;
-    bool directory = false;
-};
-
 struct RomCatalogEntry {
     std::filesystem::path path;
     std::string label;
     std::string key;
 };
-
-struct RomBrowserState {
-    bool open = false;
-    bool close_requested = false;
-    bool focus_first_entry = false;
-    std::filesystem::path directory;
-    std::vector<BrowserEntry> entries;
-    std::string message;
-};
-
-RomBrowserState g_rom_browser;
 
 constexpr ImVec4 kBackground{0.02F, 0.20F, 0.45F, 1.0F};
 constexpr ImVec4 kPanel{0.025F, 0.20F, 0.43F, 1.0F};
@@ -2772,11 +2757,6 @@ bool SelectCatalogRom(const RomCatalogEntry& entry, std::filesystem::path& selec
     return true;
 }
 
-bool IsRomFile(const std::filesystem::path& path) {
-    const std::string extension = Lowercase(PathUtf8(path.extension()));
-    return extension == ".z64" || extension == ".v64" || extension == ".n64";
-}
-
 #if defined(DKR_IOS)
 // Files and Open In put ROMs in Documents. The container path changes when the
 // app is reinstalled, so the remembered absolute paths can't be the only record.
@@ -2789,7 +2769,7 @@ void AddDocumentsRomsToCatalog(std::vector<RomCatalogEntry>& catalog) {
     std::filesystem::directory_iterator it(documents, error);
     for (; !error && it != std::filesystem::directory_iterator(); it.increment(error)) {
         std::error_code entry_error;
-        if (!it->is_regular_file(entry_error) || entry_error || !IsRomFile(it->path())) {
+        if (!it->is_regular_file(entry_error) || entry_error || !dkr::library_ui::is_rom_file(it->path())) {
             continue;
         }
         std::string validation_error;
@@ -2800,154 +2780,6 @@ void AddDocumentsRomsToCatalog(std::vector<RomCatalogEntry>& catalog) {
     }
 }
 #endif
-
-std::filesystem::path DefaultBrowserDirectory(const std::filesystem::path& selected) {
-    std::error_code error;
-    if (!selected.empty()) {
-        const auto parent = selected.parent_path();
-        if (std::filesystem::is_directory(parent, error)) {
-            return parent;
-        }
-    }
-#if defined(DKR_IOS)
-    const auto documents = dkr::runtime::ios::documents_directory();
-    if (!documents.empty() && std::filesystem::is_directory(documents, error)) {
-        return documents;
-    }
-#endif
-#if defined(_WIN32)
-    if (const char* profile = std::getenv("USERPROFILE"); profile != nullptr) {
-        const auto downloads = std::filesystem::path(profile) / "Downloads";
-        if (std::filesystem::is_directory(downloads, error)) {
-            return downloads;
-        }
-        return std::filesystem::path(profile);
-    }
-#else
-    if (const char* home = std::getenv("HOME"); home != nullptr) {
-        const auto downloads = std::filesystem::path(home) / "Downloads";
-        if (std::filesystem::is_directory(downloads, error)) {
-            return downloads;
-        }
-        return std::filesystem::path(home);
-    }
-#endif
-    return std::filesystem::current_path(error);
-}
-
-void RefreshRomBrowser() {
-    g_rom_browser.entries.clear();
-    g_rom_browser.message.clear();
-    std::error_code error;
-    if (g_rom_browser.directory.empty()) {
-#if defined(_WIN32)
-        const DWORD drive_mask = GetLogicalDrives();
-        for (int drive = 0; drive < 26; ++drive) {
-            if ((drive_mask & (1UL << drive)) != 0) {
-                std::string root = "A:\\";
-                root[0] = static_cast<char>('A' + drive);
-                g_rom_browser.entries.push_back({std::filesystem::path(root), true});
-            }
-        }
-#else
-        g_rom_browser.entries.push_back({std::filesystem::path("/"), true});
-        if (const char* home = std::getenv("HOME"); home != nullptr) {
-            g_rom_browser.entries.push_back({std::filesystem::path(home), true});
-        }
-#endif
-    } else {
-        std::filesystem::directory_iterator iterator(g_rom_browser.directory,
-                                                     std::filesystem::directory_options::skip_permission_denied, error);
-        if (error) {
-            g_rom_browser.message = "T.T. could not read this location: " + error.message();
-        } else {
-            for (const auto& item : iterator) {
-                const bool directory = item.is_directory(error);
-                error.clear();
-                if (directory || (item.is_regular_file(error) && IsRomFile(item.path()))) {
-                    g_rom_browser.entries.push_back({item.path(), directory});
-                }
-                error.clear();
-            }
-        }
-    }
-    std::sort(g_rom_browser.entries.begin(), g_rom_browser.entries.end(),
-              [](const BrowserEntry& left, const BrowserEntry& right) {
-                  if (left.directory != right.directory) {
-                      return left.directory > right.directory;
-                  }
-                  return Lowercase(PathUtf8(left.path.filename())) < Lowercase(PathUtf8(right.path.filename()));
-              });
-    g_rom_browser.focus_first_entry = true;
-}
-
-void OpenRomBrowser(const std::filesystem::path& selected) {
-    g_rom_browser.open = true;
-    g_rom_browser.close_requested = false;
-    g_rom_browser.directory = DefaultBrowserDirectory(selected);
-    RefreshRomBrowser();
-}
-
-void RomBrowserBack() {
-    if (!g_rom_browser.open) {
-        return;
-    }
-    if (g_rom_browser.directory.empty()) {
-        g_rom_browser.close_requested = true;
-        return;
-    }
-    const auto parent = g_rom_browser.directory.parent_path();
-    if (parent.empty() || parent == g_rom_browser.directory) {
-        g_rom_browser.directory.clear();
-    } else {
-        g_rom_browser.directory = parent;
-    }
-    RefreshRomBrowser();
-}
-
-bool AcceptRom(const std::filesystem::path& path, std::filesystem::path& selected,
-               std::vector<RomCatalogEntry>& catalog, std::string& status) {
-    std::string error;
-    dkr::runtime::rom::Identity identity{};
-    if (!dkr::runtime::ValidateRomForLauncher(path, identity, error)) {
-        status = error;
-        g_rom_browser.message = error;
-        return false;
-    }
-    CommitRomSelection(path, identity, selected, catalog, status);
-    g_rom_browser.open = false;
-    g_rom_browser.close_requested = false;
-    return true;
-}
-
-bool SelectRomWithDialog(std::filesystem::path& selected, std::vector<RomCatalogEntry>& catalog, std::string& status) {
-    if (NFD_Init() != NFD_OKAY) {
-        status = "The system file picker could not be initialized.";
-        return false;
-    }
-    nfdu8char_t* result = nullptr;
-    const nfdfilteritem_t filters[] = {{"Nintendo 64 ROM", "z64,v64,n64"}};
-    const nfdresult_t dialog = NFD_OpenDialogU8(&result, filters, 1, nullptr);
-    if (dialog == NFD_OKAY) {
-        const std::filesystem::path candidate = std::filesystem::u8path(result);
-        NFD_FreePathU8(result);
-        std::string error;
-        dkr::runtime::rom::Identity identity{};
-        if (!dkr::runtime::ValidateRomForLauncher(candidate, identity, error)) {
-            status = error;
-            NFD_Quit();
-            return false;
-        }
-        CommitRomSelection(candidate, identity, selected, catalog, status);
-        NFD_Quit();
-        return true;
-    }
-    if (dialog == NFD_ERROR) {
-        status = NFD_GetError();
-    }
-    NFD_Quit();
-    return false;
-}
 
 bool ImportCrtFilterWithDialog() {
     // The Vulkan Inspector pool reserves one descriptor for the font atlas and
@@ -3993,98 +3825,8 @@ void DrawLinuxSoftwarePanelUnderlay(const ImVec2& size, const ImVec4& color) {
 #endif
 }
 
-void DrawRomBrowser(std::filesystem::path& selected, std::string& status, bool& rom_ready,
-                    std::vector<RomCatalogEntry>& catalog) {
-    constexpr const char* kPopupName = "Select Diddy Kong Racing ROM";
-    if (g_rom_browser.open && !ImGui::IsPopupOpen(kPopupName)) {
-        ImGui::OpenPopup(kPopupName);
-    }
-    const ImGuiViewport* viewport = ImGui::GetMainViewport();
-    ImGui::SetNextWindowSize(
-        {std::clamp(viewport->Size.x * 0.72F, 680.0F, 1040.0F), std::clamp(viewport->Size.y * 0.78F, 560.0F, 760.0F)},
-        ImGuiCond_Appearing);
-    const bool popup_visible = BeginPaddedModal(kPopupName, ImGuiWindowFlags_NoSavedSettings);
-    if (!popup_visible) {
-        return;
-    }
-    if (g_rom_browser.close_requested) {
-        g_rom_browser.open = false;
-        g_rom_browser.close_requested = false;
-        ImGui::CloseCurrentPopup();
-        ImGui::EndPopup();
-        return;
-    }
-
-    PushHeadingFont();
-    ImGui::TextUnformatted("SELECT DIDDY KONG RACING ROM");
-    PopHeadingFont();
-    ImGui::TextDisabled("Folders first, then .z64, .v64 and .n64 files. Nothing leaves this PC.");
-    ImGui::Dummy({0.0F, 8.0F});
-
-    const std::string location = g_rom_browser.directory.empty() ? "This PC" : PathUtf8(g_rom_browser.directory);
-    ImGui::TextWrapped("Current folder: %s", location.c_str());
-    if (ImGui::Button("UP ONE LEVEL", {170.0F, 42.0F})) {
-        RomBrowserBack();
-    }
-    ImGui::SameLine();
-    if (ImGui::Button("THIS PC", {130.0F, 42.0F})) {
-        g_rom_browser.directory.clear();
-        RefreshRomBrowser();
-    }
-
-    ImGui::PushStyleColor(ImGuiCol_ChildBg, {0.02F, 0.12F, 0.23F, 0.98F});
-    BeginPaddedChild("game-pak-files", {0.0F, -118.0F}, true, ImGuiWindowFlags_NavFlattened, {14.0F, 12.0F});
-    if (!g_rom_browser.message.empty()) {
-        ImGui::PushStyleColor(ImGuiCol_Text, kWarm);
-        ImGui::TextWrapped("%s", g_rom_browser.message.c_str());
-        ImGui::PopStyleColor();
-        ImGui::Separator();
-    }
-    if (g_rom_browser.entries.empty() && g_rom_browser.message.empty()) {
-        ImGui::TextDisabled("No supported ROM files or folders were found here.");
-    }
-    for (std::size_t index = 0; index < g_rom_browser.entries.size(); ++index) {
-        const BrowserEntry& entry = g_rom_browser.entries[index];
-        std::string name = PathUtf8(entry.path.filename());
-        if (name.empty()) {
-            name = PathUtf8(entry.path);
-        }
-        const std::string label = entry.directory ? "[FOLDER]  " + name : "[ROM]     " + name;
-        if (ImGui::Selectable(label.c_str(), false, ImGuiSelectableFlags_SpanAllColumns, {0.0F, 38.0F})) {
-            if (entry.directory) {
-                g_rom_browser.directory = entry.path;
-                RefreshRomBrowser();
-                break;
-            }
-            if (AcceptRom(entry.path, selected, catalog, status)) {
-                rom_ready = true;
-                ImGui::CloseCurrentPopup();
-                break;
-            }
-        }
-        if (g_rom_browser.focus_first_entry && index == 0) {
-            ImGui::SetItemDefaultFocus();
-            g_rom_browser.focus_first_entry = false;
-        }
-    }
-    ImGui::EndChild();
-    ImGui::PopStyleColor();
-
-    ImGui::TextDisabled("A / Cross  SELECT     B / Circle  BACK     D-pad / Stick  MOVE");
-    if (ImGui::Button("CANCEL", {130.0F, 42.0F})) {
-        g_rom_browser.open = false;
-        ImGui::CloseCurrentPopup();
-    }
-    ImGui::SameLine();
-    if (ImGui::Button("SYSTEM FILE PICKER", {220.0F, 42.0F})) {
-        if (SelectRomWithDialog(selected, catalog, status)) {
-            rom_ready = true;
-            g_rom_browser.open = false;
-            ImGui::CloseCurrentPopup();
-        }
-    }
-    ImGui::EndPopup();
-}
+#include "library_ui/rom_browser_ui.inl"
+#include "library_ui/rom_browser_files.inl"
 
 bool BeginMainWindow(const char* name, ImGuiWindowFlags extra = 0) {
     ImGuiViewport* viewport = ImGui::GetMainViewport();
@@ -8416,6 +8158,7 @@ dkr::runtime::ui::StartupResult dkr::runtime::ui::run_startup_screen(SDL_Window*
         std::fprintf(stderr, "[rollback][recovery] fresh launcher return renderer=%s bounded-software=%d\n",
                      renderer_info.name ? renderer_info.name : "unknown", int(bounded_software_return));
 
+    g_rom_browser = {};
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
     ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard | ImGuiConfigFlags_NavEnableGamepad;
@@ -8851,10 +8594,6 @@ dkr::runtime::ui::StartupResult dkr::runtime::ui::run_startup_screen(SDL_Window*
                 (event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_CLOSE)) {
                 running = false;
             }
-            if (event.type == SDL_KEYDOWN && event.key.repeat == 0 &&
-                event.key.keysym.scancode == SDL_SCANCODE_ESCAPE && g_rom_browser.open) {
-                g_rom_browser.close_requested = true;
-            }
             const bool code_keyboard_visible = g_online_code_keyboard_visible.load(std::memory_order_acquire);
             if (code_keyboard_visible &&
                 ((event.type == SDL_KEYDOWN && event.key.repeat == 0 &&
@@ -8868,11 +8607,8 @@ dkr::runtime::ui::StartupResult dkr::runtime::ui::run_startup_screen(SDL_Window*
                  (event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_FOCUS_LOST)))
                 dkr::runtime::hud::editor::interrupt_move();
             if (event.type == SDL_CONTROLLERBUTTONDOWN && !dkr::runtime::hud::editor::active()) {
-                if (event.cbutton.button == SDL_CONTROLLER_BUTTON_B && g_rom_browser.open) {
-                    RomBrowserBack();
-                } else if (!g_rom_browser.open && !code_keyboard_visible &&
-                           event.cbutton.button == SDL_CONTROLLER_BUTTON_A &&
-                           sidebar_selection >= launcher_page_count) {
+                if (!g_rom_browser.open && !code_keyboard_visible && event.cbutton.button == SDL_CONTROLLER_BUTTON_A &&
+                    sidebar_selection >= launcher_page_count) {
                     if (dkr::library_ui::sidebar_input_blocked.load())
                         return;
                     if (sidebar_selection == dkr::library_ui::SidebarToggle)
@@ -8882,8 +8618,8 @@ dkr::runtime::ui::StartupResult dkr::runtime::ui::run_startup_screen(SDL_Window*
                     } else {
                         request_quit_popup = true;
                     }
-                } else if (!g_rom_browser.open && page == 0 && rom_ready &&
-                           event.cbutton.button == SDL_CONTROLLER_BUTTON_START) {
+                } else if (!g_rom_browser.open && page == kPagePlay && rom_ready &&
+                           event.cbutton.button == SDL_CONTROLLER_BUTTON_START && !LibrarySidebarInputBlocked()) {
                     launch_requested = true;
                 }
             }
@@ -9247,7 +8983,13 @@ dkr::runtime::ui::StartupResult dkr::runtime::ui::run_startup_screen(SDL_Window*
             ImGui::EndChild();
             ImGui::PopStyleColor(2);
 #endif
-            DrawRomBrowser(selected_rom, rom_status, rom_ready, rom_catalog);
+            if (g_rom_browser.open) {
+                const bool accepted = DrawRomBrowser(g_rom_browser, rom_ready, [&](const auto& candidate) {
+                    return candidate ? AcceptBrowserRom(*candidate, selected_rom, rom_catalog, rom_status)
+                                     : SelectRomWithDialog(selected_rom, rom_catalog, rom_status);
+                });
+                rom_ready |= accepted;
+            }
             ImGui::EndDisabled();
             DrawUpdateNotice(result, running);
             if (request_restart_popup) {
@@ -9735,6 +9477,10 @@ void dkr::runtime::ui::draw(RT64::Application& application) {
             g_overlay_page.store(requested, std::memory_order_relaxed);
             sidebar_selection = dkr::library_ui::sidebar_parent(requested);
             g_overlay_sidebar_selection.store(sidebar_selection, std::memory_order_release);
+        }
+        if (focus_selected_page && g_overlay_page.load(std::memory_order_relaxed) == kPagePlay) {
+            g_play_page.focus = PlayPageState::Focus::Start;
+            g_play_page.play_requested = false;
         }
 #if defined(__ANDROID__) || defined(DKR_IOS)
         int mobile_page = g_overlay_page.load(std::memory_order_relaxed);

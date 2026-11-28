@@ -3,6 +3,13 @@
 Add your own original ROM in **Play → Add a ROM…**. The **Game ROM** dropdown
 keeps the installed choices and selects the native revision automatically.
 
+On a new profile, choose **Browse for ROM**. In the game’s file browser, use
+the D-pad or left stick to move and A/Cross to select. **Locations** lists common
+folders and drives. **Up one level** opens the parent folder. B/Circle returns to
+the previous location, or closes the browser when you first open it. Escape and
+**Cancel** close it from anywhere. If a file is rejected, the browser explains
+why and lets you choose another. **System file picker** opens your desktop dialog.
+
 DKR-R's game engines support these clean US revisions after byte-order
 normalisation:
 

@@ -136,6 +136,7 @@ struct PlayPageState {
     std::set<std::string> shown;
     std::map<std::string, double> entered;
     std::optional<PlayNotice> leaving;
+    bool play_requested = false;
     float leaving_height = 0.0F;
     double leaving_at = -10.0;
     enum class Focus { None, Start, Browse, Rom } focus = Focus::None;
@@ -497,6 +498,7 @@ void DrawPlayPage(float available_width, const PlayPageContext& play, bool live 
         state.shown.clear();
         state.entered.clear();
         state.leaving.reset();
+        state.play_requested = false;
         state.arrived_at = -10.0;
         state.focus = play.rom_ready ? PlayPageState::Focus::Start : PlayPageState::Focus::Browse;
         state.was_ready = play.rom_ready;
@@ -512,7 +514,8 @@ void DrawPlayPage(float available_width, const PlayPageContext& play, bool live 
     const bool imports_busy = g_legacy_imports.snapshot().busy || g_code_library.view()->busy;
     const bool launch_modal = g_mod_launch.snapshot().modal;
     const bool lobby = dkr::runtime::netplay::session().active();
-    const bool nav = ImGui::GetIO().NavVisible;
+    const bool can_focus =
+        ImGui::GetCurrentContext()->OpenPopupStack.empty() && (live || dkr::crash_reports::view().consent.choice != -1);
 
     float width = std::max(available_width, 1.0F);
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, {0.0F, 0.0F});
@@ -546,7 +549,8 @@ void DrawPlayPage(float available_width, const PlayPageContext& play, bool live 
     ImGui::PopStyleVar();
     LibraryNavigationScrollWindow(ImGui::GetCurrentWindow());
     width = std::max(1.F, std::min(available_width, ImGui::GetContentRegionAvail().x - 8.F));
-    DrawLauncherFeatured(width, live);
+    if (play.rom_ready)
+        DrawLauncherFeatured(width, live);
 
     // The ROM pass: status, the ROM list, and the actions for it.
     {
@@ -637,9 +641,9 @@ void DrawPlayPage(float available_width, const PlayPageContext& play, bool live 
             PaddockDrawRun(draw, pick_label, {body_x, y}, PaddockCol(0xB0C9CC), "GAME ROM", "GAME ROM" + 8);
             y += pick_label.line + 6.0F;
             ImGui::SetCursorScreenPos({body_x, y});
-            if (state.focus == PlayPageState::Focus::Rom) {
-                if (nav)
-                    ImGui::SetKeyboardFocusHere();
+            if (state.focus == PlayPageState::Focus::Rom && can_focus) {
+                ImGui::GetCurrentContext()->NavDisableHighlight = false;
+                ImGui::SetKeyboardFocusHere();
                 state.focus = PlayPageState::Focus::None;
             }
             const RomSelectResult picked = DrawRomSelect("play-rom", pick_width, false, live || lobby || launch_modal,
@@ -664,9 +668,9 @@ void DrawPlayPage(float available_width, const PlayPageContext& play, bool live 
         y += meta_height + 10.F;
 
         ImGui::SetCursorScreenPos({action_x, y});
-        if (state.focus == PlayPageState::Focus::Browse && !ready) {
-            if (nav)
-                ImGui::SetKeyboardFocusHere();
+        if (state.focus == PlayPageState::Focus::Browse && can_focus && !live && !lobby && !launch_modal) {
+            ImGui::GetCurrentContext()->NavDisableHighlight = false;
+            ImGui::SetKeyboardFocusHere();
             state.focus = PlayPageState::Focus::None;
         }
         RaceButtonLook look;
@@ -823,8 +827,7 @@ void DrawPlayPage(float available_width, const PlayPageContext& play, bool live 
             look.text = 0x8FA6AD;
             look.ring_alpha = 20U;
         }
-        if (state.focus == PlayPageState::Focus::Start && can_start &&
-            ImGui::GetCurrentContext()->OpenPopupStack.empty()) {
+        if (state.focus == PlayPageState::Focus::Start && can_start && can_focus) {
             ImGui::GetCurrentContext()->NavDisableHighlight = false;
             ImGui::SetKeyboardFocusHere();
             state.focus = PlayPageState::Focus::None;
@@ -835,10 +838,19 @@ void DrawPlayPage(float available_width, const PlayPageContext& play, bool live 
                               : lobby ? "LEAVE LOBBY & PLAY OFFLINE"
                                       : dkr::localisation::text("play.start_game").data(),
                               {PlayLaunchButtonWidth(width), kPlayStartHeight}, look)) {
+            if (!live && lobby)
+                ImGui::OpenPopup("Leave lobby and play offline?");
+            else
+                state.play_requested = true;
+        }
+        // Let the launcher or overlay consume the whole confirm press before
+        // the game can see that same button.
+        if (state.play_requested && can_start && can_focus && !ImGui::IsKeyDown(ImGuiKey_GamepadFaceDown) &&
+            !ImGui::IsKeyDown(ImGuiKey_Space) && !ImGui::IsKeyDown(ImGuiKey_Enter) &&
+            !ImGui::IsKeyDown(ImGuiKey_KeypadEnter)) {
+            state.play_requested = false;
             if (live)
                 g_overlay_visible.store(false, std::memory_order_release);
-            else if (lobby)
-                ImGui::OpenPopup("Leave lobby and play offline?");
             else
                 play.launch_requested = true;
         }

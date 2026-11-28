@@ -94,6 +94,22 @@ void LibraryNavigationHook(ImGuiContext* context, ImGuiContextHook* hook) {
         LibraryNavigationScroll(state);
         return;
     }
+    // These surfaces have no menu bar. Left unowned, a lone Alt tap makes
+    // ImGui toggle its menu layer, which focuses the root window and drops
+    // the content's nav selection.
+    const ImGuiID owner = ImHashStr("library-navigation");
+    ImGui::SetKeyOwner(ImGuiMod_Alt, owner);
+    // With nothing to cancel, ImGui's own cancel leaves the flattened content
+    // and clears its selection. Keep focus where it is instead. Dialogs, active
+    // widgets and children entered on purpose still get their cancel.
+    const ImGuiWindow* nav = context->NavWindow;
+    const bool entered_child =
+        nav && (nav->Flags & ImGuiWindowFlags_ChildWindow) != 0 && (nav->Flags & ImGuiWindowFlags_NavFlattened) == 0;
+    if (!context->ActiveId && !context->OpenPopupStack.Size && context->NavLayer == ImGuiNavLayer_Main &&
+        !entered_child) {
+        ImGui::SetKeyOwner(ImGuiKey_GamepadFaceRight, owner);
+        ImGui::SetKeyOwner(ImGuiKey_Escape, owner);
+    }
     const int connected =
         PlayLaunchLayoutCheck() ? 1 : dkr::library_ui::navigation_connected.load(std::memory_order_relaxed);
     if (connected > 0)
@@ -115,13 +131,16 @@ void LibraryNavigationHook(ImGuiContext* context, ImGuiContextHook* hook) {
     for (unsigned k = 0; k < keys.size(); ++k)
         state.physical[k] = (physical & (1U << k)) != 0;
     const bool dpad = mode == dkr::library_ui::SidebarInput::Dpad;
+    // A dialog owns both directional inputs. Sidebar preference only applies
+    // while the sidebar is available.
+    const bool dpad_in_content = !dpad || context->OpenPopupStack.Size != 0;
     const bool route_sticks = !LibraryContentInputCaptured();
     const auto consumed = [&](ImGuiKey key) {
         if (route_sticks && key >= ImGuiKey_GamepadLStickLeft && key <= ImGuiKey_GamepadLStickDown)
             return true;
         if (key >= ImGuiKey_GamepadDpadLeft && key <= ImGuiKey_GamepadDpadDown)
             return route_sticks || dpad;
-        if (key == ImGuiKey_GamepadFaceDown && state.selection >= 11)
+        if (key == ImGuiKey_GamepadFaceDown && state.selection >= 11 && !context->OpenPopupStack.Size)
             return true;
         return !dpad && (key == ImGuiKey_GamepadL1 || key == ImGuiKey_GamepadR1);
     };
@@ -158,7 +177,8 @@ void LibraryNavigationHook(ImGuiContext* context, ImGuiContextHook* hook) {
         for (unsigned k = 0; k < sticks.size(); ++k) {
             context->IO.AddKeyAnalogEvent(sticks[k], false, 0.F);
             state.focus_directions[k] = state.stick_armed && magnitude[k] > (state.focus_directions[k] ? .3F : .5F);
-            const bool button = !dpad && (state.physical[physical_index[k]] || (edges & (1U << physical_index[k]))) &&
+            const bool button = dpad_in_content &&
+                                (state.physical[physical_index[k]] || (edges & (1U << physical_index[k]))) &&
                                 LibraryNavigationActive(state);
             context->IO.AddKeyAnalogEvent(directions[k], button || state.focus_directions[k],
                                           button ? 1.F : magnitude[k]);
