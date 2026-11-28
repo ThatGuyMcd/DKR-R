@@ -60,6 +60,7 @@
 #include "online_presentation/test_receive_delay.hpp"
 #include "online_stability/qualification_delivery.hpp"
 #include "runtime_ui.hpp"
+#include "graphics_launch.hpp"
 #include "achievements.hpp"
 #include <cfloat>
 #include <ctime>
@@ -7878,6 +7879,72 @@ bool SettingsDropdown(const char*, std::string_view, int*, std::initializer_list
                       std::string_view);
 void DrawPlayUpdateButton(float);
 #include "cloud_saves/play_ui.inl"
+namespace graphics_check = dkr::runtime::graphics_launch;
+bool PlayNoticeButton(const char* label);
+graphics_check::Check g_graphics_check;
+GraphicsApi g_graphics_alternate = GraphicsApi::Auto;
+std::string g_graphics_launch_error;
+bool g_graphics_error_requested = false;
+
+void DrawGraphicsCompatibility(float width) {
+    if constexpr (!graphics_check::desktop)
+        return;
+    const auto& result = g_graphics_check.result();
+    if (result.status == graphics_check::Status::Ready) {
+        PaddockText(PaddockReading(14.F), PaddockRgb(0x72DDC6U),
+                    std::string(graphics_check::api_name(result.api)) + " ready · " + result.adapter, width);
+    } else if (result.status == graphics_check::Status::Checking) {
+        PaddockText(PaddockReading(14.F), PaddockRgb(0xB0C9CCU), "Checking graphics compatibility…", width);
+    } else if (PlayNoticeButton("GRAPHICS COMPATIBILITY")) {
+        g_graphics_launch_error = graphics_check::describe(result);
+        g_graphics_error_requested = true;
+    }
+}
+
+void DrawGraphicsLaunchError() {
+    if (std::exchange(g_graphics_error_requested, false))
+        ImGui::OpenPopup("Graphics startup");
+    if (!BeginSettingsDialog("Graphics startup", "GRAPHICS STARTUP", 640.F, 0x06336E))
+        return;
+    PaddockText(PaddockReading(16.F, false, 1.4F), PaddockRgb(0xB0C9CCU), g_graphics_launch_error,
+                SettingsDialogInner());
+    PaddockGap(14.F);
+    if (PlayNoticeButton("GRAPHICS SETTINGS")) {
+        g_page_navigation_request = kPageGraphics;
+        ImGui::CloseCurrentPopup();
+    }
+    ImGui::SameLine();
+    if (PlayNoticeButton("RETRY CHECK")) {
+        const auto api =
+            g_graphics_alternate == GraphicsApi::Auto ? graphics_check::requested_api() : g_graphics_alternate;
+        g_graphics_check.request(api, true);
+        ImGui::CloseCurrentPopup();
+    }
+#if defined(_WIN32) || defined(__APPLE__)
+    PaddockGap(8.F);
+    const auto configured = g_graphics_check.requested();
+    const auto requested = configured == GraphicsApi::Auto ? g_graphics_check.result().api : configured;
+#if defined(_WIN32)
+    const auto alternate = requested == GraphicsApi::Vulkan ? GraphicsApi::D3D12 : GraphicsApi::Vulkan;
+#else
+    const auto alternate = requested == GraphicsApi::Vulkan ? GraphicsApi::Metal : GraphicsApi::Vulkan;
+#endif
+    const auto alternate_label = std::string("CHECK ") + graphics_check::api_name(alternate) + " FOR ONE LAUNCH";
+    if (PlayNoticeButton(alternate_label.c_str())) {
+        g_graphics_alternate = alternate;
+        g_graphics_check.request(alternate, true);
+        ImGui::CloseCurrentPopup();
+    }
+#endif
+    PaddockGap(8.F);
+    if (PlayNoticeButton("COPY DETAILS"))
+        SDL_SetClipboardText(g_graphics_launch_error.c_str());
+    ImGui::SameLine();
+    if (PlayNoticeButton("CLOSE"))
+        ImGui::CloseCurrentPopup();
+    EndSettingsDialog();
+}
+
 #include "runtime_play_ui.inl"
 #include "runtime_online_ui.inl"
 #include "invite_ui.inl"
@@ -8300,6 +8367,11 @@ void dkr::runtime::ui::show_run_return_cover(bool force) {
 dkr::runtime::ui::StartupResult dkr::runtime::ui::run_startup_screen(SDL_Window* window,
                                                                      const std::filesystem::path& preselected_rom,
                                                                      bool software_failure_recovery) {
+    graphics_check::use_once(GraphicsApi::Auto);
+    g_graphics_alternate = GraphicsApi::Auto;
+    auto last_graphics_config = graphics_check::requested_api();
+    if constexpr (graphics_check::desktop)
+        g_graphics_check.request(last_graphics_config, software_failure_recovery);
     if (trial::take_restart_request() && g_previous_time_trial_request) {
         g_time_trial_request = std::exchange(g_previous_time_trial_request, std::nullopt);
     } else {
@@ -8771,7 +8843,30 @@ dkr::runtime::ui::StartupResult dkr::runtime::ui::run_startup_screen(SDL_Window*
             online_start_pending = false;
             launch_fade.clear();
         }
-        if (online_start_pending && launch_fade.started() && launch_fade.finished(PaddockClock())) {
+        if constexpr (graphics_check::desktop) {
+            const auto requested = graphics_check::requested_api();
+            if (requested != last_graphics_config) {
+                last_graphics_config = requested;
+                g_graphics_alternate = GraphicsApi::Auto;
+                g_graphics_check.request(requested);
+            }
+            g_graphics_check.poll();
+        }
+        const auto graphics_status = g_graphics_check.result().status;
+        const bool graphics_ready = !graphics_check::desktop || graphics_status == graphics_check::Status::Ready;
+        const bool graphics_pending = graphics_check::desktop && graphics_status == graphics_check::Status::Checking;
+        const auto report_graphics_block = [&] {
+            g_graphics_launch_error = graphics_check::describe(g_graphics_check.result());
+            g_graphics_error_requested = true;
+            std::fprintf(stderr, "[graphics][check] launch blocked\n");
+            launch_fade.clear();
+        };
+        if (online_start_pending && !graphics_ready && !graphics_pending) {
+            online_start_pending = false;
+            dkr::runtime::netplay::session().fail_runtime_start("Graphics compatibility check failed on this device.");
+            report_graphics_block();
+        }
+        if (online_start_pending && graphics_ready && launch_fade.started() && launch_fade.finished(PaddockClock())) {
             result.start_game = true;
             result.rom_path = selected_rom;
             dkr::library_ui::runtime_intro.begin(true, launcher_theme.seconds());
@@ -8941,8 +9036,13 @@ dkr::runtime::ui::StartupResult dkr::runtime::ui::run_startup_screen(SDL_Window*
                 std::fprintf(stderr,
                              "[launcher][automatic-start] showing launcher for selection, cancellation or recovery\n");
         }
+        if (g_time_trial_request && !graphics_ready && !graphics_pending) {
+            g_time_trial_request.reset();
+            DeleteRankedPlayback(std::exchange(g_ranked_playback_file, {}));
+            report_graphics_block();
+        }
         const bool trial_fade_finished =
-            g_time_trial_request && launch_fade.started() && launch_fade.finished(PaddockClock());
+            graphics_ready && g_time_trial_request && launch_fade.started() && launch_fade.finished(PaddockClock());
         const bool capture_return_frame = trial_fade_finished && !return_frame_captured;
         if (trial_fade_finished && !capture_return_frame) {
             auto trial = std::move(*g_time_trial_request);
@@ -8978,7 +9078,12 @@ dkr::runtime::ui::StartupResult dkr::runtime::ui::run_startup_screen(SDL_Window*
         }
         if (launch_requested && dkr::crash_reports::view().consent.choice == -1)
             launch_requested = false;
-        if (launch_requested && !SharedSaveBusy()) {
+        if (launch_requested && !graphics_ready && !graphics_pending) {
+            launch_requested = false;
+            automatic_start.cancel();
+            report_graphics_block();
+        }
+        if (launch_requested && graphics_ready && !SharedSaveBusy()) {
             launch_requested = false;
             if (!dkr::runtime::netplay::session().active() && !OnlineModSelectionLocked() &&
                 !dkr::store::installations().view()->busy && dkr::store::installations().view()->ready &&
@@ -8994,9 +9099,14 @@ dkr::runtime::ui::StartupResult dkr::runtime::ui::run_startup_screen(SDL_Window*
         }
         if (const auto prepared = g_mod_launch.snapshot(); prepared.modal && prepared.prepared && !prepared.busy &&
                                                            !SharedSaveBusy() && launch_fade.finished(PaddockClock())) {
-            // The modal owns the selection while preparing; do not admit a
-            // local bank if an online session began in the meantime.
-            if (dkr::runtime::netplay::session().active()) {
+            if (!graphics_ready) {
+                if (!graphics_pending) {
+                    g_mod_launch.dismiss();
+                    automatic_start.cancel();
+                    report_graphics_block();
+                }
+            } else if (dkr::runtime::netplay::session().active()) {
+                // Online may have begun while the launch modal owned the selection.
                 g_mod_launch.dismiss();
                 rom_status = "Custom launch cancelled because an online lobby became active.";
             } else {
@@ -9329,6 +9439,7 @@ dkr::runtime::ui::StartupResult dkr::runtime::ui::run_startup_screen(SDL_Window*
         }
 
         DrawCrashReportingConsent();
+        DrawGraphicsLaunchError();
         ApplyPaddockModalDim();
 #if defined(__ANDROID__) || defined(DKR_IOS)
         if (dkr::runtime::mobile::editing()) {
@@ -9443,6 +9554,8 @@ dkr::runtime::ui::StartupResult dkr::runtime::ui::run_startup_screen(SDL_Window*
             launcher_window_flags, launcher_frame_rate);
     }
 
+    if (result.start_game && g_graphics_check.result().status == graphics_check::Status::Ready)
+        graphics_check::use_once(g_graphics_alternate);
     g_launcher_animation_seconds = -1.0;
     if (auto* updates = dkr::updates::service())
         updates->cancel();
@@ -10155,6 +10268,11 @@ void dkr::runtime::ui::reset_lifecycle_request() {
 
 void dkr::runtime::ui::report_mod_error(std::string error) {
     g_mod_launch.report_error(std::move(error));
+}
+
+void dkr::runtime::ui::report_graphics_launch_error(std::string error) {
+    g_graphics_launch_error = std::move(error);
+    g_graphics_error_requested = true;
 }
 
 void dkr::runtime::ui::shutdown_online_mods() {

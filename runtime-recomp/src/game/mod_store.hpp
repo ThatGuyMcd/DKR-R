@@ -44,7 +44,7 @@ struct Snapshot {
     std::vector<Download> downloads;
     std::string cloud_saves_account, cloud_saves_status;
     cloud_saves::SyncStatus cloud_sync = cloud_saves::SyncStatus::Idle;
-    std::string status, error, last_action;
+    std::string status, error, sign_in_error, last_action;
     Json last_result;
     std::uint64_t generation = 0, mutation = 0;
     bool loading = false, signing_in = false, cached = false, remember = false, uploading = false, writing = false;
@@ -63,6 +63,7 @@ class Service {
     void refresh();
     void load_leaderboards(std::string cursor = {}, std::optional<LeaderboardTrackQuery> track = {});
     Json overall_rankings(const std::string& player = {}, unsigned offset = 0);
+    Json overall_player_summary(const std::string& player);
     Json ranked_attempt(std::string board);
     Json adventure_record(const std::string& category);
     Json submit_ranked_replay(const std::filesystem::path&, bool link_local = false);

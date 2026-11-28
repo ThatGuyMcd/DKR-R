@@ -29,19 +29,24 @@ def release_docs(value: str | None = None) -> Path:
     return ROOT / "docs/releases" / (value or version())
 
 
+def linux_appimage(arch: str, value: str | None = None) -> str:
+    # Quiver derives the installed filename by removing the exact release tag.
+    return f"DKR-R-{tag(value)}-Linux-{arch}.AppImage"
+
+
 def packages(value: str | None = None) -> dict[str, tuple[str, str, str]]:
     """Update platform -> (system, arch, package name) for a version."""
     v = value or version()
     return {
         "windows-x64": ("windows", "x86_64", f"DKR-R-{v}-Windows-x64.zip"),
-        "linux-x86_64": ("linux", "x86_64", f"DKR-R-{v}-Linux-x86_64.AppImage"),
-        "linux-aarch64": ("linux", "aarch64", f"DKR-R-{v}-Linux-aarch64.AppImage"),
+        "linux-x86_64": ("linux", "x86_64", linux_appimage("x86_64", v)),
+        "linux-aarch64": ("linux", "aarch64", linux_appimage("aarch64", v)),
     }
 
 
 def steam_deck(value: str | None = None) -> str:
     """The Steam Deck package: an exact copy of the Linux x86_64 one."""
-    return f"DKR-R-{value or version()}-SteamDeck-x86_64.AppImage"
+    return f"DKR-R-{tag(value)}-SteamDeck-x86_64.AppImage"
 
 
 def sha(path: Path) -> str:

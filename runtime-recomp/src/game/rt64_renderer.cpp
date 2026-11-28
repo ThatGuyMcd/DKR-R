@@ -77,6 +77,10 @@
 #include "ultramodern/ultramodern.hpp"
 
 #include <SDL.h>
+#include <SDL_syswm.h>
+#if defined(__APPLE__)
+#include <SDL_metal.h>
+#endif
 #if defined(__APPLE__)
 extern "C" void dkr_set_window_fullscreen(Uint32 window_id, bool fullscreen);
 #endif
@@ -379,7 +383,8 @@ ultramodern::renderer::GraphicsApi MapGraphicsAPI(RT64::UserConfiguration::Graph
 } // namespace
 
 dkr::runtime::RT64Renderer::RT64Renderer(std::uint8_t* rdram, ultramodern::renderer::WindowHandle window_handle,
-                                         bool developer_mode, bool owned_mode)
+                                         bool developer_mode, bool owned_mode,
+                                         std::optional<graphics_launch::GraphicsApi> probe)
     : owned_mode_(owned_mode) {
 #if defined(DKR_EXPERIMENTAL_RACE_TEST)
     if (owned_mode_)
@@ -449,7 +454,7 @@ dkr::runtime::RT64Renderer::RT64Renderer(std::uint8_t* rdram, ultramodern::rende
     RT64::ApplicationConfiguration application_config{};
     application_config.appId = "dkr-port";
     application_config.useConfigurationFile = false;
-    application_config.detectDataPath = true;
+    application_config.detectDataPath = !probe;
 #if defined(__ANDROID__)
     // Desktop path detection can select /data/.dkr-port on Android and throw
     // from RT64's constructor before its setup error handling is reached.
@@ -507,6 +512,8 @@ dkr::runtime::RT64Renderer::RT64Renderer(std::uint8_t* rdram, ultramodern::rende
         const auto application_started_at = dkr::runtime::startup_performance::Clock::now();
         application_ = std::make_unique<RT64::Application>(core, application_config);
         ApplyConfig(*application_, config);
+        application_->userConfig.graphicsAPI =
+            ToRT64(probe.value_or(graphics_launch::effective_api(graphics_launch::requested_api())));
         application_->userConfig.developerMode = developer_mode;
         // DKR renders a canonical 320x240 VI image. RT64's generic VI height
         // heuristic adds and rounds guard rows (often inferring 244), which
@@ -542,6 +549,8 @@ dkr::runtime::RT64Renderer::RT64Renderer(std::uint8_t* rdram, ultramodern::rende
 #endif
     auto setup_started_at = dkr::runtime::startup_performance::Clock::now();
     setup_result = MapSetupResult(application_->setup(thread_id));
+    if (setup_result == ultramodern::renderer::SetupResult::Success && !application_->device)
+        setup_result = ultramodern::renderer::SetupResult::DynamicLibrariesNotFound;
 #if defined(__ANDROID__)
     if (dkr::runtime::graphics_health::failed()) {
         setup_result = ultramodern::renderer::SetupResult::GraphicsDeviceNotFound;
@@ -549,7 +558,9 @@ dkr::runtime::RT64Renderer::RT64Renderer(std::uint8_t* rdram, ultramodern::rende
 #endif
     dkr::runtime::startup_performance::report("rt64-setup", setup_started_at);
     chosen_api = MapGraphicsAPI(application_->chosenGraphicsAPI);
-    if (setup_result != ultramodern::renderer::SetupResult::Success &&
+    if (!probe &&
+        graphics_launch::effective_api(graphics_launch::GraphicsApi::Auto) == graphics_launch::GraphicsApi::Auto &&
+        setup_result != ultramodern::renderer::SetupResult::Success &&
 #if defined(__ANDROID__)
         !dkr::runtime::graphics_health::failed() &&
 #endif
@@ -563,8 +574,11 @@ dkr::runtime::RT64Renderer::RT64Renderer(std::uint8_t* rdram, ultramodern::rende
         application_.reset();
         config.api_option = ultramodern::renderer::GraphicsApi::Auto;
         create_application();
+        application_->userConfig.graphicsAPI = RT64::UserConfiguration::GraphicsAPI::Automatic;
         setup_started_at = dkr::runtime::startup_performance::Clock::now();
         setup_result = MapSetupResult(application_->setup(thread_id));
+        if (setup_result == ultramodern::renderer::SetupResult::Success && !application_->device)
+            setup_result = ultramodern::renderer::SetupResult::DynamicLibrariesNotFound;
         dkr::runtime::startup_performance::report("rt64-setup-fallback", setup_started_at);
         chosen_api = MapGraphicsAPI(application_->chosenGraphicsAPI);
         if (setup_result == ultramodern::renderer::SetupResult::Success) {
@@ -578,6 +592,8 @@ dkr::runtime::RT64Renderer::RT64Renderer(std::uint8_t* rdram, ultramodern::rende
         application_.reset();
         return;
     }
+    if (probe)
+        return;
     // setup/fallback creates a fresh texture cache. Reapply persisted enabled
     // packs on its first presentation, even if the retired renderer had already
     // consumed this library generation. Do not change users' enabled settings.
@@ -1786,6 +1802,102 @@ std::unique_ptr<ultramodern::renderer::RendererContext>
 dkr::runtime::CreateRT64Renderer(std::uint8_t* rdram, ultramodern::renderer::WindowHandle window_handle,
                                  bool developer_mode) {
     return std::make_unique<RT64Renderer>(rdram, window_handle, developer_mode);
+}
+
+dkr::runtime::graphics_launch::Result dkr::runtime::graphics_launch::probe_renderer(GraphicsApi api) {
+    Result result{Status::SurfaceFailed, api, {}, {}, {}};
+#if defined(__ANDROID__) || defined(DKR_IOS)
+    return result;
+#else
+    if (SDL_InitSubSystem(SDL_INIT_VIDEO) != 0) {
+        result.detail = SDL_GetError();
+        return result;
+    }
+    struct Video {
+        ~Video() {
+            SDL_QuitSubSystem(SDL_INIT_VIDEO);
+        }
+    } video;
+    Uint32 flags = SDL_WINDOW_HIDDEN;
+#if defined(__linux__)
+    flags |= SDL_WINDOW_VULKAN;
+#elif defined(__APPLE__)
+    flags |= SDL_WINDOW_METAL;
+#endif
+    std::unique_ptr<SDL_Window, decltype(&SDL_DestroyWindow)> window(
+        SDL_CreateWindow("DKR-R graphics check", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, 320, 240, flags),
+        SDL_DestroyWindow);
+    if (!window) {
+        result.detail = SDL_GetError();
+        return result;
+    }
+    using ultramodern::renderer::WindowHandle;
+    WindowHandle handle{};
+#if defined(_WIN32) || defined(__APPLE__)
+    SDL_SysWMinfo info{};
+    SDL_VERSION(&info.version);
+    if (SDL_GetWindowWMInfo(window.get(), &info) != SDL_TRUE) {
+        result.detail = SDL_GetError();
+        return result;
+    }
+#if defined(_WIN32)
+    handle = {.window = info.info.win.window, .thread_id = GetCurrentThreadId()};
+#else
+    std::unique_ptr<void, decltype(&SDL_Metal_DestroyView)> view(SDL_Metal_CreateView(window.get()),
+                                                                 SDL_Metal_DestroyView);
+    if (!view) {
+        result.detail = SDL_GetError();
+        return result;
+    }
+    handle = {.window = info.info.cocoa.window, .view = SDL_Metal_GetLayer(view.get())};
+#endif
+#else
+    handle = window.get();
+#endif
+    std::vector<std::uint8_t> memory(8U * 1024U * 1024U);
+    RT64Renderer renderer(memory.data(), handle, false, false, api);
+    const auto chosen = renderer.get_chosen_api();
+    if (chosen != GraphicsApi::Auto)
+        result.api = chosen;
+    switch (renderer.get_setup_result()) {
+    case SetupResult::Success:
+        break;
+    case SetupResult::DynamicLibrariesNotFound:
+        result.status = Status::MissingLibraries;
+        return result;
+    case SetupResult::GraphicsDeviceNotFound:
+        result.status = Status::MissingDevice;
+        return result;
+    default:
+        result.status = Status::MissingApi;
+        return result;
+    }
+    auto& app = *renderer.application_;
+    const auto& description = app.device->getDescription();
+    result.adapter = description.name.substr(0, 128);
+    result.driver = std::to_string(description.driverVersion);
+    result.status = Status::PresentationFailed;
+    // RT64 allocates swapchain images on the presentation thread's first resize.
+    if (!app.swapChain || !app.presentGraphicsWorker) {
+        result.detail = "The game swapchain was unavailable.";
+        return result;
+    }
+    app.enhancementConfig.presentation.mode = RT64::EnhancementConfiguration::Presentation::Mode::Console;
+    *app.core.VI_STATUS_REG = dkr::runtime::presentation::kRetailNtscViStatus;
+    *app.core.VI_WIDTH_REG = 320;
+    *app.core.VI_H_START_REG = 0;
+    app.updateScreen();
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(3);
+    do {
+        if (app.sharedQueueResources->totalPresentations.load(std::memory_order_relaxed) != 0) {
+            result.status = Status::Ready;
+            break;
+        }
+        SDL_PumpEvents();
+        SDL_Delay(10);
+    } while (std::chrono::steady_clock::now() < deadline);
+    return result;
+#endif
 }
 
 void dkr::runtime::service_online_wait_presentation() {

@@ -16,7 +16,8 @@ from regression import execute
 
 MAX_REPLAY_BYTES = 1024 * 1024
 MAX_ADVENTURE_BYTES = 3 * 1024 * 1024
-ADVENTURE_SPLIT_RULES = {"adventure-us80-5", "adventure-us80-6", "adventure-us80-7"}
+ADVENTURE_SCENERY_RULES = "adventure-us80-7"
+ADVENTURE_SPLIT_RULES = {"adventure-us80-5", "adventure-us80-6", ADVENTURE_SCENERY_RULES}
 ADVENTURE_RULES = {
     "adventure-us80-1",
     "adventure-us80-2",
@@ -30,6 +31,9 @@ ADVENTURE_PASS = re.compile(
 )
 ADVENTURE_START = re.compile(r"^\[adventure\] category=([a-z0-9-]+)$", re.M)
 ADVENTURE_CHECKPOINT = re.compile(r"^\[adventure\] tick=(\d+) clock=(\d+) hash=([0-9a-f]{64})$", re.M)
+ADVENTURE_DIVERGENCE = re.compile(
+    r"^\[time-trial\] FAIL update=(\d+) Adventure input, progress or RNG diverged\.$", re.M
+)
 ADVENTURE_SPLITS = re.compile(r"^\[adventure\] splits=(\[.*\])$", re.M)
 CUSTOM_TARGET = re.compile(
     r"^\[time-trial\] track=([A-Za-z0-9_-]+) hash=([0-9a-f]{64}) vehicle=(car|hovercraft|plane)$", re.M
@@ -136,6 +140,13 @@ def verification_environment(output: Path, xvfb: bool) -> dict[str, str]:
     return env
 
 
+def first_adventure_checkpoint_diverged(log: str, rules: str) -> bool:
+    if rules != ADVENTURE_SCENERY_RULES:
+        return False
+    rows = ADVENTURE_CHECKPOINT.findall(log)
+    return len(rows) == 1 and ADVENTURE_DIVERGENCE.findall(log) == [rows[0][0]]
+
+
 def verify(
     runtime: Path,
     rom: Path,
@@ -164,35 +175,46 @@ def verify(
     output.mkdir(mode=0o700, parents=True, exist_ok=False)
     private_replay = output / "attempt.dkrreplay"
     private_replay.write_bytes(evidence)
-    profile = output / "profile"
-    command = [
-        str(runtime),
-        "--rom",
-        str(rom),
-        "--config",
-        str(profile),
-        "--verify-time-trial",
-        str(private_replay),
-        "--timeout",
-        str(timeout),
-    ]
-    if track_package is not None:
-        command.extend(("--time-trial-map", str(track_package.resolve(strict=True))))
     ghost = output / "verified.dkrghost"
-    if emit_ghost and rules not in ADVENTURE_RULES:
-        command.extend(("--export-time-trial-ghost", str(ghost)))
-    if xvfb:
-        command = ["xvfb-run", "-a", "-s", "-screen 0 1280x800x24", *command]
-    if isolate_network:
-        command = ["unshare", "-Urn", "--", *command]
-    env = verification_environment(output, xvfb)
-    code, _, error, interrupted = execute(
-        command, output, env, timeout + 30, output / "stdout.log", output / "stderr.log"
-    )
-    if interrupted:
-        raise KeyboardInterrupt()
-    logfile = profile / "logs" / "runtime.log"
-    log = logfile.read_text(encoding="utf-8", errors="replace") if logfile.is_file() else ""
+
+    def play(attempt: Path, extended_scenery: bool = False) -> tuple[int | None, str | None, str]:
+        profile = attempt / "profile"
+        command = [
+            str(runtime),
+            "--rom",
+            str(rom),
+            "--config",
+            str(profile),
+            "--verify-time-trial",
+            str(private_replay),
+            "--timeout",
+            str(timeout),
+        ]
+        if extended_scenery:
+            command.append("--verify-adventure-legacy-scenery")
+        if track_package is not None:
+            command.extend(("--time-trial-map", str(track_package.resolve(strict=True))))
+        if emit_ghost and rules not in ADVENTURE_RULES:
+            command.extend(("--export-time-trial-ghost", str(ghost)))
+        if xvfb:
+            command = ["xvfb-run", "-a", "-s", "-screen 0 1280x800x24", *command]
+        if isolate_network:
+            command = ["unshare", "-Urn", "--", *command]
+        env = verification_environment(attempt, xvfb)
+        code, _, error, interrupted = execute(
+            command, attempt, env, timeout + 30, attempt / "stdout.log", attempt / "stderr.log"
+        )
+        if interrupted:
+            raise KeyboardInterrupt()
+        logfile = profile / "logs" / "runtime.log"
+        log = logfile.read_text(encoding="utf-8", errors="replace") if logfile.is_file() else ""
+        return code, error, log
+
+    code, error, log = play(output)
+    if not error and code == 6 and first_adventure_checkpoint_diverged(log, rules):
+        retry = output / "legacy-scenery"
+        retry.mkdir(mode=0o700)
+        code, error, log = play(retry, extended_scenery=True)
     if not error and code == 6 and REJECT.search(log):
         raise InvalidReplay("The engine rejected the replay inputs or gameplay checkpoints.")
     if not error and code == 2 and rules in CUSTOM_RULES:

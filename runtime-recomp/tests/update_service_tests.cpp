@@ -203,6 +203,27 @@ int main(int argc, char** argv) {
     idle(*beta_app);
     assert(beta_app->snapshot().state == State::Available);
     assert(beta_app->snapshot().version == "1.0.7"); // Stable not lost behind playtests.
+    Feed external;
+    durable_write(root / ".quiver-version", "Version1.0.15");
+    auto quiver4 = test("quiver4", external);
+    std::filesystem::remove(root / ".quiver-version");
+    durable_write(root / "version.txt", "Version1.0.15\r\n");
+    auto quiver3 = test("quiver3", external);
+    for (auto* managed : {quiver4.get(), quiver3.get()}) {
+        assert(managed->snapshot().quiver_managed);
+        managed->startup();
+        managed->check();
+        managed->download();
+        std::string reason;
+        assert(!managed->install(reason) && reason == kQuiverUpdateMessage);
+    }
+    assert(external.calls == 0);
+    durable_write(root / "version.txt", "A note from the player\n");
+    auto unmanaged = test("unmanaged", external);
+    assert(!unmanaged->snapshot().quiver_managed);
+    unmanaged->check();
+    idle(*unmanaged);
+    assert(unmanaged->snapshot().state == State::Available);
     std::cout << "PASS: async checks, signatures, verified cache reuse, preferences, cancellation, "
                  "rate limiting and manual fallback\n";
 }

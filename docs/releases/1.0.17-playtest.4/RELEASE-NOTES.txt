@@ -1,0 +1,8 @@
+DKR-R v1.0.17 Playtest 4
+
+Speedrunning
+- Start the guided tour from the welcome screen or from Getting Started.
+- Sign in with Discord from Getting Started. After signing in, see your name, avatar, overall rank and personal leaderboard stats.
+- Open How points work inside Getting Started.
+
+This build is for local testing.

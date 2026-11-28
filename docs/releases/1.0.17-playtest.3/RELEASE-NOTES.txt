@@ -1,0 +1,8 @@
+DKR-R v1.0.17 Playtest 3
+
+Speedrunning
+- The Top Players page explains how to choose, finish and post a run.
+- An optional guided tour opens the Speedrunning tabs and explains the controls on each page.
+- Last Run picks up the personal-best badge and posting action as soon as the recording is classified and eligibility is confirmed.
+
+This build is for local testing.

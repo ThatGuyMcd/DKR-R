@@ -15,7 +15,7 @@ struct LibraryNavContext {
     std::array<bool, 4> focus_directions{};
     ImGuiWindow* content = nullptr;
     ImGuiWindow* scroll_content = nullptr;
-    ImGuiID pinned_action = 0;
+    std::array<ImGuiID, 2> pinned_actions{};
 };
 std::array<LibraryNavContext, 2> g_library_navigation;
 bool LibraryNavigationActive(const LibraryNavContext& state) {
@@ -23,12 +23,13 @@ bool LibraryNavigationActive(const LibraryNavContext& state) {
 }
 void LibraryNavigationEnterBody(LibraryNavContext& state) {
     auto& context = *state.context;
-    // The pinned action sits outside the scrolling child. Flattened ImGui
+    // The pinned actions sit outside the scrolling child. Flattened ImGui
     // navigation only scores visible child items, so an empty/clipped slice
     // can otherwise strand focus on that action. Restore the child's last
     // selection (or initialise its first control) on an explicit Up request.
     if (!LibraryNavigationActive(state) || LibraryContentInputCaptured() || context.OpenPopupStack.Size ||
-        context.ActiveId || !state.pinned_action || context.NavId != state.pinned_action ||
+        context.ActiveId || !context.NavId ||
+        (context.NavId != state.pinned_actions[0] && context.NavId != state.pinned_actions[1]) ||
         context.NavWindow != state.content || !state.scroll_content || !context.NavMoveSubmitted ||
         context.NavMoveDir != ImGuiDir_Up)
         return;
@@ -215,7 +216,7 @@ void LibraryNavigationContentWindow() {
         if (state.context == ImGui::GetCurrentContext()) {
             state.content = ImGui::GetCurrentWindow();
             state.scroll_content = nullptr;
-            state.pinned_action = 0;
+            state.pinned_actions = {};
         }
 }
 void LibraryNavigationScrollWindow(ImGuiWindow* window) {
@@ -223,10 +224,10 @@ void LibraryNavigationScrollWindow(ImGuiWindow* window) {
         if (state.context == ImGui::GetCurrentContext())
             state.scroll_content = window;
 }
-void LibraryNavigationPinnedAction(ImGuiID id) {
+void LibraryNavigationPinnedAction(ImGuiID id, bool secondary = false) {
     for (auto& state : g_library_navigation)
         if (state.context == ImGui::GetCurrentContext())
-            state.pinned_action = id;
+            state.pinned_actions[secondary] = id;
 }
 int LibraryTakeSidebarStep(bool live) {
     return std::exchange(g_library_navigation[live ? 1 : 0].pending, 0);

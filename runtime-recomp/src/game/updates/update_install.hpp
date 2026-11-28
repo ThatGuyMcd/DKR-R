@@ -1,6 +1,7 @@
 #pragma once
 #include "update_service.hpp"
 namespace dkr::updates {
+bool quiver_managed_install(const std::filesystem::path& application);
 std::string installation_unavailable(const Configuration&);
 void prepare_install(const Configuration&, const Manifest&, const std::filesystem::path& package, std::stop_token);
 void acknowledge_updated_launcher(const Configuration&);

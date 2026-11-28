@@ -3,7 +3,8 @@
   "name": "Français (French)",
   "review": "Draft; native-speaker review pending",
   "messages": {
-    "play.start_game": "LANCER LE JEU",
+    "play.start_game": "LANCER UNE PARTIE LIBRE",
+    "play.speedrunning_leaderboards": "SPEEDRUNNING ET CLASSEMENTS",
     "play.skip_launcher": "Passer le lanceur",
     "play.skip_launcher_help": "Lance automatiquement le jeu sélectionné. Désactivez cette option dans Jouer depuis le menu en jeu.",
     "play.starting_game": "Démarrage du jeu",

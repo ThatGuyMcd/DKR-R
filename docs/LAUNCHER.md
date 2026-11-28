@@ -130,17 +130,20 @@ sharing. Extra Save Location/Connection Details/Reflection Details disclosures
 have been removed. Detailed instructions live in the repository docs instead.
 ### Speedrunning
 
-Open **Speedrunning** from Play. Top Players opens first. **Runs** contains Run,
+Choose **Speedrunning & Leaderboards** in the Play bar. Top Players opens first.
+Getting Started includes the tour, scoring explanation and your account stats. **Runs** contains Run,
 Replays, My Submitted Runs and Options. Moderators and admins also see Review
 Runs. See [Speedrunning](SPEEDRUNNING.md).
 
 ## Page layout and movement
 
 Play keeps the ROM controls on the left and the offline launch options on the
-right of the same card. Smaller windows stack them inside the card. Start Game
-stays in a compact footer while the settings and Spotlight scroll above it.
-The footer reaches both panel edges and the button is narrower and centred.
-It receives initial focus when a ROM is ready without trapping controller focus.
+right of the same card. Smaller windows stack them inside the card. Play can
+check the selected graphics backend and show launch errors.
+The pinned footer has **Start Casual Gameplay** and **Speedrunning &
+Leaderboards**. Casual Gameplay receives initial focus when a ROM is ready.
+Sign in with Discord on Play, choose **Stay logged in**, and see your account
+name, avatar and Discord ID above the launch options.
 The scrollbar appears only when needed, against the right edge. The scroll area
 uses the parent panel's background rather than an extra opaque layer.
 Play shows Community Spotlight above this card.

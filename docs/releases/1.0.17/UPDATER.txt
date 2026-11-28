@@ -1,0 +1,10 @@
+DKR-R v1.0.17 updater assets
+
+Use GitHub release tag Version1.0.17 and the source commit named in the signed
+DKR-R-update.json. Upload DKR-R-update.json and DKR-R-update.sig with the exact
+Windows x64, Linux x86-64 and Linux ARM64 packages. The Steam Deck download is
+a byte-for-byte copy of Linux x86-64 and shares its update entry.
+
+Verify the Ed25519 signature and package hashes before publishing. Installed
+copies trust the existing updater public key. See docs/UPDATES.md and
+docs/RELEASING.md for qualification and upload checks.

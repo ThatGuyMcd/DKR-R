@@ -16,6 +16,30 @@
   </provides>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="1.0.17" date="2026-11-28" type="stable">
+      <description><p>Full Game Replay Theatre, a Speedrunning tour, Discord sign-in from Play, online crash fixes and improved updates.</p></description>
+    </release>
+    <release version="1.0.17-playtest.7" date="2026-11-28" type="development">
+      <description><p>Use Replay Theatre controls in Full Game runs and seek in both Full Game and single-track replays as frames become available.</p></description>
+    </release>
+    <release version="1.0.17-playtest.6" date="2026-11-27" type="development">
+      <description><p>Sign in with Discord from the Play tab, stay logged in and see your Discord profile.</p></description>
+    </release>
+    <release version="1.0.17-playtest.5" date="2026-11-27" type="development">
+      <description><p>Fix AppImage restarts after updates and show the Quiver update route for managed installations.</p></description>
+    </release>
+    <release version="1.0.17-playtest.4" date="2026-11-27" type="development">
+      <description><p>Start the Speedrunning tour from the welcome screen and see your rank and the scoring rules in Getting Started.</p></description>
+    </release>
+    <release version="1.0.17-playtest.3" date="2026-11-27" type="development">
+      <description><p>Add a Speedrunning guide and tour and show eligible personal bests and posting actions after a run.</p></description>
+    </release>
+    <release version="1.0.17-playtest.2" date="2026-11-27" type="development">
+      <description><p>Give Casual Gameplay and Speedrunning separate buttons in the pinned Play bar.</p></description>
+    </release>
+    <release version="1.0.17-playtest.1" date="2026-11-26" type="development">
+      <description><p>Guard against invalid checkpoint progress in online races and check graphics compatibility in the Launcher.</p></description>
+    </release>
     <release version="1.0.16" date="2026-11-25" type="stable">
       <description><p>Speedrunning, public lobbies, host handover, Cloud Saves, Save Manager and Badge Gallery.</p></description>
     </release>

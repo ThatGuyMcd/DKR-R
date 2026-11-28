@@ -1047,7 +1047,7 @@ void DrawReplayTheatre() {
     const auto* view = ImGui::GetMainViewport();
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 13.F);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, {14.F, 13.F});
-    if (transport.buffering) {
+    if (transport.buffering && !state.updates) {
         ImGui::SetNextWindowPos(view->GetCenter(), ImGuiCond_Always, {.5F, .5F});
         ImGui::SetNextWindowBgAlpha(.94F);
         if (ImGui::Begin("Preparing replay", nullptr,
@@ -1093,8 +1093,13 @@ void DrawReplayTheatre() {
             ImGui::SetWindowFocus();
         }
         const auto time = RunClock(state.clock);
-        ImGui::Text("REPLAY THEATRE | %s", trial::kRacers[state.racer].name.data());
-        ImGui::SameLine();
+        const auto category =
+            std::ranges::find(trial::kAdventureCategories, state.adventure, &trial::AdventureCategory::goal);
+        const auto title =
+            category != trial::kAdventureCategories.end() ? category->title : trial::kRacers[state.racer].name;
+        ImGui::Text("REPLAY THEATRE | %s", title.data());
+        if (state.adventure == trial::Adventure::None)
+            ImGui::SameLine();
         ImGui::Text("%s   |   Frame %u / %u%s", time.c_str(), state.updates, state.total_updates,
                     transport.finished && !transport.seeking ? "   |   Finished" : "");
         if (local) {
@@ -1108,13 +1113,14 @@ void DrawReplayTheatre() {
                 OlParagraph(g_time_trial_message, 14.F, kOlSoft, ImGui::GetContentRegionAvail().x);
         }
         if (transport.seeking) {
-            ImGui::Text("Preparing frame %u   |   %s on arrival", transport.seek_to,
+            ImGui::Text("Seeking to frame %u   |   %s on arrival", transport.seek_to,
                         transport.paused ? "Pause" : "Play");
             ImGui::SameLine();
             if (OlButton("Cancel seek", OlTone::Plain, 0.F, nullptr, 28.F))
                 trial::theatre_cancel_seek();
         } else if (transport.buffered < state.total_updates) {
-            ImGui::Text("Preparing replay %u / %u", transport.buffered, state.total_updates);
+            ImGui::Text(transport.buffering ? "Buffering frame %u / %u" : "Available through frame %u / %u",
+                        transport.buffered, state.total_updates);
         } else {
             ImGui::TextUnformatted("Ready to seek");
         }
@@ -2040,7 +2046,12 @@ const dkr::store::Snapshot& LeaderboardLayoutFixture() {
         })json"));
         return value;
     }();
-    return fixture;
+    static const auto account_fixture = [] {
+        auto value = fixture;
+        value.user = {{"id", "fixture-account"}, {"displayName", "Example Racer"}};
+        return value;
+    }();
+    return g_launcher_layout_step == 6 ? account_fixture : fixture;
 }
 
 void DrawCatalogueLeaders(const dkr::store::Json& track, float width, bool full_game) {
@@ -2304,13 +2315,15 @@ void DrawAdventureBoards(float width, const dkr::store::Json* catalogue, TrackQu
 }
 
 #include "speedrunning_welcome.inl"
+#include "speedrunning_guide.inl"
 
 void DrawLeaderboardsPage(float width, bool entered, bool live) {
-    enum Category { TopPlayers, Vanilla, Custom, FullGame, Runs };
-    enum RunTab { NewRun, Replays, MySubmittedRuns, ReviewRuns, Options };
+    using namespace speedrunning_guide;
     static const std::vector<std::string> labels{"Top Players", "Vanilla Tracks", "Custom Tracks", "Full Game", "Runs"};
     static int category = TopPlayers;
     static RunTab run_tab = NewRun;
+    static int tour_step = -1;
+    static bool focus_next_stop = false;
     static std::string last_requested_owner;
     static RunTab last_requested_tab = NewRun;
     static std::string world, vehicle;
@@ -2322,14 +2335,24 @@ void DrawLeaderboardsPage(float width, bool entered, bool live) {
     const auto* snapshot = published.get();
     if (g_leaderboard_layout_check) {
         snapshot = &LeaderboardLayoutFixture();
-        category = g_launcher_layout_step == 3   ? Custom
+        category = g_launcher_layout_step >= 5   ? TopPlayers
+                   : g_launcher_layout_step == 3 ? Custom
                    : g_launcher_layout_step == 4 ? FullGame
                    : g_launcher_layout_step == 2 ? Vanilla
                                                  : Runs;
         query = {g_launcher_layout_step == 2 ? "ancient-lake" : ""};
         run_tab = NewRun;
-    } else if (entered) {
-        const bool after_run = std::exchange(g_open_speedrunning_result, false);
+        if (g_launcher_layout_step == 6) {
+            g_account_standing = {
+                "fixture-account",
+                {{"id", "fixture-account"}, {"place", 12}, {"total", 22081}, {"personalBests", 7}, {"records", 2}},
+                AccountStanding::Status::Ready};
+        }
+    } else if (entered || (!live && g_open_speedrunning_result)) {
+        // A race can return to the same page without changing its navigation ID.
+        const bool after_run = !live && std::exchange(g_open_speedrunning_result, false);
+        tour_step = -1;
+        g_account_standing = {};
         category = after_run ? Runs : TopPlayers;
         query = {};
         back_to_profile = false;
@@ -2339,7 +2362,7 @@ void DrawLeaderboardsPage(float width, bool entered, bool live) {
         SelectOverallPlayer({});
         g_overall_focus.clear();
         g_overall_tab = OverallPlayerTab::Score;
-        if (!DialogJobRunning())
+        if (!after_run && !DialogJobRunning())
             RefreshOverallRankings();
         g_refresh_replay_library = true;
         g_published_replay_times = {};
@@ -2352,6 +2375,37 @@ void DrawLeaderboardsPage(float width, bool entered, bool live) {
     const bool can_review = staff && !owner.empty();
     if (run_tab == ReviewRuns && !can_review)
         run_tab = NewRun;
+    const int tour_length = static_cast<int>(kStops.size()) - (can_review ? 0 : 1);
+    if (tour_step >= tour_length)
+        tour_step = -1;
+    const auto select_category = [&](int next) {
+        category = next;
+        query = {};
+        back_to_profile = false;
+        g_track_return_focus.clear();
+        run_tab = NewRun;
+        last_requested_tab = NewRun;
+        if (category == TopPlayers && g_overall_standings.is_null() && !DialogJobRunning())
+            RefreshOverallRankings();
+        world.clear();
+        vehicle.clear();
+        search[0] = '\0';
+    };
+    const auto start_tour = [&] {
+        if (category != TopPlayers)
+            select_category(TopPlayers);
+        tour_step = 0;
+        focus_next_stop = true;
+        ImGui::SetScrollY(0.F);
+    };
+    if (tour_step >= 0) {
+        const auto& stop = kStops[static_cast<std::size_t>(tour_step)];
+        if (category != stop.category)
+            select_category(stop.category);
+        if (stop.tab == Replays && run_tab != Replays)
+            g_refresh_replay_library = true;
+        run_tab = stop.tab;
+    }
     const bool showing_submissions = category == Runs && (run_tab == MySubmittedRuns || run_tab == ReviewRuns);
     const float refresh = PaddockImportButtonWidth("Refreshing...");
     const float website = PaddockImportButtonWidth("Website");
@@ -2368,6 +2422,7 @@ void DrawLeaderboardsPage(float width, bool entered, bool live) {
                     if (showing_submissions) {
                         RefreshLeaderboardRuns(run_tab == ReviewRuns);
                     } else if (category == TopPlayers) {
+                        g_account_standing = {};
                         RefreshOverallRankings();
                     } else if (category == Runs && run_tab == Replays) {
                         g_refresh_replay_library = true;
@@ -2385,36 +2440,19 @@ void DrawLeaderboardsPage(float width, bool entered, bool live) {
                 SDL_OpenURL(kLeaderboardWebsite);
         });
     DrawLocalRunConfirmation();
-    if (!live && !g_leaderboard_layout_check)
-        DrawSpeedrunningWelcome(entered, !owner.empty(), staff, snapshot->speedrun_catalogue.get());
+    if (!live && !g_leaderboard_layout_check &&
+        DrawSpeedrunningWelcome(entered, !owner.empty(), staff, snapshot->speedrun_catalogue.get()))
+        start_tour();
     const int next = StoreTabLine(labels, category, width, "speedrun-category", true);
     if (next != category) {
-        category = next;
-        query = {};
-        back_to_profile = false;
-        g_track_return_focus.clear();
-        run_tab = NewRun;
-        last_requested_tab = NewRun;
-        if (category == TopPlayers && g_overall_standings.is_null() && !DialogJobRunning())
-            RefreshOverallRankings();
-        world.clear();
-        vehicle.clear();
-        search[0] = '\0';
+        tour_step = -1;
+        select_category(next);
     }
     if ((category != Runs || (run_tab != NewRun && run_tab != Options)) && !snapshot->speedrun_error.empty())
         OlParagraph(snapshot->speedrun_error, 15.F, kOlError, width);
     if (!g_time_trial_message.empty())
         OlParagraph(g_time_trial_message, 15.F, kOlSoft, width);
     PaddockGap(8.F);
-    if (category == TopPlayers) {
-        if (const auto selected = DrawOverallRankings(width)) {
-            query = *selected;
-            category = query.full_game ? FullGame : query.custom ? Custom : Vanilla;
-            back_to_profile = true;
-            service.load_leaderboards({}, query);
-        }
-        return;
-    }
     if (category == Runs) {
         std::vector<std::string> run_tabs{"Run", "Replays", "My Submitted Runs"};
         if (can_review)
@@ -2424,8 +2462,11 @@ void DrawLeaderboardsPage(float width, bool entered, bool live) {
         const int selected =
             StoreTabLine(run_tabs, run_tab == Options ? options_index : run_tab, width, "speedrun-runs", true);
         const auto next_tab = selected == options_index ? Options : static_cast<RunTab>(selected);
-        if (next_tab == Replays && run_tab != Replays)
-            g_refresh_replay_library = true;
+        if (next_tab != run_tab) {
+            tour_step = -1;
+            if (next_tab == Replays)
+                g_refresh_replay_library = true;
+        }
         run_tab = next_tab;
         if (owner.empty() || (run_tab != MySubmittedRuns && run_tab != ReviewRuns)) {
             last_requested_owner.clear();
@@ -2436,6 +2477,36 @@ void DrawLeaderboardsPage(float width, bool entered, bool live) {
             RefreshLeaderboardRuns(run_tab == ReviewRuns);
         }
         PaddockGap(8.F);
+    }
+    if (tour_step >= 0) {
+        const int previous = tour_step;
+        tour_step = DrawTour(width, tour_step, tour_length, std::exchange(focus_next_stop, false));
+        if (tour_step >= 0 && tour_step != previous) {
+            focus_next_stop = true;
+            ImGui::SetScrollY(0.F);
+        }
+    } else if (!live && category == TopPlayers && DrawPanel(width, can_review, *snapshot)) {
+        start_tour();
+    }
+    if (category == TopPlayers) {
+        if (live) {
+            static bool show_points = false;
+            if (OlButton(show_points ? "Hide points explanation" : "How points work"))
+                show_points = !show_points;
+            StoreControlFocus();
+            if (show_points)
+                DrawOlFeature(width, "How points work", nullptr, DrawOverallPointsExplanation);
+        }
+        if (const auto selected = DrawOverallRankings(width)) {
+            tour_step = -1;
+            query = *selected;
+            category = query.full_game ? FullGame : query.custom ? Custom : Vanilla;
+            back_to_profile = true;
+            service.load_leaderboards({}, query);
+        }
+        return;
+    }
+    if (category == Runs) {
         if (run_tab == NewRun)
             DrawLeaderboardPractice(width, snapshot->speedrun_catalogue.get());
         else if (run_tab == Replays)

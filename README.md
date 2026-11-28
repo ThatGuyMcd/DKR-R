@@ -4,17 +4,21 @@
 
 [Join our Discord](https://discord.com/invite/AMWfXdBjNP) · [Open the Mod Library](https://positron-portal.com/dkr-r/) · [Downloads](https://github.com/ThatGuyMcd/DKR-R/releases)
 
-## DKR-R v1.0.16
+## DKR-R v1.0.17
 
-Start a Speedrunning attempt, watch a replay or race a ghost from Play. Browse
-public lobbies, suggest a host and hand over the lobby without closing it.
-Cloud Saves can sync Vanilla, Modded and Online Adventure independently.
-Save Manager keeps slots beside the editor, and Achievements opens the Badge
-Gallery.
+Open **Speedrunning & Leaderboards** beside **Start Casual Gameplay**. The
+Getting Started guide and tour show how to race and post your first run.
+Full Game and single-track replays start after a short buffer and support
+seeking. Sign in with Discord from Play and choose whether to stay logged in.
+
+This release fixes an online checkpoint crash, reports graphics startup
+failures in the Launcher and repairs Linux AppImage updates. The DKR-R
+website now has a community homepage, News & Updates, expanded player
+profiles and optional push notifications.
 
 Use matching builds for online play. Bring your own legally obtained
-**US v1.0 or US Rev A/v1.1 ROM**. See the [release notes](docs/releases/1.0.16/RELEASE-NOTES.txt),
-[documentation index](docs/DOCUMENTATION-1.0.16.md) and
+**US v1.0 or US Rev A/v1.1 ROM**. See the [release notes](docs/releases/1.0.17/RELEASE-NOTES.txt),
+[documentation index](docs/README.md) and
 [validation record](RELEASE-VALIDATION.md).
 
 ## Get started
@@ -38,15 +42,15 @@ There is no bundled revision-conversion data. See [ROM setup](docs/ROM_SETUP.md)
 ## Play and the overlay
 
 **Escape**, **F1** or controller **Back/View** opens the overlay. It uses the same
-pages as the launcher. **Play** contains Achievements, **Speedrunning**,
+pages as the launcher. **Play** contains Achievements,
 **Session Mods** and Save Manager. Turn **Session Mods** off to play Vanilla
 Adventure or on to play Modded Adventure. Each has its own save slots, balloons
 and unlocks. Online and development saves are stored separately. See the
 [Speedrunning guide](docs/SPEEDRUNNING.md) and [Saves](docs/SAVES.md).
 
-Start Game stays in a compact bar at the bottom while the page scrolls above it.
-It starts selected when a ROM is ready, and you can move away with the controller
-normally. The overlay uses the same position for Return to the Race.
+The pinned Play bar puts **Start Casual Gameplay** beside **Speedrunning &
+Leaderboards**. Casual Gameplay starts selected when a ROM is ready. The
+overlay uses the same position for Return to the Race.
 
 **Skip launcher** boots the selected game automatically and can be turned off
 again in the overlay. **Language** changes the launcher and overlay immediately;
@@ -138,7 +142,8 @@ Raw dumps need separate consent and can contain personal information. Complete
 anonymity cannot be guaranteed. See [crash reporting](docs/CRASH_REPORTING.md).
 
 The launcher checks GitHub for compatible signed updates; downloading and
-installing remain your choice. See [Updates](docs/UPDATES.md).
+installing remain your choice. Use Quiver Launcher for Quiver-managed copies.
+See [Updates](docs/UPDATES.md).
 
 Startup cleanup clears verified leftover downloads, installation preparation and
 old caches once per launch, continuing at low priority while playing.
@@ -149,7 +154,7 @@ controls. Saves, ROMs and installed content are kept. See [Storage](docs/STORAGE
 
 ## Documentation and contributing
 
-- [All current guides](docs/README.md), [release notes](docs/releases/1.0.16/RELEASE-NOTES.txt)
+- [All current guides](docs/README.md), [release notes](docs/releases/1.0.17/RELEASE-NOTES.txt)
   and [known limitations/validation](RELEASE-VALIDATION.md).
 - [Troubleshooting](docs/TROUBLESHOOTING.md), [building](docs/BUILDING.md),
   [development](docs/DEVELOPMENT.md) and [contributing](CONTRIBUTING.md).

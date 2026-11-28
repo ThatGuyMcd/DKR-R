@@ -1,0 +1,11 @@
+DKR-R v1.0.17 Playtest 7
+
+Replay Theatre
+- Watch Full Game runs with pause, playback speed, frame stepping, seeking, split markers and the controller input viewer.
+- Start watching Full Game and single-track runs after a short buffer.
+- Seek ahead to prepare more frames on demand, or seek back to frames already cached.
+
+Leaderboards
+- Compatible port builds can submit their replays for verification and moderator review.
+
+This build is for local testing.

@@ -164,6 +164,7 @@ struct Child::Impl {
     int result = -1;
 #ifdef _WIN32
     HANDLE handle{};
+    DWORD exit_code{};
 #else
     pid_t pid = -1;
 #endif
@@ -311,11 +312,11 @@ int Child::wait(unsigned timeout) {
 #ifdef _WIN32
     if (WaitForSingleObject(impl->handle, timeout) != WAIT_OBJECT_0)
         return -1;
-    DWORD code = 1;
-    if (!GetExitCodeProcess(impl->handle, &code))
+    if (!GetExitCodeProcess(impl->handle, &impl->exit_code))
         throw std::runtime_error("Could not inspect update process exit status.");
     // Windows exception exits have the high bit set. A negative result is
     // reserved for 'still running', never for an already-signalled child.
+    const auto code = impl->exit_code;
     impl->result = code <= DWORD(std::numeric_limits<int>::max()) ? int(code) : 1;
     return impl->result;
 #else
@@ -337,6 +338,11 @@ int Child::wait(unsigned timeout) {
     return -1;
 #endif
 }
+#ifdef _WIN32
+std::uint32_t Child::windows_exit_code() const {
+    return impl->exit_code;
+}
+#endif
 void Child::terminate() {
     if (wait(0) >= 0)
         return;

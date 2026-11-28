@@ -1,7 +1,6 @@
 # DKR-R documentation
 
-Start here for the current v1.0.15 instructions. The older plans and playtest logs
-are still useful, but they aren't the current feature list.
+Start here for DKR-R v1.0.17. See the [release notes](releases/1.0.17/RELEASE-NOTES.txt) for changes since v1.0.16.
 
 ## Playing and settings
 
@@ -16,6 +15,7 @@ are still useful, but they aren't the current feature list.
 | [Controls](CONTROLLERS.md) | Profiles, N64 setup, SDL2/SDL3, gyro and Android touch groups. |
 | [Saves and portable mode](SAVES.md) | Offline/online/modded storage, recovery and profile switching. |
 | [Application updates](UPDATES.md) | GitHub checks, signed packages, installation, backups and publishing. |
+| [Speedrunning](SPEEDRUNNING.md) | Starting runs, Replay Theatre and submissions. |
 | [Storage cleanup](STORAGE.md) | Once-per-launch background maintenance, install cleanup, retained recovery and cache limits. |
 | [Crash reporting](CRASH_REPORTING.md) | Consent, queued reports, native fault context, file dialogs and unresolved crashes. |
 | [Texture packs](TEXTURE_PACKS.md) | Imports, priorities, track-owned HD packs and texture export/capture. |
@@ -31,7 +31,7 @@ are still useful, but they aren't the current feature list.
 | [Achievements](ACHIEVEMENTS.md) | 94 local goals, recognition, notifications and progress protection. |
 | [Library administration](MOD_LIBRARY_ADMIN.md) | FTP uploads, batch entries, image controls, usage filters and deployment. |
 | [Troubleshooting](TROUBLESHOOTING.md) | Failures, recurring player issues, support exports and the correct runtime logs. |
-| [Platform support](PLATFORMS.md) | v1.0.15 packages, Linux requirements and excluded platforms. |
+| [Platform support](PLATFORMS.md) | Current packages, Linux requirements and source port coverage. |
 
 ## Track Lab and development
 

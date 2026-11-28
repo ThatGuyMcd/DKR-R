@@ -26,6 +26,9 @@ struct Child {
           bool system_desktop_libraries = false);
     ~Child();
     int wait(unsigned timeout_ms);
+#ifdef _WIN32
+    std::uint32_t windows_exit_code() const;
+#endif
     void terminate();
 };
 bool parent_alive(std::uint64_t pid);

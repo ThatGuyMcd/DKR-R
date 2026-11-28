@@ -1,0 +1,8 @@
+DKR-R v1.0.17 Playtest 2
+
+Play
+- Start Casual Gameplay launches the selected game using your existing session settings.
+- Speedrunning & Leaderboards is beside it in the pinned launch bar and opens the Speedrunning page.
+- Includes the online checkpoint repair and graphics compatibility check from Playtest 1.
+
+This build is for local testing.

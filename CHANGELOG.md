@@ -1,5 +1,56 @@
 # DKR-R changelog
 
+## 1.0.17 — 2026-11-28
+
+- Add Casual Gameplay and Speedrunning launch actions side by side, plus Discord sign-in and a persistent session option.
+- Add the Speedrunning guide, guided tour, scoring explanation and personal standings. Show eligible PB and posting actions in Last Run immediately.
+- Add Full Game Replay Theatre controls and input display. Start either replay type after a short buffer and prepare frames as needed for seeking.
+- Recover from an online checkpoint crash, report graphics launch failures in the Launcher and fix Direct3D sprite seams.
+- Fix Linux AppImage update restarts and make Quiver-managed installations update through Quiver.
+- Accept ranked submissions from compatible ports. Restore verification compatibility for older All Trophy Races recordings.
+- Add the community homepage, news moderation and search, expanded profiles, mobile navigation and optional push notifications.
+- Add public MP4 downloads, video queue progress and ETA, and improve the website online count on mobile.
+- Expand tooling tests and static analysis coverage.
+
+See the [release notes](docs/releases/1.0.17/RELEASE-NOTES.txt) for details.
+
+## 1.0.17 playtest 7 — 2026-11-28
+
+- Watch Full Game runs with the Replay Theatre controls, controller input viewer and split markers.
+- Start single-track and Full Game replays after a short buffer. Seek ahead as frames become available or back to cached frames.
+- Allow ranked submissions from compatible macOS, iOS, Android and Linux ARM64 ports.
+
+## 1.0.17 playtest 6 — 2026-11-27
+
+- Sign in with Discord from the Play tab and choose whether to stay logged in.
+- See your Discord picture, display name and ID next to the launch settings.
+
+## 1.0.17 playtest 5 — 2026-11-27
+
+- Fix the Linux AppImage restart during an in-app update.
+- Direct Quiver-managed installations to the update in Quiver Launcher.
+- Include the release tag in Linux asset names so Quiver replaces older AppImages.
+
+## 1.0.17 playtest 4 — 2026-11-27
+
+- Offer the Speedrunning tour from the first-visit welcome.
+- Add Discord sign-in and personal leaderboard stats to Getting Started.
+- Move the points explanation into Getting Started.
+
+## 1.0.17 playtest 3 — 2026-11-27
+
+- Add a getting-started guide and a guided tour to Speedrunning.
+- Refresh Last Run after a recording finishes so the personal-best badge and posting action appear when eligible.
+
+## 1.0.17 playtest 2 — 2026-11-27
+
+- Put Start Casual Gameplay and Speedrunning & Leaderboards together in the pinned Play bar.
+
+## 1.0.17 playtest 1 — 2026-11-26
+
+- Recover safely from invalid racer checkpoint distances during online races.
+- Check graphics compatibility on Play and keep the Launcher available when graphics startup fails.
+
 ## 1.0.16
 
 - Add Speedrunning, ranked verification, replay theatre, prepared ghosts,

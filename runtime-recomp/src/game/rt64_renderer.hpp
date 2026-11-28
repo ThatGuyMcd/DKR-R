@@ -4,6 +4,7 @@
 #include "presentation_counter_policy.hpp"
 #include "track_performance.hpp"
 #include "online_view_policy.hpp"
+#include "graphics_launch.hpp"
 #include <utility>
 #include "ultramodern/renderer_context.hpp"
 
@@ -11,6 +12,7 @@
 #include <chrono>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <deque>
 #include <vector>
 
@@ -43,7 +45,7 @@ class RenderPass;
 class RT64Renderer final : public ultramodern::renderer::RendererContext {
   public:
     RT64Renderer(std::uint8_t* rdram, ultramodern::renderer::WindowHandle window_handle, bool developer_mode,
-                 bool owned_mode = false);
+                 bool owned_mode = false, std::optional<graphics_launch::GraphicsApi> probe = std::nullopt);
     ~RT64Renderer() override;
 
     bool valid() override;
@@ -72,6 +74,7 @@ class RT64Renderer final : public ultramodern::renderer::RendererContext {
 #endif
 
   private:
+    friend graphics_launch::Result graphics_launch::probe_renderer(graphics_launch::GraphicsApi);
     void render_dl_locked(const OSTask* task, std::uint8_t* rdram_snapshot,
                           const presentation::ReplayPresentation* replay = nullptr);
     bool present_theatre_frame(std::chrono::steady_clock::time_point now);

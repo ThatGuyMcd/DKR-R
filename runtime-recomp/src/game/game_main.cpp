@@ -60,6 +60,7 @@
 #endif
 #if DKR_RUNTIME_HAS_RT64
 #include "custom_tracks.hpp"
+#include "graphics_launch.hpp"
 #include "rt64_renderer.hpp"
 #include "runtime_texture_packs.hpp"
 #include "runtime_ui.hpp"
@@ -83,6 +84,7 @@
 #include <filesystem>
 #include <fstream>
 #include <limits>
+#include <mutex>
 #include <set>
 #include <stdexcept>
 #include <string>
@@ -238,8 +240,16 @@ RspUcodeFunc* GetRspMicrocode(const OSTask* task) {
     return nullptr;
 }
 
+std::mutex runtime_error_mutex;
+std::string runtime_error_text;
+
 void MessageBox(const char* message) {
     std::fprintf(stderr, "[boot][runtime-error] %s\n", message);
+    {
+        std::scoped_lock lock(runtime_error_mutex);
+        if (runtime_error_text.empty())
+            runtime_error_text = message;
+    }
 #if defined(__ANDROID__)
     const auto failure = dkr::runtime::graphics_health::failure.load();
     if (failure == 0)
@@ -438,6 +448,7 @@ struct LaunchOptions {
     std::filesystem::path replay_path;
     std::filesystem::path ghost_replay;
     std::filesystem::path ghost_export;
+    bool legacy_adventure_scenery = false;
     std::string time_trial_track;
     std::filesystem::path time_trial_map;
     dkr::runtime::time_trial::Adventure adventure = dkr::runtime::time_trial::Adventure::None;
@@ -502,6 +513,8 @@ bool ParseLaunchOptions(int argc, char** argv, LaunchOptions& options, std::stri
             }
             options.owned_check_players = unsigned(value[0] - '0');
 #endif
+        } else if (argument == "--verify-adventure-legacy-scenery") {
+            options.legacy_adventure_scenery = true;
         } else if (argument == "--adventure-category") {
             const char* value = require_value("--adventure-category");
             if (!value)
@@ -682,6 +695,14 @@ bool RelaunchApplication(int argc, char** argv) {
 }
 
 int DkrMain(int argc, char** argv) {
+#if DKR_RUNTIME_HAS_RT64
+    if (argc == 4 && std::string_view(argv[1]) == dkr::runtime::graphics_launch::probe_argument) {
+#if defined(_WIN32)
+        SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX);
+#endif
+        return dkr::runtime::graphics_launch::run_probe(argv[2], std::filesystem::u8path(argv[3]));
+    }
+#endif
     dkr::updates::remember_arguments(argc, argv);
 #if !defined(__ANDROID__) && !defined(DKR_IOS)
     // Hold a shared lock for normal play, including multiple local instances.
@@ -944,6 +965,10 @@ int DkrMain(int argc, char** argv) {
             return 2;
         }
     }
+    if (launch.legacy_adventure_scenery && !time_trial::supports_legacy_scenery_verification()) {
+        std::fprintf(stderr, "[adventure] Legacy scenery requires Full Game verification with the v7 rules.\n");
+        return 2;
+    }
 #if defined(DKR_EXPERIMENTAL_RACE_TEST)
     const bool rollback_bootstrap = !launch.bootstrap_output.empty();
     const bool owned_check = !launch.owned_check_invite.empty();
@@ -1074,6 +1099,21 @@ int DkrMain(int argc, char** argv) {
     {
         dkr::runtime::startup_performance::ScopedPhase phase("ui-configure");
         dkr::runtime::ui::configure(config_directory);
+    }
+    if (launch.legacy_adventure_scenery) {
+        // Early v7 recordings didn't identify the guest scenery settings. Reproduce the
+        // extended scenery profile in the isolated verifier without changing its video mode.
+        namespace enh = dkr::runtime::enhancements;
+        enh::set_presentation_profile(enh::PresentationProfile::Modern);
+        enh::set_view_distance_multiplier(6);
+        enh::set_keep_hub_scenery_enabled(true);
+        enh::set_keep_track_scenery_enabled(true);
+        enh::set_keep_minigame_scenery_enabled(true);
+        enh::set_scenery_retention_mode(enh::SceneryRetentionMode::FullForwardView);
+        enh::set_animated_scenery_distance_multiplier(enh::kMaximumAnimatedSceneryMultiplier);
+        enh::set_billboard_effect_distance_multiplier(enh::kMaximumBillboardEffectMultiplier);
+        enh::set_water_lava_detail_multiplier(enh::kMaximumWaterLavaDetailMultiplier);
+        std::fprintf(stderr, "[adventure] Verifying with legacy extended scenery.\n");
     }
 #if defined(DKR_EXPERIMENTAL_RACE_TEST)
     if (rollback_bootstrap) {
@@ -1741,6 +1781,10 @@ int DkrMain(int argc, char** argv) {
         bool graphics_failure_reported = false;
 #endif
         std::exception_ptr runtime_failure;
+        {
+            std::scoped_lock lock(runtime_error_mutex);
+            runtime_error_text.clear();
+        }
         bool return_from_owned = false;
         bool owned_failed = false;
 #if defined(DKR_EXPERIMENTAL_RACE_TEST)
@@ -1999,16 +2043,34 @@ int DkrMain(int argc, char** argv) {
 #if DKR_RUNTIME_HAS_RT64
         const auto lifecycle_request = dkr::runtime::ui::lifecycle_request();
 #endif
+        std::string startup_error;
         if (runtime_failure != nullptr) {
-            dkr::runtime::platform::shutdown();
+            {
+                std::scoped_lock lock(runtime_error_mutex);
+                startup_error = std::move(runtime_error_text);
+            }
             try {
                 std::rethrow_exception(runtime_failure);
             } catch (const std::exception& error) {
                 std::fprintf(stderr, "[boot] runtime failed: %s\n", error.what());
+                if (startup_error.empty())
+                    startup_error = error.what();
             } catch (...) {
                 std::fprintf(stderr, "[boot] runtime failed with an unknown exception\n");
+                if (startup_error.empty())
+                    startup_error = "The game stopped with an unknown startup error.";
             }
-            return 5;
+#if DKR_RUNTIME_HAS_RT64
+            if (dkr::runtime::graphics_launch::desktop && launch.rom_path.empty()) {
+                dkr::runtime::ui::report_graphics_launch_error(startup_error);
+                if (dkr::runtime::netplay::session().active())
+                    dkr::runtime::netplay::session().fail_runtime_start(startup_error);
+            } else
+#endif
+            {
+                dkr::runtime::platform::shutdown();
+                return 5;
+            }
         }
         const bool return_from_time_trial = time_trial::active();
         if (time_trial::preparing_ghost() && time_trial::advance_ghost()) {
@@ -2033,8 +2095,9 @@ int DkrMain(int argc, char** argv) {
             return owned_failed ? 5 : 0;
         }
 #endif
-        if (return_from_time_trial || lifecycle_request == dkr::runtime::ui::LifecycleRequest::StopGame ||
-            !mod_failure.empty() || !save_failure.empty() ||
+        if (!startup_error.empty() || return_from_time_trial ||
+            lifecycle_request == dkr::runtime::ui::LifecycleRequest::StopGame || !mod_failure.empty() ||
+            !save_failure.empty() ||
             (return_from_owned && lifecycle_request == dkr::runtime::ui::LifecycleRequest::None)) {
             if (!mod_failure.empty())
                 dkr::runtime::ui::report_mod_error("Custom content stopped safely: " + mod_failure);
@@ -2048,7 +2111,7 @@ int DkrMain(int argc, char** argv) {
                     : std::string{});
             dkr::runtime::ui::reset_lifecycle_request();
             const bool software_launcher_return =
-                return_from_time_trial ||
+                return_from_time_trial || !startup_error.empty() ||
                 dkr::runtime::launcher_surface_recovery(owned_failed, return_from_owned,
                                                         !mod_failure.empty() || !save_failure.empty());
             dkr::session_content::end();

@@ -16,6 +16,10 @@ public final class DkrActivity extends SDLActivity {
     public String requestUpdateHttp(String url, String etag, long offset, long context) {
         return DkrUpdates.fetch(url, etag, offset, context);
     }
+    public boolean requestStoreHttp(String url, String method, byte[] body, String[] headers, int timeout,
+                                    long context) {
+        return DkrStoreHttp.request(url, method, body, headers, timeout, context);
+    }
     public String installVerifiedUpdate(String path, String version, String sha) {
         return DkrUpdates.install(this, path, version, sha);
     }

@@ -10,6 +10,23 @@
 set -eu
 
 here="$(dirname "$(readlink -f "$0")")"
+
+# Older update helpers start the replacement through FUSE. Switch to the
+# AppImage runtime's extraction path before loading the game from that mount.
+case "${here##*/}" in
+  .mount_*)
+    if [ -n "${DKR_UPDATE_TOKEN:-}" ] && [ "${APPDIR:-}" = "${here}" ]; then
+      case "${APPIMAGE:-}" in
+        /*)
+          if [ -f "${APPIMAGE}" ] && [ -x "${APPIMAGE}" ]; then
+            exec "${APPIMAGE}" --appimage-extract-and-run "$@"
+          fi
+          ;;
+      esac
+    fi
+    ;;
+esac
+
 fallback="${here}/usr/lib/wayland-fallback"
 library=libwayland-client.so.0
 

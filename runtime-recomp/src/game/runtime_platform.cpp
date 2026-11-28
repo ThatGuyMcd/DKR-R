@@ -1398,6 +1398,14 @@ ultramodern::renderer::WindowHandle dkr::runtime::platform::create_window() {
 #endif
         g_window = SDL_CreateWindow("DKR-R - Diddy Kong Racing Recompiled", SDL_WINDOWPOS_CENTERED,
                                     SDL_WINDOWPOS_CENTERED, 1440, 900, flags);
+#if defined(__linux__) && !defined(__ANDROID__)
+        if (!g_window && (flags & SDL_WINDOW_VULKAN)) {
+            std::fprintf(stderr, "[boot][window] Vulkan window unavailable; opening the launcher: %s\n",
+                         SDL_GetError());
+            g_window = SDL_CreateWindow("DKR-R - Diddy Kong Racing Recompiled", SDL_WINDOWPOS_CENTERED,
+                                        SDL_WINDOWPOS_CENTERED, 1440, 900, flags & ~SDL_WINDOW_VULKAN);
+        }
+#endif
         if (g_window == nullptr) {
             std::fprintf(stderr, "[boot][window] SDL creation failed: %s\n", SDL_GetError());
 #if !defined(DKR_IOS)

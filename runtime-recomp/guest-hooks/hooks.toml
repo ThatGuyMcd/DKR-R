@@ -4,6 +4,77 @@
 # (scripts/camera_scene_kernel.py). Every hook applies exactly once per payload.
 schema = 1
 
+# Parallel or coincident checkpoint planes can make the projection non-finite.
+# Keep the last valid progress when no crossing can be established. If the
+# crossing was already accepted, start the new segment at its beginning.
+[[hook]]
+id = "owned-checkpoint-projection"
+function = "checkpoint_is_passed"
+payloads = ["owned"]
+entry = "const gpr checkpoint_output = (gpr)MEM_W(0X14, ctx->r29);"
+[hook.vars.77]
+epilogue = "L_80018C58"
+first_sum = "8001894C"
+second_sum = "80018BE0"
+first_store = "80018974"
+second_store = "80018C08"
+[hook.vars.80]
+epilogue = "L_80018C8C"
+first_sum = "80018980"
+second_sum = "80018C14"
+first_store = "800189A8"
+second_store = "80018C3C"
+[[hook.edits]]
+match = "ctx->f6.fl = DIV_S(ctx->f6.fl, ctx->f8.fl);"
+replace = '''ctx->f6.fl = DIV_S(ctx->f6.fl, ctx->f8.fl);
+    if ((ctx->f6.u32l & 0x7FFFFFFFU) > 0x7F800000U) {
+        if ((MEM_W(0, checkpoint_output) & 0x7FFFFFFFU) > 0x7F800000U)
+            MEM_W(0, checkpoint_output) = 0x3F800000U;
+        ctx->r2 = 1;
+        goto {epilogue};
+    }'''
+[[hook.edits]]
+match = '''ctx->f0.fl = DIV_S(ctx->f4.fl, ctx->f0.fl);
+    // 0x{first_sum}: add.s       $f2, $f12, $f0'''
+replace = '''ctx->f0.fl = DIV_S(ctx->f4.fl, ctx->f0.fl);
+    if ((ctx->f0.u32l & 0x7FFFFFFFU) > 0x7F800000U) {
+        if ((MEM_W(0, checkpoint_output) & 0x7FFFFFFFU) > 0x7F800000U)
+            MEM_W(0, checkpoint_output) = 0x3F800000U;
+        ctx->r2 = 1;
+        goto {epilogue};
+    }
+    // 0x{first_sum}: add.s       $f2, $f12, $f0'''
+[[hook.edits]]
+match = "ctx->f10.fl = DIV_S(ctx->f10.fl, ctx->f4.fl);"
+replace = '''ctx->f10.fl = DIV_S(ctx->f10.fl, ctx->f4.fl);
+    if ((ctx->f10.u32l & 0x7FFFFFFFU) > 0x7F800000U) {
+        MEM_W(0, checkpoint_output) = 0x3F800000U;
+        ctx->r2 = 0;
+        goto {epilogue};
+    }'''
+[[hook.edits]]
+match = "ctx->f0.fl = DIV_S(ctx->f6.fl, ctx->f0.fl);"
+replace = '''ctx->f0.fl = DIV_S(ctx->f6.fl, ctx->f0.fl);
+    if ((ctx->f0.u32l & 0x7FFFFFFFU) > 0x7F800000U) {
+        MEM_W(0, checkpoint_output) = 0x3F800000U;
+        ctx->r2 = 0;
+        goto {epilogue};
+    }'''
+
+# A restored racer can already carry invalid progress. Keep the generated
+# FPU checks and repair only the checkpoint field before it reaches them.
+[[hook]]
+id = "owned-restored-checkpoint-progress"
+function = "func_80059208"
+payloads = ["owned"]
+[[hook.edits]]
+match = "ctx->f6.u32l = MEM_W(ctx->r17, 0XA8);"
+replace = '''ctx->f6.u32l = MEM_W(ctx->r17, 0XA8);
+    if ((ctx->f6.u32l & 0x7FFFFFFFU) > 0x7F800000U) {
+        ctx->f6.u32l = 0x3F800000U;
+        MEM_W(0XA8, ctx->r17) = ctx->f6.u32l;
+    }'''
+
 # Local Time Trial recording and playback have their own input cadence.
 # These hooks are inert outside a prepared solo replay session.
 [[hook]]

@@ -110,8 +110,8 @@ def main():
             r"\[launcher-layout\]\[isolated-check\] step=(\d+) page=(\d+) width=(\d+) height=(\d+) captured", text
         )
         assert code == 0, code
-        assert [int(match[0]) for match in matches] == list(range(5)), matches
-        assert [int(match[1]) for match in matches] == [0, 14, 14, 14, 14], matches
+        assert [int(match[0]) for match in matches] == list(range(7)), matches
+        assert [int(match[1]) for match in matches] == [0] + [14] * 6, matches
         for step, _, width, height in matches:
             data = (profile / f"layout-{step}.bmp").read_bytes()
             assert data[:2] == b"BM" and struct.unpack_from("<I", data, 2)[0] == len(data)
@@ -170,7 +170,18 @@ def main():
         if not args.save:
             button_width = row["button-right"] - row["button-left"]
             assert 0 < button_width < row["available"] * 0.9, result
-            assert abs(row["button-left"] + row["button-right"] - row["bar-left"] - row["bar-right"]) <= 2, result
+            if args.surface == "launcher":
+                assert row["speedrunning-visible"] == 1, result
+                assert row["button-right"] < row["speedrunning-left"], result
+                assert row["top"] == row["speedrunning-top"] and row["bottom"] == row["speedrunning-bottom"], result
+                speedrunning_width = row["speedrunning-right"] - row["speedrunning-left"]
+                assert abs(button_width - speedrunning_width) <= 1, result
+                assert abs(row["button-left"] + row["speedrunning-right"] - row["bar-left"] - row["bar-right"]) <= 2, (
+                    result
+                )
+            else:
+                assert row["speedrunning-visible"] == 0, result
+                assert abs(row["button-left"] + row["button-right"] - row["bar-left"] - row["bar-right"]) <= 2, result
     dimensions = {
         "small": (1024, 600),
         "short": (1280, 720),

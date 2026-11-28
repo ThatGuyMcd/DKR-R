@@ -156,6 +156,7 @@ bool preparing_ghost();
 bool replaying();
 bool uses_uninitialised_adventure_save();
 bool uses_completed_adventure_save();
+bool supports_legacy_scenery_verification();
 void finish_interrupted_recording();
 bool request_restart();
 bool take_restart_request();

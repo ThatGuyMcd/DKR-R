@@ -1,6 +1,7 @@
 #include "../src/game/time_trial/adventure_rules.hpp"
 #include "../src/game/time_trial/adventure_splits.hpp"
 #include "../src/game/time_trial/session.hpp"
+#include "../src/game/time_trial/theatre_audio.hpp"
 #include <cassert>
 
 using namespace dkr::runtime::time_trial;
@@ -33,6 +34,29 @@ static_assert(earned_character_flags(0x0ffff2) == 2);
 static_assert(earned_character_flags(0xfffff2) == 3);
 
 int main() {
+    TheatreAudio audio;
+    const std::array<std::int16_t, 2> first_mix{4, -4};
+    const std::array<std::int16_t, 2> resumed_mix{7, -7};
+    assert(audio.append(1, first_mix));
+    assert(audio.append(120, resumed_mix));
+    std::vector<std::int16_t> playback;
+    assert(audio.read(1, 119, playback) && playback.empty());
+    assert(audio.read(119, 120, playback));
+    assert(std::ranges::equal(playback, resumed_mix));
+    playback.clear();
+    assert(audio.read(0, 1, playback));
+    assert(std::ranges::equal(playback, first_mix));
+    assert(audio.append(121, first_mix));
+    playback.clear();
+    assert(audio.read(119, 121, playback));
+    assert((playback == std::vector<std::int16_t>{7, -7, 4, -4}));
+    audio.clear();
+    playback.clear();
+    assert(audio.read(0, 121, playback) && playback.empty());
+    assert(audio.append(1, resumed_mix));
+    assert(audio.read(0, 1, playback));
+    assert(std::ranges::equal(playback, resumed_mix));
+
     const FinishTargets podium{"Ancient Lake", 140, {100, 120, 160}};
     assert(podium.place(90) == 1 && podium.place(110) == 2 && podium.place(130) == 3);
     assert(podium.place(100) == 0 && podium.place(145) == 0);

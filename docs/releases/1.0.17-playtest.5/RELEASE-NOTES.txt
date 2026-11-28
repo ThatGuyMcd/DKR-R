@@ -1,0 +1,9 @@
+DKR-R v1.0.17 Playtest 5
+
+Updates
+- The Linux updater restarts the replacement AppImage outside the retiring AppImage mount.
+- The AppImage can also use the extraction path when an older updater restarts it.
+- Quiver-managed copies show how to update through Quiver Launcher.
+- Linux download filenames let Quiver replace older AppImages and launch the new build.
+
+This build is for local testing.

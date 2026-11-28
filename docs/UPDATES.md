@@ -1,13 +1,13 @@
 # DKR-R updates
 
-## Updating to v1.0.16
+## Updating to v1.0.17
 
 Use **Check for updates** in Play or About DKR-R. Choose **Download update**,
 then **Install update and restart** after playing. Startup checks can be turned
 off, a version can be skipped, and beta/playtest releases are optional. Stable
 releases are the default. A failed check does not stop offline play.
 
-v1.0.16 has Windows x64, Linux x86_64 and Linux ARM64 update packages. Steam
+v1.0.17 has Windows x64, Linux x86_64 and Linux ARM64 update packages. Steam
 Deck uses the Linux x86_64 package. Android, macOS and iOS are excluded from
 this release. Android releases are no longer supported. Older installations
 on excluded platforms must not be pointed at a different platform's download.
@@ -34,10 +34,19 @@ the launcher. Do not copy just one executable out of the ZIP. For a manual
 upgrade into a new portable folder, copy both portable.txt and your existing
 dkr-runtime-data before launching. Normal profile installations reuse the profile.
 
-Linux and Steam Deck replace the whole AppImage at its existing path. Make it
-executable when installing manually. A read-only folder can keep playing but
-cannot accept an in-place update. Developer/package-manager installs update
-through their existing manual/package route.
+Linux and Steam Deck replace the whole AppImage at its existing path. The
+updater starts the replacement using the AppImage runtime's extract-and-run
+mode. Make a manually installed file executable. A read-only folder can keep
+playing but cannot accept an in-place update.
+
+If you installed DKR-R through Quiver Launcher, open DKR-R in Quiver and
+choose **Update**. Quiver manages the AppImage or ZIP and its installed-version
+record together. DKR-R shows this instruction in **Updates** for managed copies.
+New Linux and Steam Deck asset filenames include the exact release tag
+(for example, `DKR-R-Version1.0.17-Linux-x86_64.AppImage`). Quiver can
+then install the AppImage under a stable filename and retire older builds
+of the same download variant.
+Developer/package-manager installs use their existing manual/package route.
 
 Windows transaction backups are under .dkr-update-backups; AppImage backups
 sit beside the old application. The profile's updates folder holds download
@@ -55,12 +64,12 @@ DKR-R-Updater --recover <that-folder/request.json>
 Recovery checks the signed manifest and the exact recorded backup. It does
 not search other folders or delete user data. Do not remove the only backup.
 Older Android/Apple builds retain their own installer and distribution rules;
-there is no new APK, app bundle or IPA in the v1.0.16 set.
+there is no new APK, app bundle or IPA in the v1.0.17 set.
 
 ## Preparing the release update files
 
 The exact filenames are **DKR-R-update.json** and **DKR-R-update.sig**. Upload
-both beside the final downloads. The stable tag is **Version1.0.16**, and must
+both beside the final downloads. The stable tag is **Version1.0.17**, and must
 match the manifest. The source commit must contain the reviewed first-party source, pinned build inputs and final release metadata.
 
 The manifest records each package's version, size, SHA256, platform and minimum
@@ -93,7 +102,7 @@ replacing already published assets. Publishing makes the update discoverable.
 
 ## Checks before rollout
 
-Run the updater signing/tooling and native updater tests. Check a v1.0.15 notice,
+Run the updater signing/tooling and native updater tests. Check a v1.0.16 notice,
 download, install and restart on actual Windows/Linux installations, including
 portable data and Unicode paths. Keep interrupted-download/install recovery,
 corrupt signatures/packages, locked files, multiple instances, read-only folders

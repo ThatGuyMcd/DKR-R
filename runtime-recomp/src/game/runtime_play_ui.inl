@@ -432,6 +432,66 @@ void DrawPlayPortableSetting(float width, bool entered, bool live) {
 }
 
 void SettingsLabel(std::string_view label, float width);
+void DrawOlProfileAvatar(ImDrawList*, ImVec2, float, std::string_view, const std::string&, bool);
+
+void DrawPlayDiscordAccount(float width, bool locked) {
+    auto& store = dkr::store::service();
+    const auto account = store.view();
+    if (account->user.is_null()) {
+        ImGui::BeginDisabled(locked);
+        if (account->signing_in) {
+            StoreNote(account->status, width);
+            PaddockGap(6.F);
+            const auto cancel = dkr::localisation::label("Cancel sign-in");
+            const auto kind = PaddockButtonKind::Plain;
+            if (PaddockButton(cancel.c_str(), kind, std::min(width, PaddockButtonWidth(cancel.c_str(), kind)), 44.F))
+                store.cancel_login();
+        } else {
+            constexpr float gap = 12.F;
+            const auto login = dkr::localisation::label("Log in with Discord");
+            const auto kind = PaddockButtonKind::Primary;
+            const float button_width = std::min(width, PaddockButtonWidth(login.c_str(), kind));
+            if (PaddockButton(login.c_str(), kind, button_width, 44.F))
+                store.login();
+            const bool paired = width - button_width - gap >= 145.F;
+            if (paired)
+                ImGui::SameLine(0.F, gap);
+            bool remember = account->remember;
+            const std::string stay_logged_in(dkr::localisation::source("Stay logged in"));
+            if (PaddockCheckbox("##play-discord-remember", stay_logged_in.c_str(), &remember,
+                                paired ? width - button_width - gap : width))
+                store.remember(remember);
+        }
+        ImGui::EndDisabled();
+    } else {
+        const auto profile = account->user.find("discordProfile");
+        std::string name = dkr::store::text(account->user, "displayName", 96);
+        std::string avatar;
+        const auto discord_id = dkr::store::text(account->user, "discordId", 22);
+        if (profile != account->user.end()) {
+            const auto discord_name = dkr::store::text(*profile, "displayName", 96);
+            if (!discord_name.empty())
+                name = discord_name;
+            avatar = dkr::store::text(*profile, "avatarUrl", 180);
+        }
+        const float size = std::min(42.F, width * .2F);
+        constexpr float gap = 10.F;
+        DrawOlProfileAvatar(ImGui::GetWindowDrawList(), ImGui::GetCursorScreenPos(), size, name, avatar, false);
+        ImGui::Dummy({size, size});
+        ImGui::SameLine(0.F, gap);
+        ImGui::BeginGroup();
+        const float text_width = std::max(1.F, width - size - gap);
+        PaddockText(PaddockReading(16.F, true, 1.25F), PaddockRgb(0xFFF4D3),
+                    name.empty() ? dkr::localisation::source("Signed in with Discord") : name, text_width);
+        if (!discord_id.empty())
+            StoreNote("Discord ID " + discord_id, text_width);
+        ImGui::EndGroup();
+    }
+    if (!account->sign_in_error.empty()) {
+        PaddockGap(4.F);
+        PaddockText(PaddockReading(13.F, false, 1.45F), PaddockRgb(0xFFAA97), account->sign_in_error, width);
+    }
+}
 
 void DrawPlayLaunchOptions(float width, bool entered, bool live) {
     constexpr float gap = 14.F;
@@ -700,6 +760,8 @@ void DrawPlayPage(float available_width, const PlayPageContext& play, bool live 
         ImGui::SetCursorScreenPos({content_left, y + actions_height + 14.F});
         ImGui::BeginGroup();
         DrawPlaySaveSummary(content_inner, live, launch_modal);
+        if (!live)
+            DrawGraphicsCompatibility(content_inner);
         ImGui::EndGroup();
         const float resume_bottom = ImGui::GetItemRectMax().y;
 
@@ -707,6 +769,10 @@ void DrawPlayPage(float available_width, const PlayPageContext& play, bool live 
         const float options_y = side ? at.y + panel_padding : resume_bottom + 6.F;
         ImGui::SetCursorScreenPos({options_x, options_y});
         ImGui::BeginGroup();
+        if (!live) {
+            DrawPlayDiscordAccount(options_width, lobby || launch_modal);
+            PaddockGap(12.F);
+        }
         DrawPlayLaunchOptions(options_width, entered, live);
         ImGui::EndGroup();
         const float tools_y = std::max(resume_bottom, ImGui::GetItemRectMax().y) + 8.F;
@@ -807,6 +873,17 @@ void DrawPlayPage(float available_width, const PlayPageContext& play, bool live 
     {
         const bool can_start =
             live || (play.rom_ready && !imports_busy && !launch_modal && !g_play_offline_after_leave);
+        const float row_width = PlayLaunchRowWidth(width);
+        const float button_width = live ? row_width : std::max(1.F, (row_width - kPlayLaunchActionGap) * .5F);
+        const auto fit = [&](const char* label, RaceButtonLook look) {
+            const float natural = PaddockRaceButtonWidth(label, look.font_px) - 34.F;
+            look.font_px *= std::clamp((button_width - 34.F) / std::max(1.F, natural), .45F, 1.F);
+            return look;
+        };
+        constexpr const char* speedrunning_label = "Speedrunning & Leaderboards###play-speedrunning";
+        const char* start_label = live    ? "RETURN TO THE RACE"
+                                  : lobby ? "LEAVE LOBBY & PLAY OFFLINE"
+                                          : "Start Casual Gameplay###play-casual";
         RaceButtonLook look;
         look.font_px = 21.F;
         look.hover_in = 0.12F;
@@ -831,10 +908,7 @@ void DrawPlayPage(float available_width, const PlayPageContext& play, bool live 
         }
         ImGui::PushStyleVar(ImGuiStyleVar_DisabledAlpha, 1.0F);
         ImGui::BeginDisabled(!can_start);
-        if (PaddockRaceButton(live    ? "RETURN TO THE RACE"
-                              : lobby ? "LEAVE LOBBY & PLAY OFFLINE"
-                                      : dkr::localisation::text("play.start_game").data(),
-                              {PlayLaunchButtonWidth(width), kPlayStartHeight}, look)) {
+        if (PaddockRaceButton(start_label, {button_width, kPlayStartHeight}, fit(start_label, look))) {
             if (live)
                 g_overlay_visible.store(false, std::memory_order_release);
             else if (lobby)
@@ -844,6 +918,23 @@ void DrawPlayPage(float available_width, const PlayPageContext& play, bool live 
         }
         ImGui::EndDisabled();
         PlayLaunchButtonCheck(can_start);
+        if (!live) {
+            ImGui::SameLine(0.F, kPlayLaunchActionGap);
+            RaceButtonLook speedrunning = look;
+            speedrunning.fill = 0xB74712;
+            speedrunning.border = 0xFFCE72;
+            speedrunning.border_alpha = 255U;
+            speedrunning.text = 0xFFF6DA;
+            speedrunning.ring_alpha = 0U;
+            speedrunning.drop = 4.F;
+            speedrunning.drop_colour = 0x6F2E12;
+            speedrunning.highlight_alpha = 51U;
+            speedrunning.sink = true;
+            if (PaddockRaceButton(speedrunning_label, {button_width, kPlayStartHeight},
+                                  fit(speedrunning_label, speedrunning)))
+                g_page_navigation_request = dkr::library_ui::LeaderboardsPage;
+            PlaySpeedrunningButtonCheck();
+        }
         ImGui::PopStyleVar();
     }
     if (BeginSettingsDialog("Leave lobby and play offline?", "LEAVE LOBBY & PLAY OFFLINE?", 620.0F, 0x06336E)) {

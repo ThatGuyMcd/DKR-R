@@ -72,8 +72,8 @@
       "reason": "online identity changed to cfc1d8e0d92c"
     },
     "runtime-recomp/guest-hooks/hooks.toml": {
-      "sha256": "b0fe0d2efb0dac427a22bbd17ce7c0ec036831592d7bde6f18da36b1f1758dde",
-      "reason": "online identity changed to cfc1d8e0d92c"
+      "sha256": "5e14f836d896c7b4aa1bb00322bcc36cd6850f2bd11be6773eead642541816f6",
+      "reason": "Checkpoint hooks intervene only when guest arithmetic yields NaN or a restored checkpoint already contains NaN at the original assertion. Successful checkpoint calculations, lobby protocol and rollback wire format retain their released behavior."
     },
     "runtime-recomp/legacy-character-menu.v77.recomp-fragment.json": {
       "sha256": "82db39e16f1e30eff1851d74eaf443cd962a2b65517d95f531f4cc0924357ce0",

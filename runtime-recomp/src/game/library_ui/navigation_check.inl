@@ -161,7 +161,7 @@ void LauncherLayoutCheckCapture(SDL_Renderer* renderer, int current_page) {
     ++g_launcher_layout_step;
     g_launcher_layout_at = PaddockClock();
     if ((PlayLaunchLayoutCheck() && g_launcher_layout_step == 6) ||
-        (g_leaderboard_layout_check && g_launcher_layout_step == 5)) {
+        (g_leaderboard_layout_check && g_launcher_layout_step == 7)) {
         SDL_Event quit{};
         quit.type = SDL_QUIT;
         SDL_PushEvent(&quit);

@@ -43,7 +43,7 @@ void PinnedContentScrollCase(bool live, dkr::library_ui::SidebarInput mode) {
     LibraryInstallNavigationHook(live);
     ImGuiWindow* content = nullptr;
     ImGuiWindow* body = nullptr;
-    ImGuiID start = 0;
+    ImGuiID start = 0, speedrunning = 0;
     const auto frame = [&](bool initial = false, bool pinned = true) {
         ImGui::NewFrame();
         ImGui::SetNextWindowPos({0, 0});
@@ -65,9 +65,15 @@ void PinnedContentScrollCase(bool live, dkr::library_ui::SidebarInput mode) {
             ImGui::EndChild();
             if (initial)
                 ImGui::SetKeyboardFocusHere();
-            ImGui::Button("Start Game", {420, 48});
+            ImGui::Button("Start Casual Gameplay", {live ? 420.F : 200.F, 48});
             start = ImGui::GetItemID();
             LibraryNavigationPinnedAction(start);
+            if (!live) {
+                ImGui::SameLine();
+                ImGui::Button("Speedrunning & Leaderboards", {200, 48});
+                speedrunning = ImGui::GetItemID();
+                LibraryNavigationPinnedAction(speedrunning, true);
+            }
         }
         ImGui::EndGroup();
         ImGui::EndChild();
@@ -96,6 +102,22 @@ void PinnedContentScrollCase(bool live, dkr::library_ui::SidebarInput mode) {
     record_navigation_axis(3, 0);
     frame();
     frame();
+    if (!live) {
+        record_navigation_axis(0, .9F);
+        frame();
+        frame();
+        assert(GImGui->NavId == speedrunning);
+        record_navigation_axis(0, 0);
+        frame();
+        frame();
+        record_navigation_axis(1, -.9F);
+        frame();
+        frame();
+        assert(GImGui->NavId != speedrunning && GImGui->NavWindow == body);
+        record_navigation_axis(1, 0);
+        frame();
+        frame();
+    }
     // Opening another page must discard the inner target and scroll that page.
     frame(false, false);
     frame(false, false);

@@ -106,6 +106,7 @@ std::filesystem::path cache(const Configuration& c) {
 Service::Service(Configuration c, Transport t) : config(std::move(c)), transport(std::move(t)) {
     Version::parse(config.version);
     unhex(config.key, 32);
+    view.quiver_managed = quiver_managed_install(config.application);
     std::filesystem::create_directories(cache(config));
     require_private_tree(cache(config));
     try {
@@ -207,7 +208,8 @@ void Service::startup() {
         check();
 }
 void Service::check() {
-    if (snapshot().busy)
+    const auto state = snapshot();
+    if (state.busy || state.quiver_managed)
         return;
     if (now() < retry_after) {
         publish(State::Failed, "Update checks are cooling down after GitHub rate limiting. Try later.");
@@ -365,6 +367,8 @@ void Service::discover(std::stop_token stop) {
         publish(State::Current, "You are running the latest available release for this platform/channel.");
 }
 void Service::download() {
+    if (snapshot().quiver_managed)
+        return;
     run([this](std::stop_token stop) {
         if (!release)
             throw std::runtime_error("Check for a signed update first.");
@@ -448,6 +452,10 @@ void Service::skip() {
 }
 bool Service::install(std::string& error) {
     auto s = snapshot();
+    if (s.quiver_managed) {
+        error = kQuiverUpdateMessage;
+        return false;
+    }
     if (s.state != State::Ready || s.busy || !release) {
         error = "Download and verify the update first.";
         return false;

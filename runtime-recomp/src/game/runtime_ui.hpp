@@ -73,6 +73,7 @@ bool overlay_visible();
 LifecycleRequest lifecycle_request();
 void reset_lifecycle_request();
 void report_mod_error(std::string error);
+void report_graphics_launch_error(std::string error);
 // Main/event thread only, after both experimental game workers have joined.
 void report_online_game_end(std::string message, bool lobby_retained);
 #if defined(DKR_EXPERIMENTAL_RACE_TEST)

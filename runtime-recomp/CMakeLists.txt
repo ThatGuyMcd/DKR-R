@@ -1314,6 +1314,7 @@ if(DKR_RUNTIME_BUILD_GENERATED OR DKR_RUNTIME_BUILD_RT64)
             src/game/generated/racing_banana_font.c
             src/game/generated/selawik_font.c
             src/game/rt64_renderer.cpp
+            src/game/graphics_launch.cpp
             src/game/runtime_crt_overlay.cpp
             src/game/runtime_rice_texture_import.cpp
             src/game/runtime_texture_packs.cpp
@@ -1934,8 +1935,15 @@ if(DKR_RUNTIME_BUILD_GENERATED)
     target_link_libraries(DKRPortGameCore PRIVATE DKRCameraPresentation)
     if(WIN32)
         target_link_libraries(DKRPortGameCore PRIVATE winhttp crypt32 bcrypt)
-    elseif(NOT ANDROID AND NOT IOS)
-        # macOS uses the system libcurl; Android and iOS have no store backend.
+    elseif(ANDROID)
+        target_sources(DKRPortGameCore PRIVATE src/android/android_store_http.cpp)
+        target_compile_definitions(DKRPortGameCore PRIVATE DKR_MOBILE_STORE_HTTP)
+    elseif(IOS)
+        target_sources(DKRPortGameCore PRIVATE src/ios/apple_store_http.mm)
+        target_compile_definitions(DKRPortGameCore PRIVATE DKR_MOBILE_STORE_HTTP)
+        set_source_files_properties(src/ios/apple_store_http.mm PROPERTIES COMPILE_OPTIONS "-fobjc-arc")
+        target_link_libraries(DKRPortGameCore PRIVATE "-framework Foundation")
+    else()
         find_package(CURL REQUIRED)
         target_link_libraries(DKRPortGameCore PRIVATE CURL::libcurl)
     endif()

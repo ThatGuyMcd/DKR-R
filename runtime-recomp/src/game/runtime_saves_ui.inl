@@ -473,7 +473,7 @@ void DrawSavesDraftBar(const SavesPageState& state, float width, float top, cons
     ImGui::SameLine(0.0F, 12.0F);
     if (SavesRaceButton("APPLY CHANGES", layout.apply_width, SavesTone::Primary, locked || !dirty))
         ask = SavesPageState::Ask::Apply;
-    LibraryNavigationPinnedAction(!locked && dirty ? ImGui::GetItemID() : 0);
+    LibraryNavigationPinnedAction(!locked && dirty ? ImGui::GetItemID() : 0, false);
 }
 
 // File tools shared by both Adventure saves.

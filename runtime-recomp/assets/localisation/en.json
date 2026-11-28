@@ -4,8 +4,12 @@
   "review": "Source English",
   "messages": {
     "play.start_game": {
-      "text": "START GAME",
+      "text": "Start Casual Gameplay",
       "context": "Pinned Play action, initially selected when a ROM is ready. Starts the normal offline launch flow."
+    },
+    "play.speedrunning_leaderboards": {
+      "text": "Speedrunning & Leaderboards",
+      "context": "Pinned Play action. Opens the Speedrunning page without starting the game."
     },
     "play.skip_launcher": {
       "text": "Skip launcher",

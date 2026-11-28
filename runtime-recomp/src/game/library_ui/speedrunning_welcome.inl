@@ -1,4 +1,4 @@
-void DrawSpeedrunningWelcome(bool entered, bool signed_in, bool staff, const dkr::store::Json* catalogue) {
+bool DrawSpeedrunningWelcome(bool entered, bool signed_in, bool staff, const dkr::store::Json* catalogue) {
     constexpr const char* popup = "Welcome to Speedrunning!";
     static std::filesystem::path acknowledged;
     const auto marker = g_config_directory / "speedrunning-welcome-seen";
@@ -6,14 +6,14 @@ void DrawSpeedrunningWelcome(bool entered, bool signed_in, bool staff, const dkr
     if (entered && acknowledged != marker && !std::filesystem::is_regular_file(marker, ec))
         ImGui::OpenPopup(popup);
     if (!ImGui::IsPopupOpen(popup))
-        return;
+        return false;
 
     const auto viewport = ImGui::GetMainViewport()->WorkSize;
     const float modal_width = std::min(790.F, viewport.x - 38.F);
     ImGui::SetNextWindowSize({modal_width, 0.F}, ImGuiCond_Always);
     constexpr ImGuiWindowFlags flags = ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_AlwaysAutoResize;
     if (!BeginPaddedModal(popup, flags))
-        return;
+        return false;
 
     const float width = ImGui::GetContentRegionAvail().x;
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, {10.F, 5.F});
@@ -72,14 +72,24 @@ void DrawSpeedrunningWelcome(bool entered, bool signed_in, bool staff, const dkr
     ImGui::PopStyleVar();
 
     PaddockGap(10.F);
-    const bool dismiss = OlButton("Got it", OlTone::Go) || ImGui::IsKeyPressed(ImGuiKey_Escape, false) ||
+    constexpr float gap = 8.F;
+    const float tour_width = OlButtonWidth("Start guided tour", OlTone::Go);
+    const float skip_width = OlButtonWidth("Skip for now");
+    const bool start = OlButton("Start guided tour", OlTone::Go, std::min(width, tour_width));
+    const bool inline_skip = tour_width + gap + skip_width <= width;
+    if (inline_skip)
+        ImGui::SameLine(0.F, gap);
+    const bool dismiss = OlButton("Skip for now", OlTone::Plain, std::min(width, skip_width)) ||
+                         ImGui::IsKeyPressed(ImGuiKey_Escape, false) ||
                          ImGui::IsKeyPressed(ImGuiKey_GamepadFaceRight, false);
     bool login = false;
     if (!signed_in) {
-        ImGui::SameLine();
-        login = OlButton("Sign in with Discord");
+        const float login_width = OlButtonWidth("Sign in with Discord");
+        if (skip_width + gap + login_width + (inline_skip ? tour_width + gap : 0.F) <= width)
+            ImGui::SameLine(0.F, gap);
+        login = OlButton("Sign in with Discord", OlTone::Plain, std::min(width, login_width));
     }
-    if (dismiss || login) {
+    if (start || dismiss || login) {
         acknowledged = marker;
         try {
             dkr::updates::durable_write(marker, "seen\n");
@@ -91,4 +101,5 @@ void DrawSpeedrunningWelcome(bool entered, bool signed_in, bool staff, const dkr
         ImGui::CloseCurrentPopup();
     }
     ImGui::EndPopup();
+    return start;
 }

@@ -31,7 +31,7 @@ from typing import Any
 import zipfile
 
 sys.dont_write_bytecode = True
-from release_common import ROOT, WATER_LICENSE, contracts, release_docs, sha, version  # noqa: E402
+from release_common import ROOT, WATER_LICENSE, contracts, linux_appimage, release_docs, sha, version  # noqa: E402
 
 DENIED = frozenset(
     (
@@ -275,7 +275,9 @@ def linux(a: argparse.Namespace) -> Package:
     # The isolated Linux picker carries libstdc++/libgcc, with their exception.
     copy(Path("/usr/share/doc/libstdc++6/copyright"), docs / "licenses/GCC-RUNTIME-COPYRIGHT.txt")
     copy(Path("/usr/share/common-licenses/GPL-3"), docs / "licenses/GCC-GPL-3.txt")
-    for name in ("AppRun", "dkr-r.png", ".DirIcon"):
+    copy(ROOT / "packaging/linux/AppRun", root / "AppRun")
+    (root / "AppRun").chmod(0o755)
+    for name in ("dkr-r.png", ".DirIcon"):
         path = a.template / name
         if path.is_symlink():
             (root / name).symlink_to(path.readlink())
@@ -316,7 +318,7 @@ def linux(a: argparse.Namespace) -> Package:
     squash = a.output / (root.stem + ".squashfs")
     options = ["-noappend", "-comp", "zstd", "-processors", "3", "-no-progress", "-root-owned"]
     run(["mksquashfs", str(root), str(squash), *options])
-    artifact = a.output / f"DKR-R-{v}-Linux-{a.arch}.AppImage"
+    artifact = a.output / linux_appimage(a.arch, v)
     with artifact.open("xb") as out, squash.open("rb") as payload:
         out.write(original[: offsets[0]])
         shutil.copyfileobj(payload, out)

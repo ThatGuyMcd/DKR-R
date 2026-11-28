@@ -1,7 +1,8 @@
-// The header and launch action stay outside the scrolling Play content on
+// The header and launch bar stay outside the scrolling Play content on
 // both UI surfaces. Heights are in the same logical pixels as other controls.
 #include "panel_footer.hpp"
 constexpr float kPlayStartHeight = 48.F;
+constexpr float kPlayLaunchActionGap = 12.F;
 
 // Available only with the existing token-authenticated disposable UI profile.
 extern std::filesystem::path g_launcher_layout_root;
@@ -21,6 +22,8 @@ bool ModdedSaveDraftLayoutCheck() {
 }
 struct PlayLaunchGeometry {
     ImVec2 button_min{}, button_max{}, clip_min{}, clip_max{};
+    ImRect speedrunning{0.F, 0.F, 0.F, 0.F};
+    bool speedrunning_focused = false;
     ImVec2 footer_min{}, footer_max{};
     ImVec2 panel_min{}, panel_max{};
     float available_width = 0.F;
@@ -42,9 +45,9 @@ void PlayLaunchBodyCheck() {
     geometry.body_right = ImGui::GetWindowPos().x + ImGui::GetWindowSize().x;
 }
 void LibraryNavigationScrollWindow(ImGuiWindow*);
-void LibraryNavigationPinnedAction(ImGuiID);
+void LibraryNavigationPinnedAction(ImGuiID, bool);
 void PlayLaunchButtonCheck(bool enabled) {
-    LibraryNavigationPinnedAction(enabled ? ImGui::GetItemID() : 0);
+    LibraryNavigationPinnedAction(enabled ? ImGui::GetItemID() : 0, false);
     if (!PlayLaunchLayoutCheck())
         return;
     auto& geometry = g_play_launch_geometry;
@@ -63,22 +66,35 @@ void PlayLaunchButtonCheck(bool enabled) {
     for (auto* item = ImGui::GetCurrentContext()->NavWindow; item; item = item->ParentWindow)
         geometry.main_focused |= item == window;
 }
+void PlaySpeedrunningButtonCheck() {
+    LibraryNavigationPinnedAction(ImGui::GetItemID(), true);
+    if (!PlayLaunchLayoutCheck())
+        return;
+    g_play_launch_geometry.speedrunning = {ImGui::GetItemRectMin(), ImGui::GetItemRectMax()};
+    g_play_launch_geometry.speedrunning_focused = ImGui::IsItemFocused();
+}
 void PlayLaunchCaptureCheck() {
     if (!PlayLaunchLayoutCheck())
         return;
     const auto& g = g_play_launch_geometry;
     const bool visible = g.button_min.x >= g.clip_min.x && g.button_min.y >= g.clip_min.y &&
                          g.button_max.x <= g.clip_max.x && g.button_max.y <= g.clip_max.y;
+    const bool speedrunning_visible =
+        g.speedrunning.GetWidth() > 0.F && ImRect(g.clip_min, g.clip_max).Contains(g.speedrunning);
     std::fprintf(
         stderr,
         "[play-launch][isolated-check] step=%d visible=%d focused=%d enabled=%d "
         "height=%.1f top=%.1f bottom=%.1f body-scroll=%.1f body-max=%.1f parent-scroll=%.1f "
         "button-left=%.1f button-right=%.1f bar-left=%.1f bar-right=%.1f bar-top=%.1f bar-bottom=%.1f available=%.1f "
-        "panel-left=%.1f panel-right=%.1f panel-bottom=%.1f body-focused=%d body-scrollbar=%d body-right=%.1f nav-main=%d\n",
+        "panel-left=%.1f panel-right=%.1f panel-bottom=%.1f body-focused=%d body-scrollbar=%d body-right=%.1f nav-main=%d "
+        "speedrunning-visible=%d speedrunning-focused=%d speedrunning-left=%.1f speedrunning-right=%.1f "
+        "speedrunning-top=%.1f speedrunning-bottom=%.1f\n",
         g_launcher_layout_step, int(visible), int(g.focused), int(g.enabled), g.button_max.y - g.button_min.y,
         g.button_min.y, g.button_max.y, g.body_scroll, g.body_max, g.parent_scroll, g.button_min.x, g.button_max.x,
         g.footer_min.x, g.footer_max.x, g.footer_min.y, g.footer_max.y, g.available_width, g.panel_min.x, g.panel_max.x,
-        g.panel_max.y, int(g.body_focused), int(g.body_scrollbar), g.body_right, int(g.main_focused));
+        g.panel_max.y, int(g.body_focused), int(g.body_scrollbar), g.body_right, int(g.main_focused),
+        int(speedrunning_visible), int(g.speedrunning_focused), g.speedrunning.Min.x, g.speedrunning.Max.x,
+        g.speedrunning.Min.y, g.speedrunning.Max.y);
 }
 
 struct SaveDraftGeometry {
@@ -101,7 +117,7 @@ void SaveDraftCaptureCheck() {
                  g.editor_body.Max.x, g.selected_slot, int(g.modded));
 }
 
-float PlayLaunchButtonWidth(float width) {
+float PlayLaunchRowWidth(float width) {
     return std::max(1.F, std::min(width * .85F, 1280.F));
 }
 
@@ -133,6 +149,8 @@ void DrawPlayLaunchSummary(float width, const std::string& summary) {
     // corners. The normal text/item clip would leave a strip down each side.
     DrawPanelFooterBackground(window, at.y, PaddockCol(0x092534), PaddockCol(0x325365));
     if (PlayLaunchLayoutCheck()) {
+        g_play_launch_geometry.speedrunning = {0.F, 0.F, 0.F, 0.F};
+        g_play_launch_geometry.speedrunning_focused = false;
         g_play_launch_geometry.footer_min = footer_min;
         g_play_launch_geometry.footer_max = footer_max;
         g_play_launch_geometry.available_width = width;
@@ -141,5 +159,5 @@ void DrawPlayLaunchSummary(float width, const std::string& summary) {
     PaddockText(PaddockReading(13.F, false, 1.4F), PaddockRgb(0xB0C9CC), summary, width - 8.F);
     PaddockGap(8.F);
     ImGui::SetCursorScreenPos(
-        {std::floor((panel.Min.x + panel.Max.x - PlayLaunchButtonWidth(width)) * .5F), ImGui::GetCursorScreenPos().y});
+        {std::floor((panel.Min.x + panel.Max.x - PlayLaunchRowWidth(width)) * .5F), ImGui::GetCursorScreenPos().y});
 }

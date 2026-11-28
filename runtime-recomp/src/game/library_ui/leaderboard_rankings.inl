@@ -486,22 +486,17 @@ std::optional<TrackQuery> DrawOverallPlayerPanel(float width, const dkr::store::
     return next;
 }
 
+void DrawOverallPointsExplanation(float width) {
+    OlParagraph("Verified finishes earn points for placement (70%) and pace against the record (30%). "
+                "Solo boards count for 35%. Board weight grows to 100% at eight competitors.",
+                15.F, kOlSoft, width);
+    OlParagraph("Vanilla Tracks 500  |  Custom Tracks 250  |  Full Game 250", 16.F, kOlAmber, width, true);
+    OlParagraph("Track scores use 75% full race and 25% best lap. Your best 10 custom tracks earn up to "
+                "200 points, and the next 20 earn up to 50. Adding a track keeps your existing points.",
+                15.F, kOlSoft, width);
+}
+
 std::optional<TrackQuery> DrawOverallRankings(float width) {
-    static bool show_points = false;
-    if (OlButton(show_points ? "Hide points explanation" : "How points work"))
-        show_points = !show_points;
-    StoreControlFocus();
-    if (show_points) {
-        DrawOlFeature(width, "How points work", nullptr, [&](float inner) {
-            OlParagraph("Verified finishes earn points for placement (70%) and pace against the record (30%). "
-                        "Solo boards count for 35%. Board weight grows to 100% at eight competitors.",
-                        15.F, kOlSoft, inner);
-            OlParagraph("Vanilla Tracks 500  |  Custom Tracks 250  |  Full Game 250", 16.F, kOlAmber, inner, true);
-            OlParagraph("Track scores use 75% full race and 25% best lap. Your best 10 custom tracks earn up to "
-                        "200 points, and the next 20 earn up to 50. Adding a track keeps your existing points.",
-                        15.F, kOlSoft, inner);
-        });
-    }
     const auto players = g_overall_standings.find("players");
     if (players == g_overall_standings.end() || !players->is_array() || players->empty()) {
         OlParagraph(DialogJobRunning()                     ? "Loading top players..."

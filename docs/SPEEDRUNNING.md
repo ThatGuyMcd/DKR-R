@@ -1,8 +1,10 @@
 # Speedrunning in DKR-R
 
-Open **Play > Speedrunning**. **Top Players** shows overall points, published
-personal bests and world records. Open a player to see their results or select
-**How points work**. **Vanilla Tracks**, **Custom Tracks** and **Full Game**
+Choose **Speedrunning & Leaderboards** from the Play bar. **Top Players**
+shows overall points, published personal bests and world records.
+**Getting Started** explains the tabs, posting and points. Start the guided
+tour here or from the first-visit welcome. Sign in with Discord to see your
+profile, overall placing and personal stats. **Vanilla Tracks**, **Custom Tracks** and **Full Game**
 open the boards. Under **View Times**, the record history shows each holder,
 their time and how long the record stood.
 
@@ -34,21 +36,24 @@ excludes wrong warps.
 
 Practise installed custom courses from Runs. Posting requires the exact
 released course and an eligible board for that vehicle. Intake also depends
-on the category, verifier and platform. Ranked submissions currently require
-an eligible x86_64 client.
+on the category, verifier and platform. Compatible macOS, iOS, Android and Linux ARM64 ports can submit alongside
+Windows and Linux x86-64.
 
 ## Replays, ghosts and moderation
 
-Watch replays in-engine. Use the timeline, frame-step buttons, speed control
-and optional controller display. **Runs > Options** changes the overlays and
+Watch single-track and Full Game replays in-engine. Playback starts after a
+short buffer. Pause, change speed, step frame by frame or seek on the timeline.
+Seeking ahead prepares the target on demand. Full Game replays show route
+splits, and both replay types offer a controller input display. **Runs > Options** changes the overlays and
 replay retention. **Race Ghost** records a new attempt with the ghost's racer.
 Prepared ghosts can be raced after download. Watching keeps the recorded racer.
 
 Moderators and admins review verified runs. Launcher reviewers can watch the
 in-engine replay while the hosted video renders. Website review needs a playable
 video when hosted video review is enabled. The leaderboard host renders the
-video. Players can close DKR-R after upload. The website bell shows submission
+video. Players can close DKR-R after upload. Website reviewers can see queue and render progress, with an ETA when enough
+data is available. Download published videos as MP4. The website bell shows submission
 status changes and unread review items.
 
 See the [launcher guide](LAUNCHER.md) and
-[release notes](releases/1.0.16/RELEASE-NOTES.txt).
+[release notes](releases/1.0.17/RELEASE-NOTES.txt).

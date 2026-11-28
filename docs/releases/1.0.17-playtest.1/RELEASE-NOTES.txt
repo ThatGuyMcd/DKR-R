@@ -1,0 +1,11 @@
+DKR-R v1.0.17 Playtest 1
+
+Online races
+- Recover from invalid checkpoint progress before it reaches the racer AI assertion observed in v1.0.16.
+
+Graphics startup
+- The Play tab checks the selected graphics backend on the current machine.
+- If the check or graphics startup fails, the Launcher shows diagnostics and offers Graphics Settings and Retry Check.
+- On Windows, the error dialog can check the other graphics backend for one launch.
+
+This build is for local testing.

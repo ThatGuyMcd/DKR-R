@@ -93,6 +93,22 @@ class AppRunWaylandFallbackTests(unittest.TestCase):
         self.env["LD_LIBRARY_PATH"] = "/opt/user"
         self.assertIn(f"LD=/opt/user:{self.fallback} ", self.run_apprun())
 
+    def test_old_helper_restarts_mounted_appimage_through_extraction(self):
+        mount = self.appdir.rename(self.root / ".mount_fixture")
+        image = self.root / "DKR-R update.AppImage"
+        image.write_text('#!/bin/sh\nprintf "%s\\n" "$@"\n')
+        image.chmod(0o755)
+        self.env.update(APPDIR=str(mount), APPIMAGE=str(image), DKR_UPDATE_TOKEN="a" * 32)
+        result = subprocess.run(
+            [str(mount / "AppRun"), "--config", "save folder"], env=self.env, capture_output=True, text=True
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.splitlines(), ["--appimage-extract-and-run", "--config", "save folder"])
+
+    def test_extracted_child_does_not_restart_again(self):
+        self.env.update(APPDIR=str(self.appdir), APPIMAGE="/unused.AppImage", DKR_UPDATE_TOKEN="a" * 32)
+        self.assert_exposed(True)
+
     def test_without_fallback_directory_nothing_changes(self):
         (self.fallback / LIBRARY).unlink()
         self.fallback.rmdir()

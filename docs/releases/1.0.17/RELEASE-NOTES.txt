@@ -1,0 +1,27 @@
+DKR-R v1.0.17
+
+Launcher and Speedrunning
+- Start Casual Gameplay and Speedrunning & Leaderboards are side by side at the bottom of Play. Sign in with Discord there, choose Stay logged in and see your profile picture, name and Discord ID.
+- Getting Started on Top Players explains the tabs and scoring. Start the guided tour from the welcome or the guide. Signed-in players see their overall placing and stats.
+- Eligible Last Run entries show the Personal Best badge and Post to Leaderboard on return to the Launcher.
+- Full Game replays have Replay Theatre controls, route split markers and a controller input viewer. Both replay types start after a short buffer. Pause, change speed, step through frames and seek. Seeking ahead prepares the requested section on demand.
+- Older All Trophy Races recordings can verify with the expected scenery rules. Compatible macOS, iOS, Android and Linux ARM64 builds can submit for the same verification and review as Windows and Linux x86-64.
+
+Online, graphics and updates
+- Recover safely from invalid racer checkpoint progress during online races.
+- Play checks graphics compatibility. If startup fails, the Launcher stays open and explains the failure. Open Graphics Settings or retry the check. Windows can offer a one-launch check of the other graphics backend.
+- Fix Direct3D seams on unscaled 2D sprites.
+- Linux restarts the replacement AppImage after a built-in update. Managed copies show the Quiver update route. The Linux asset names carry the exact release tag so Quiver can replace older copies.
+
+DKR-R website and moderation
+- The community homepage brings together Community Spotlight, News & Updates, Latest Mods, Latest Runs, Top 3 Players, My Account and online player count. Spotlight shows up to six scrolling indicators for all featured mods.
+- News supports searchable articles, category filters, rich text, images, videos and file attachments. Moderators manage articles and media from the website.
+- The fixed mobile header has a navigation drawer. The cloud background stays fixed to the viewport and scrolls horizontally. The Mod Library opens with eight mods, and category tiles fill the mobile rows.
+- My Account shows leaderboard stats and recent submissions. Keep your Discord picture or choose a custom one. The website offers Stay signed in and notification preferences.
+- Browser push notifications are optional. Choose which events to receive, including review updates and when someone beats your leaderboard time.
+- Published runs have an MP4 download. Review Runs shows video queue or render progress and an ETA when sufficient render data is available. The online player count has a mobile-compatible fallback.
+
+Build and distribution
+- Download Windows x64, Linux x86-64 or Linux ARM64. The Steam Deck download uses the Linux x86-64 build. Submission support for other ports is source support in this release.
+- Extract the full Windows ZIP or make the AppImage executable. Keep your profile and supply your own US v1.0 or US Rev A/v1.1 ROM. Some legacy mods need v1.0 to install.
+- Tooling discovers more test cases and covers more renderer and replay code in static analysis.

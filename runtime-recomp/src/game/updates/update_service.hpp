@@ -7,6 +7,8 @@
 
 namespace dkr::updates {
 enum class State { Idle, Checking, Current, Available, Downloading, Ready, Preparing, Failed };
+inline constexpr const char* kQuiverUpdateMessage =
+    "This copy is managed by Quiver Launcher. Open DKR-R in Quiver and choose Update.";
 struct Preferences {
     bool automatic = true, beta = false;
     std::string skipped;
@@ -16,7 +18,7 @@ struct Snapshot {
     Preferences preferences;
     std::string message = "Not checked yet.", version, notes, last_check, installation_result;
     std::uint64_t received{}, total{};
-    bool manual_only = false, busy = false;
+    bool manual_only = false, busy = false, quiver_managed = false;
 };
 struct Configuration {
     std::filesystem::path data, application, helper;

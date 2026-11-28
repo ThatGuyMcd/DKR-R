@@ -38,8 +38,9 @@
 #include <wincrypt.h>
 #include <winhttp.h>
 #else
-// Android links no HTTPS backend (the CURL link in CMakeLists.txt).
-#if !defined(__ANDROID__)
+#if defined(DKR_MOBILE_STORE_HTTP)
+#include "mod_store/mobile_http.hpp"
+#else
 #include <curl/curl.h>
 #endif
 #include <fcntl.h>
@@ -359,9 +360,67 @@ Response http_once(const Request& r, std::stop_token stop, const Sink& sink) {
     }
     return response;
 }
-#elif defined(__ANDROID__)
-Response http_once(const Request&, std::stop_token, const Sink&) {
-    throw Error("The Mod Store isn't available in this build.");
+#elif defined(DKR_MOBILE_STORE_HTTP)
+Response http_once(const Request& r, std::stop_token stop, const Sink& sink) {
+    const bool api = prefix(r.url, Api);
+    if (!trusted_url(r.url, api))
+        throw Error("Unapproved library address.");
+
+    HttpHeaders headers{{"User-Agent", "DKR-R-ModStore/1"}, {"Accept-Encoding", "identity"}};
+    if (api) {
+        headers.emplace_back("Origin", Site);
+        if (!r.online_instance.empty())
+            headers.emplace_back("X-DKRR-Instance", r.online_instance);
+        if (r.token.size() == 43 && identifier(r.token))
+            headers.emplace_back("Authorization", "Bearer " + r.token);
+    } else {
+        if (!r.token.empty())
+            throw Error("Credentials cannot be sent to a file host.");
+        headers.emplace_back("Referer", "https://positron-portal.com/dkr-r/index.html");
+    }
+    if (r.method == "POST" || r.method == "PUT")
+        headers.emplace_back("Content-Type", r.type);
+    if (r.offset) {
+        headers.emplace_back("Range", "bytes=" + std::to_string(r.offset) + "-");
+        if (!r.etag.empty() && r.etag.find_first_of("\r\n") == r.etag.npos)
+            headers.emplace_back("If-Range", r.etag);
+    }
+
+    Response out;
+    out.url = r.url;
+    std::uint64_t received = 0;
+    MobileHttpReceiver receiver{
+        [&](unsigned status) { out.status = status; },
+        [&](std::string_view name, std::string_view value) {
+            const auto field = lower(std::string(name));
+            if (field == "content-type")
+                out.type = lower(std::string(value));
+            else if (field == "etag")
+                out.etag = value;
+            else if (field == "content-range")
+                out.range = value;
+            else if (field == "location")
+                out.location = value;
+            else if (field == "content-length" && !value.empty() &&
+                     std::all_of(value.begin(), value.end(), [](char c) { return c >= '0' && c <= '9'; }))
+                out.length = std::stoull(std::string(value));
+        },
+        [&](const char* data, std::size_t length) {
+            if (stop.stop_requested() || length > r.limit - received)
+                throw Error("Transfer stopped or exceeded its size limit.");
+            received += length;
+            if (sink && out.status >= 200 && out.status < 300)
+                sink(data, length, out);
+            else {
+                if (out.body.size() + length > std::min<std::uint64_t>(r.limit, MaxImage))
+                    throw Error("Response too large.");
+                out.body.append(data, length);
+            }
+        },
+        stop,
+    };
+    mobile_http(r.url, r.method, r.body, headers, r.timeout, receiver);
+    return out;
 }
 #else
 Response http_once(const Request& r, std::stop_token stop, const Sink& sink) {
@@ -955,9 +1014,13 @@ struct Service::Impl {
         }
         try {
             auto profile = get("/v1/launcher/discord-profile", stop, true);
-            if (profile.is_object() && text(profile, "accountId", 80) == text(user, "id", 80) &&
-                !dkr::profile::display_name(text(profile, "displayName", 200)).empty())
-                user["discordProfile"] = std::move(profile);
+            if (profile.is_object() && text(profile, "accountId", 80) == text(user, "id", 80)) {
+                const auto discord_id = text(profile, "discordId", 22);
+                if (!discord_id.empty())
+                    user["discordId"] = discord_id;
+                if (!dkr::profile::display_name(text(profile, "displayName", 200)).empty())
+                    user["discordProfile"] = std::move(profile);
+            }
         } catch (...) {
         }
 
@@ -1544,6 +1607,16 @@ Json Service::overall_rankings(const std::string& player, unsigned offset) {
         throw Error("Overall rankings are unavailable. Try refreshing.");
     return data;
 }
+Json Service::overall_player_summary(const std::string& player) {
+    try {
+        auto details = overall_rankings(player);
+        return std::move(details.at("player"));
+    } catch (const Error& error) {
+        if (error.status == 404)
+            return nullptr;
+        throw;
+    }
+}
 Json Service::ranked_attempt(std::string board) {
     auto request = impl_->ranked_request("/v1/speedruns/attempts", true);
     request.method = "POST";
@@ -2039,6 +2112,7 @@ void Service::login() {
     p.update([](Snapshot& s) {
         s.signing_in = true;
         s.error.clear();
+        s.sign_in_error.clear();
         s.status = "Opening Discord in your browser...";
     });
     p.auth_worker = std::jthread([&p](std::stop_token lifetime) {
@@ -2132,6 +2206,7 @@ void Service::login() {
                     p.state.signing_in = false;
                     p.state.status = "Signed in with Discord.";
                     p.state.error = remember_warning;
+                    p.state.sign_in_error = remember_warning;
                     if (!remember_warning.empty())
                         p.state.remember = false;
                     p.publish();
@@ -2148,6 +2223,7 @@ void Service::login() {
             p.update([&](Snapshot& s) {
                 s.signing_in = false;
                 s.error = error.what();
+                s.sign_in_error = s.error;
             });
         }
     });
@@ -2179,6 +2255,7 @@ void Service::logout() {
         p.state.uploading = false;
         p.state.loading = p.state.writing = false;
         p.state.status = "Signed out.";
+        p.state.sign_in_error.clear();
         p.state.last_action.clear();
         p.state.last_result = nullptr;
         p.publish();

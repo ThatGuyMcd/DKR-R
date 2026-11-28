@@ -1,0 +1,7 @@
+DKR-R v1.0.17 Playtest 6
+
+Play tab
+- Log in with Discord and choose Stay logged in to restore your session after a restart.
+- See your Discord picture, display name and ID above the launch settings.
+
+This build is for local testing.

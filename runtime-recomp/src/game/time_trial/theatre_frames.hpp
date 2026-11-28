@@ -1,6 +1,7 @@
 #pragma once
 
 #include "session.hpp"
+#include "theatre_file.hpp"
 #include "ultramodern/renderer_context.hpp"
 #include <miniz/miniz.h>
 
@@ -9,8 +10,6 @@
 #include <cstring>
 #include <deque>
 #include <exception>
-#include <fstream>
-#include <random>
 #include <span>
 #include <vector>
 
@@ -29,15 +28,6 @@ class TheatreFrames final {
 
     explicit TheatreFrames(bool sequential = false) : sequential_(sequential) {}
 
-    ~TheatreFrames() {
-        file_.close();
-        std::error_code error;
-        if (directory_.empty())
-            return;
-        std::filesystem::remove(directory_ / "frames.tmp", error);
-        std::filesystem::remove(directory_, error);
-    }
-
     bool append(const OSTask& task, FrameStamp stamp, std::span<const std::uint8_t, ImageBytes> image) {
         try {
             if (sequential_) {
@@ -53,7 +43,7 @@ class TheatreFrames final {
             if (!entries_.empty() && stamp.progress.updates <= last())
                 return true;
             const bool key = entries_.size() % Group == 0;
-            if (entries_.empty() && !open())
+            if (entries_.empty() && !file_.open())
                 return false;
             if (key) {
                 raw_.assign(image.begin(), image.end());
@@ -74,9 +64,9 @@ class TheatreFrames final {
             compressed_.resize(bytes);
             if (mz_compress2(compressed_.data(), &bytes, raw_.data(), static_cast<mz_ulong>(raw_.size()), 1) != MZ_OK)
                 return false;
-            file_.seekp(write_offset_);
-            file_.write(reinterpret_cast<const char*>(compressed_.data()), bytes);
-            if (!file_)
+            file_.stream.seekp(write_offset_);
+            file_.stream.write(reinterpret_cast<const char*>(compressed_.data()), bytes);
+            if (!file_.stream)
                 return false;
             entries_.push_back({{task, stamp}, write_offset_, bytes, static_cast<mz_ulong>(raw_.size())});
             write_offset_ += bytes;
@@ -145,25 +135,11 @@ class TheatreFrames final {
     bool sequential_;
     std::deque<StreamFrame> streamed_;
 
-    bool open() {
-        const auto root = std::filesystem::temp_directory_path();
-        std::random_device random;
-        for (int i = 0; i < 8; ++i) {
-            const auto path = root / ("dkr-r-theatre-" + std::to_string(random()) + "-" + std::to_string(random()));
-            if (std::filesystem::create_directory(path)) {
-                directory_ = path;
-                file_.open(path / "frames.tmp", std::ios::in | std::ios::out | std::ios::binary | std::ios::trunc);
-                return bool(file_);
-            }
-        }
-        return false;
-    }
-
     bool decode(const Entry& entry, bool key) {
         compressed_.resize(entry.bytes);
-        file_.seekg(entry.offset);
-        file_.read(reinterpret_cast<char*>(compressed_.data()), entry.bytes);
-        if (!file_)
+        file_.stream.seekg(entry.offset);
+        file_.stream.read(reinterpret_cast<char*>(compressed_.data()), entry.bytes);
+        if (!file_.stream)
             return false;
         auto size = entry.raw_bytes;
         if (key)
@@ -187,8 +163,7 @@ class TheatreFrames final {
         return cursor == size;
     }
 
-    std::filesystem::path directory_;
-    std::fstream file_;
+    TheatreFile file_;
     std::streamoff write_offset_ = 0;
     std::vector<Entry> entries_;
     std::vector<std::uint8_t> last_image_, decoded_, raw_, compressed_;

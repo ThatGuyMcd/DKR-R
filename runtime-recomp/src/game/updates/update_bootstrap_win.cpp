@@ -3,6 +3,8 @@
 #include "../application_layout.hpp"
 #include <cstdio>
 #include <cstdlib>
+#include <cwchar>
+#include <iterator>
 #include <windows.h>
 #include <shellapi.h>
 
@@ -44,8 +46,18 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
         Child game(runtime, arguments, root, true);
         for (;;) {
             int result = game.wait(1000);
-            if (result >= 0)
+            if (result >= 0) {
+                if (result != 0 && arguments.empty()) {
+                    wchar_t exit_code[16]{};
+                    std::swprintf(exit_code, std::size(exit_code), L"0x%08lX",
+                                  static_cast<unsigned long>(game.windows_exit_code()));
+                    const std::wstring message = std::wstring(L"DKR-R closed unexpectedly (exit code ") + exit_code +
+                                                 L"). Reopen DKR-R and use the graphics compatibility check on Play. "
+                                                 L"The latest runtime log contains any additional error details.";
+                    MessageBoxW(nullptr, message.c_str(), L"DKR-R stopped", MB_OK | MB_ICONERROR);
+                }
                 return result;
+            }
         }
     } catch (const std::exception& error) {
         std::fprintf(stderr, "[updates][bootstrap] %s\n", error.what());

@@ -6,11 +6,13 @@ bool UpdatesLocked(bool launcher);
 
 void DrawPlayUpdateButton(float width) {
     auto* updates = dkr::updates::service();
-    const bool busy = updates && updates->snapshot().busy;
+    const auto snapshot = updates ? updates->snapshot() : dkr::updates::Snapshot{};
+    const bool busy = snapshot.busy;
     const bool locked = !updates || UpdatesLocked(true);
     ImGui::BeginDisabled(busy || locked);
-    const char* label = width < PaddockImportButtonWidth("Check for updates") ? "Updates###play-update-check"
-                                                                              : "Check for updates###play-update-check";
+    const bool compact = width < PaddockImportButtonWidth("Check for updates");
+    const char* label =
+        snapshot.quiver_managed || compact ? "Updates###play-update-check" : "Check for updates###play-update-check";
     const bool pressed = PaddockImportButton(label, width, true);
     ImGui::EndDisabled();
     if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
@@ -31,6 +33,8 @@ void DrawPlayUpdateButton(float width) {
 
 std::string UpdateDisplayMessage(const dkr::updates::Snapshot& snapshot) {
     using dkr::updates::State;
+    if (snapshot.quiver_managed)
+        return dkr::updates::kQuiverUpdateMessage;
     switch (snapshot.state) {
     case State::Idle:
         return "Not checked yet.";
@@ -112,6 +116,11 @@ void DrawUpdatesCard(float width) {
             return;
         }
         const auto snapshot = updates->snapshot();
+        if (snapshot.quiver_managed) {
+            DetailText("Installed: " + std::string(DKR_RELEASE_VERSION), inner, kSetMuted, 8);
+            DetailText(UpdateDisplayMessage(snapshot), inner, kSetMuted);
+            return;
+        }
         const bool launcher = g_launcher_rom != nullptr;
         auto preferences = snapshot.preferences;
         {
@@ -172,8 +181,9 @@ void DrawUpdateNotice(dkr::runtime::ui::StartupResult& result, bool& running) {
         ImGui::OpenPopup("DKR-R updates");
         g_update_notice_requested = false;
     }
+    ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, {0.5F, 0.5F});
     ImGui::SetNextWindowSize({std::min(620.0F, ImGui::GetIO().DisplaySize.x - 32.0F), 0}, ImGuiCond_Appearing);
-    if (!BeginPaddedModal("DKR-R updates", ImGuiWindowFlags_AlwaysAutoResize))
+    if (!BeginPaddedModal("DKR-R updates", ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings))
         return;
     auto width = ImGui::GetContentRegionAvail().x;
     DetailHeading("DKR-R UPDATES", width, kSetWarm);
@@ -190,7 +200,8 @@ void DrawUpdateNotice(dkr::runtime::ui::StartupResult& result, bool& running) {
     }
     DrawUpdateActions(width, true);
     PaddockGap(12.0F);
-    if (DetailRaceButton(snapshot.state == dkr::updates::State::Current || snapshot.state == dkr::updates::State::Failed
+    if (DetailRaceButton(snapshot.quiver_managed || snapshot.state == dkr::updates::State::Current ||
+                                 snapshot.state == dkr::updates::State::Failed
                              ? "CLOSE"
                              : "LATER",
                          width, 0x0A6EA1, snapshot.state == dkr::updates::State::Preparing))

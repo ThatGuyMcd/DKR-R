@@ -88,7 +88,34 @@ void restore_single(const std::filesystem::path& target, const std::filesystem::
     }
 }
 } // namespace
+bool quiver_managed_install(const std::filesystem::path& application) {
+    if (application.empty())
+        return false;
+    std::error_code error;
+    if (std::filesystem::symlink_status(application / ".quiver-version", error).type() ==
+        std::filesystem::file_type::regular)
+        return true;
+
+    // Quiver 3 stores the GitHub tag in version.txt. Limit this generic
+    // filename to the Version-prefixed tags used for DKR-R releases.
+    const auto legacy = application / "version.txt";
+    if (std::filesystem::symlink_status(legacy, error).type() != std::filesystem::file_type::regular)
+        return false;
+    try {
+        auto tag = read_text(legacy, 128);
+        if (!tag.starts_with("Version"))
+            return false;
+        tag.erase(tag.find_last_not_of(" \r\n\t") + 1);
+        (void)Version::parse(std::string_view(tag).substr(7));
+        return true;
+    } catch (const std::exception&) {
+        return false;
+    }
+}
+
 std::string installation_unavailable(const Configuration& config) {
+    if (quiver_managed_install(config.application))
+        return kQuiverUpdateMessage;
 #if defined(__ANDROID__)
     (void)config;
     return {}; // The Android adapter uses the system installer.
@@ -137,6 +164,8 @@ void prepare_install(const Configuration& config, const Manifest& manifest, cons
     auto target = actual_target();
     auto root = kind() == "zip" ? target : target.parent_path();
     require_private_tree(root);
+    if (quiver_managed_install(root))
+        throw std::runtime_error(kQuiverUpdateMessage);
     auto id = unique_id();
     auto job = config.data / "updates" / ("handoff-" + id);
     std::filesystem::create_directory(job);
@@ -291,6 +320,10 @@ int updater_main(int argc, char** argv) {
         for (auto& arg : arguments)
             if (arg.size() > 32768 || arg.find('\0') != arg.npos)
                 throw std::runtime_error("Invalid relaunch argument.");
+        // Start the replacement outside FUSE. A mounted AppImage can
+        // fail during the old launcher's shutdown and replacement handoff.
+        if (package_kind == "appimage")
+            arguments.insert(arguments.begin(), "--appimage-extract-and-run");
         restart_executable = executable;
         restart_root = root;
         restart_arguments = arguments;
@@ -299,6 +332,8 @@ int updater_main(int argc, char** argv) {
         std::filesystem::path backup;
         {
             InstallLock lock(root, 5000);
+            if (quiver_managed_install(root))
+                throw std::runtime_error(kQuiverUpdateMessage);
             if (package_kind == "zip") {
                 if (pending_files(target)) {
                     recover_files(target);

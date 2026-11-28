@@ -1,6 +1,7 @@
 #include "session.hpp"
 #include "ghost_file.hpp"
 #include "options.hpp"
+#include "theatre_audio.hpp"
 
 #include "achievements.hpp"
 #include "atomic_snapshot.hpp"
@@ -15,6 +16,10 @@
 #include "time_trial_symbols.hpp"
 #include "ultramodern/ultramodern.hpp"
 #include "updates/update_process.hpp"
+
+#ifdef __APPLE__
+#include <TargetConditionals.h>
+#endif
 
 #include <algorithm>
 #include <array>
@@ -88,6 +93,8 @@ std::deque<Progress> movie_progress;
 std::size_t captured_audio_samples = 0;
 unsigned mixer_update = 0;
 unsigned audio_ready = 0;
+unsigned graphics_ready = 0;
+TheatreAudio adventure_audio;
 std::vector<std::int16_t> present_audio;
 std::deque<std::pair<std::uint32_t, FrameStamp>> graphics_stamps;
 struct GhostPose {
@@ -494,15 +501,23 @@ void add_ranked_fields(Json& manifest) {
     if (ranked_attempt) {
 #if defined(_WIN32)
         constexpr auto platform = "windows";
-#elif defined(__linux__) && !defined(__ANDROID__)
+#elif defined(__ANDROID__)
+        constexpr auto platform = "android";
+#elif defined(__linux__)
         constexpr auto platform = "linux";
+#elif defined(__APPLE__) && TARGET_OS_IOS
+        constexpr auto platform = "ios";
+#elif defined(__APPLE__) && TARGET_OS_OSX
+        constexpr auto platform = "macos";
 #else
         constexpr auto platform = "unsupported";
 #endif
 #if defined(_M_ARM64) || defined(__aarch64__)
         constexpr auto arch = "aarch64";
-#else
+#elif defined(_M_X64) || defined(__x86_64__)
         constexpr auto arch = "x86_64";
+#else
+        constexpr auto arch = "unsupported";
 #endif
         manifest.update(
             {{"board", ranked_attempt->board},
@@ -845,7 +860,7 @@ void finish_interrupted_recording() {
 }
 
 bool watching() {
-    return mode.load() == Mode::Watch && (adventure_goal == Adventure::None || exporting_video());
+    return mode.load() == Mode::Watch;
 }
 
 std::filesystem::path watched_replay() {
@@ -1044,20 +1059,23 @@ std::optional<FrameStamp> theatre_graphics_stamp(std::uint32_t display_list) {
 
 void theatre_buffered(unsigned frame) {
     std::scoped_lock lock(progress_mutex);
-    if (frame <= transport.buffered)
+    if (frame <= graphics_ready)
         return;
-    transport.buffered = frame;
+    graphics_ready = frame;
+    if (exporting_video())
+        transport.buffered = frame;
     if (frame == visible_progress.total_updates)
         std::fprintf(stderr, "[replay] indexed all %u frames; %zu audio samples\n", frame, captured_audio_samples);
 }
 
 std::optional<unsigned> theatre_next_frame(std::chrono::steady_clock::time_point now) {
     std::scoped_lock lock(progress_mutex);
-    if (!transport.buffered)
+    if (!graphics_ready)
         return std::nullopt;
     const unsigned shown = visible_progress.updates;
-    auto picture_ready = transport.buffered;
-    if (exporting_full_game_video()) {
+    const bool full_game = adventure_goal != Adventure::None;
+    auto picture_ready = graphics_ready;
+    if (full_game) {
         // menus and scene loads can hold one picture for several updates.
         // Wait for submitted graphics, but let the clock and inputs advance
         // over gaps without requiring the guest to produce a new picture.
@@ -1077,17 +1095,17 @@ std::optional<unsigned> theatre_next_frame(std::chrono::steady_clock::time_point
             return shown + 1;
         return std::nullopt;
     }
+    transport.buffered = ready;
     if (!shown) {
-        if (!next_present.time_since_epoch().count())
-            next_present = now + std::chrono::seconds(3);
-        const unsigned starting_frames = std::min(visible_progress.total_updates, 90U);
-        if (now < next_present || ready < starting_frames)
+        const unsigned starting_frames = std::min(visible_progress.total_updates, 8U);
+        if (ready < starting_frames)
             return std::nullopt;
         transport.buffering = false;
     }
     // A request can arrive before the producer has indexed it. Show the
     // current picture until the exact target is available.
     if (transport.seeking && transport.seek_to <= transport.buffered) {
+        transport.buffering = false;
         next_present = now + std::chrono::microseconds(3333333U / transport.speed);
         return transport.seek_to;
     }
@@ -1133,20 +1151,31 @@ bool theatre_presented(Progress source, unsigned frame) {
     } else if (frame <= timeline_progress.size())
         source = timeline_progress[frame - 1];
     visible_progress = source;
+    if (!prior && !exporting_video())
+        std::fprintf(stderr, "[replay] started %s playback at frame=%u available=%u total=%u\n",
+                     adventure_goal == Adventure::None ? "single-track" : "Full Game", frame, transport.buffered,
+                     source.total_updates);
     if (seek) {
         transport.seeking = false;
         std::fprintf(stderr, "[replay] seek completed at frame=%u racer=%s\n", frame,
                      kRacers[source.racer].name.data());
     } else if ((prior || exporting_video()) && !transport.pause_on_open && !transport.paused && !transport.scrubbing &&
                frame > prior) {
-        const auto first = std::upper_bound(audio_blocks.begin(), audio_blocks.end(), prior,
-                                            [](unsigned n, const AudioBlock& block) { return n < block.frame; });
-        const auto last = std::upper_bound(first, audio_blocks.end(), frame,
-                                           [](unsigned n, const AudioBlock& block) { return n < block.frame; });
-        for (auto it = first; it != last; ++it)
-            present_audio.insert(present_audio.end(), it->samples.begin(), it->samples.end());
-        if (exporting_full_game_video())
-            audio_blocks.erase(audio_blocks.begin(), last);
+        if (adventure_goal != Adventure::None && !exporting_video()) {
+            if (!adventure_audio.read(prior, frame, present_audio)) {
+                archive_error = true;
+                return false;
+            }
+        } else {
+            const auto first = std::upper_bound(audio_blocks.begin(), audio_blocks.end(), prior,
+                                                [](unsigned n, const AudioBlock& block) { return n < block.frame; });
+            const auto last = std::upper_bound(first, audio_blocks.end(), frame,
+                                               [](unsigned n, const AudioBlock& block) { return n < block.frame; });
+            for (auto it = first; it != last; ++it)
+                present_audio.insert(present_audio.end(), it->samples.begin(), it->samples.end());
+            if (exporting_full_game_video())
+                audio_blocks.erase(audio_blocks.begin(), last);
+        }
     }
     if (frame == source.total_updates) {
         transport.finished = true;
@@ -1167,7 +1196,12 @@ bool theatre_capture_audio(std::span<const std::int16_t> samples) {
     // __amHandleFrameMsg submits the previous mix to AI before mixing the
     // current update. Discard the boot mix and stamp the rest on that clock.
     if (mixer_update > 1 && samples.size() <= 8192) {
-        audio_blocks.push_back({mixer_update - 1, {samples.begin(), samples.end()}});
+        if (adventure_goal != Adventure::None && !exporting_video()) {
+            if (!adventure_audio.append(mixer_update - 1, samples))
+                archive_error = true;
+        } else {
+            audio_blocks.push_back({mixer_update - 1, {samples.begin(), samples.end()}});
+        }
         captured_audio_samples += samples.size();
     }
     return true;
@@ -1260,8 +1294,9 @@ void retire() {
     audio_blocks.clear();
     timeline_progress.clear();
     movie_progress.clear();
+    adventure_audio.clear();
     captured_audio_samples = 0;
-    mixer_update = audio_ready = 0;
+    mixer_update = audio_ready = graphics_ready = 0;
     present_audio.clear();
     ranked_attempt.reset();
     ghost_preparation.reset();
@@ -1311,6 +1346,10 @@ void retire() {
 
 bool uses_uninitialised_adventure_save() {
     return fresh_adventure_save;
+}
+
+bool supports_legacy_scenery_verification() {
+    return mode == Mode::Verify && adventure_goal != Adventure::None && use_completed_save_rules;
 }
 
 bool uses_completed_adventure_save() {
@@ -1539,10 +1578,15 @@ extern "C" int dkr_time_trial_frame_begin(std::uint8_t* rdram, unsigned revision
         {
             std::scoped_lock lock(progress_mutex);
             failed = archive_error;
-            // An export can only advance once the encoder consumes frames.
-            // Keep the full-session picture and audio buffers bounded.
-            waiting =
-                update > mixer_update + 2 || (exporting_full_game_video() && update > visible_progress.updates + 6);
+            waiting = update > mixer_update + 2;
+            if (!exporting_video() || adventure_goal != Adventure::None) {
+                // Full Game exports follow the encoder. The viewer builds only a short
+                // lead over playback or an explicit seek.
+                const auto target = transport.seeking ? std::max(visible_progress.updates, transport.seek_to)
+                                                      : visible_progress.updates;
+                const auto lead = exporting_video() ? 6U : 120U;
+                waiting = waiting || update > target + lead;
+            }
         }
         if (failed) {
             stop(false, "Replay Theatre could not write its temporary frame index.");
@@ -1558,9 +1602,9 @@ extern "C" int dkr_time_trial_frame_begin(std::uint8_t* rdram, unsigned revision
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
             return 1;
         }
-        // Produce ahead of the viewing clock with one retrace wait. The
-        // authored simulation still uses the recording's original step.
-        if (!exporting_full_game_video())
+        // Time Trial can produce ahead with one retrace wait. Full Game
+        // keeps the authored menu and scene timing even when seeking.
+        if (adventure_goal == Adventure::None)
             MEM_B(0, guest(symbols::for_revision(revision).video_delta)) = 1;
     }
     if (preparing_ghost())
@@ -1860,6 +1904,8 @@ void adventure_frame(std::uint8_t* rdram, unsigned revision) {
         current_progress.stick_y = previous.stick_y;
         if (exporting_full_game_video())
             movie_progress.push_back(current_progress);
+        else if (watching())
+            timeline_progress.push_back(current_progress);
         if (attest_adventure_splits && clock && sample.valid) {
             const unsigned taj_flags = MEM_HU(0x14, guest(sample.settings));
             const unsigned world = MEM_BU(0x48, guest(sample.settings));
