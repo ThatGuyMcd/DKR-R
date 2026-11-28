@@ -19,29 +19,6 @@ the game with its own clean profile, compares the checkpoints and takes the
 time from the reproduced race. This checks repeatability of the recorded
 inputs. Moderators can also review playback.
 
-## Run the local pilot
-
-The local test server uses disposable accounts, storage and a loopback-only
-address. Close it with Ctrl+C when finished. It needs Node.js, Python, a
-fresh launcher profile directory, the rebuilt game executable and your own
-US v1.1 ROM. On Linux pass `--xvfb` to run the verifier on a separate display.
-
-```sh
-python services/online-directory/build.py --output build/local-ranked-worker
-node services/online-directory/run_local_ranked.cjs --bundle build/local-ranked-worker --runtime <game-executable> --rom <rom> --jobs <jobs-directory> --profile <disposable-profile>
-```
-
-Start the game executable with `--config <disposable-profile>`. Add the same
-ROM in Play if the profile has no ROM selected. After a verified run has been
-reviewed, enter `publish <run-id>` in the local test server console. Published
-rows have a **Watch** button when a launcher profile is active.
-
-For the automated verifier proof, replace `--profile <disposable-profile>`
-with `--fixture <practice-fixture.dkrreplay>`. This wraps a known input
-fixture in a disposable test ticket. It verifies and publishes the original
-and checks that changed inputs are rejected. The script uses separate
-processes and profiles for verification.
-
 ## Replay Theatre
 
 In **My replays**, select **Watch** beside a local recording or download.

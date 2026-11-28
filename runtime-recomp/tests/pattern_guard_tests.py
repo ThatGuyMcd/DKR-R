@@ -82,10 +82,8 @@ class AllowlistTests(unittest.TestCase):
         )
 
 
-class ServicesScopeTests(unittest.TestCase):
-    def test_pipeline_rules_skip_services_and_nothing_else(self):
-        # A string-replace splice over first-party-named text: PG004 in the
-        # runtime tree, out of scope under services/.
+class PipelineScopeTests(unittest.TestCase):
+    def test_pipeline_rules_apply_across_the_tree(self):
         source = (
             "from pathlib import Path\n"
             "text = Path('runtime-recomp/src/game/x.cpp').read_text()\n"
@@ -100,7 +98,7 @@ class ServicesScopeTests(unittest.TestCase):
             subprocess.run(["git", "-C", str(root), "add", "-A"], check=True)
             _, out, err = run_guard(root, "--tree", "--baseline", "ignore")
         self.assertIn("scripts/splice.py:3: PG004", out + err)
-        self.assertNotIn("services/", out + err)
+        self.assertIn("services/web/build.py:3: PG004", out + err)
 
 
 class CheckContentTests(unittest.TestCase):

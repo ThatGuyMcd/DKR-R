@@ -8,12 +8,11 @@ default_install_hook_types: [pre-commit, pre-push]
 default_stages: [pre-commit]
 # Pinned-byte files: *.patch sha256s live in patches/manifest.json (many have
 # trailing whitespace on blank context lines), modding/reference-us-v*/* are
-# byte-exact receipts and services/*/baseline/ match their SHA256SUMS. No fixer
+# byte-exact receipts. No fixer
 # may touch them; the pinned-bytes hook below proves it on every commit.
 # runtime-recomp/src/ is clang-format's and gersemi's: both run on every commit
 # and CI checks the whole tree (scripts/format_sources.py --check). The
 # whitespace fixers leave it alone (their own excludes below).
-# services/*/baseline/ are deployed bases pinned by their SHA256SUMS,
 # tests/fixtures/ are pattern-guard inputs and packaging/licenses/ are verbatim
 # third-party texts.
 exclude: |
@@ -26,7 +25,6 @@ exclude: |
     build/|
     patches/|
     modding/reference-us-v|
-    services/[^/]+/baseline/|
     tests/fixtures/|
     packaging/licenses/|
     .*\.patch$

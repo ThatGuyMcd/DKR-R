@@ -70,10 +70,6 @@ Store-managed cars use installation receipts and the normal Update / Repair,
 duplicate and recoverable transaction flows. Keep receipts and retained editions
 when diagnosing an interrupted install. A same-name file is not proof of identity.
 
-The website and launcher display **Vehicles**. The backend category identifier
-remains `legacy` to preserve existing entry IDs, reviews, requests and file
-mappings. Do not rename that stored ID or move hosted files during deployment.
-Explicit historical ROM patch files retain their separate importer route.
+The website and launcher display **Vehicles**. Explicit historical ROM patch files retain their separate importer route.
 
-See [mods and installation](LEGACY-MODS-BETA.md), [Online](ONLINE_MULTIPLAYER.md)
-and [library administration](MOD_LIBRARY_ADMIN.md).
+See [mods and installation](LEGACY-MODS-BETA.md), and [Online](ONLINE_MULTIPLAYER.md).

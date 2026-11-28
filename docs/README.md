@@ -29,7 +29,6 @@ Start here for DKR-R v1.0.17. See the [release notes](releases/1.0.17/RELEASE-NO
 | [Spectators](SPECTATORS.md) | Watching, cameras, host-approved swaps and late-join gates. |
 | [Vehicles](VEHICLES.md) | Custom .dkrkart cars, native selection and managed Store installations. |
 | [Achievements](ACHIEVEMENTS.md) | 94 local goals, recognition, notifications and progress protection. |
-| [Library administration](MOD_LIBRARY_ADMIN.md) | FTP uploads, batch entries, image controls, usage filters and deployment. |
 | [Troubleshooting](TROUBLESHOOTING.md) | Failures, recurring player issues, support exports and the correct runtime logs. |
 | [Platform support](PLATFORMS.md) | Current packages, Linux requirements and source port coverage. |
 

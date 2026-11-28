@@ -1,16 +1,14 @@
 #!/usr/bin/env python3
 """Fail when a checksum-pinned file no longer matches its pin.
 
-Three kinds of file are pinned by sha256 and must keep their exact bytes, even
+Two kinds of file are pinned by sha256 and must keep their exact bytes, even
 where they carry trailing whitespace or CRLF line endings that a formatter
 would "fix":
 
 * every patch listed in patches/manifest.json (``dependencies[].patches[]``
   and ``stagedPatches[]``);
 * the address-only SDK kits, modding/reference-us-v*/, against the ``files``
-  map in each kit's receipt.json;
-* the deployed bases a service splices into, services/*/baseline/, against
-  that directory's SHA256SUMS (``sha256sum`` format).
+  map in each kit's receipt.json.
 
 With no arguments every pin is checked. With paths (what pre-commit passes),
 only the pins those paths belong to are checked; a manifest or receipt in the
@@ -33,7 +31,6 @@ from typing import NamedTuple
 ROOT = Path(__file__).resolve().parents[1]
 PATCH_MANIFEST = "patches/manifest.json"
 RECEIPTS = "modding/reference-us-v*/receipt.json"
-SERVICE_BASELINES = "services/*/baseline/SHA256SUMS"
 
 
 class Pin(NamedTuple):
@@ -57,12 +54,6 @@ def pins(root: Path) -> dict[str, Pin]:
         kit = receipt.parent.relative_to(root).as_posix()
         for name, sha in json.loads(receipt.read_text(encoding="utf-8"))["files"].items():
             pinned[f"{kit}/{name}"] = Pin(sha, source)
-    for sums in sorted(root.glob(SERVICE_BASELINES)):
-        source = sums.relative_to(root).as_posix()
-        baseline = sums.parent.relative_to(root).as_posix()
-        for line in sums.read_text(encoding="utf-8").splitlines():
-            sha, name = line.split(maxsplit=1)
-            pinned[f"{baseline}/{name}"] = Pin(sha, source)
     return pinned
 
 

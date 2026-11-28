@@ -20,8 +20,7 @@ Local validation included all 162 host CTests before scope reduction. The
 narrowed candidate passes all 156 remaining host CTests. The six owned heap
 and menu fixtures are deferred with their production testability refactors;
 all eleven outstanding release checks remain explicitly pending. The earlier
-Python 3.12 guard/tooling, pre-commit, 71 library workflow checks and 21
-Cloudflare D1 checks also passed. These do not establish release readiness
+Python 3.12 guard, tooling and pre-commit checks also passed. These do not establish release readiness
 or cross-play.
 
 The current-main compiler-selected source audit caught a missing `sender`
@@ -275,22 +274,12 @@ metadata is rejected locally without retiring the directory connection. Characte
 portraits are an authored module and CMake library, with a synthetic decoder and
 private-storage fixture; no source staging is involved.
 
-The online service owns its API modules under services/online-directory/api.
-Its builder uses pinned esbuild, produces a fresh reviewable bundle and records
-input/output hashes. Optional owner rollback inputs are preserved byte for byte.
-The local Miniflare harness supplies an explicit modulesRoot so bundles outside
-the checkout work. Profile proof tests exercise the real native X25519 helper
-against Worker Web Crypto and synthetic D1 data. Before applying profile
-migrations, tickets still succeed with authentication and reject anonymous
-requests. No live service or real credentials are used.
-
 Validation: all 156 host tests pass. The macOS full-nogen game core builds and
 the prepared macOS DKRPortGame executable links. Directory harnesses pass 95
 checks normally and 101 with running spectators; the expanded profile harness
 passes 94 checks. Bundle tests cover fresh outputs, exact rollback bytes,
 compiler rejection, receipt tampering and invocation from another directory.
-Host CI now fetches sparse guest symbol tables automatically; service CI builds
-the native profile proof fixture before running the local Worker tests.
+Host CI now fetches sparse guest symbol tables automatically.
 
 These ports do not establish compatibility with current main. A separate
 ancestor audit found the online-performance layer absent from the v1.0.11

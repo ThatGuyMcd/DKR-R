@@ -57,9 +57,6 @@ deleted, see git history).
 |---|---|
 | android, hlslpp, libdatachannel, libjuice, n64-modern-runtime, n64recomp, nfd, performance, plume, rt64, sdl2, sljit, startup-memory, usrsctp, custom-magic-codes, netplay | registered dependency patches, still in `patches/<dependency>/` (`patches/manifest.json`); their layer notes and scripts are gone |
 | enhanced-water | RT64 shaders and render sources in `runtime-recomp/src/water/`; its patches stay in `patches/enhanced-water/` |
-| online-directory (backend) | `services/online-directory/` |
-| mod-store (backend) | `services/mod-store/` |
-| library-workflow | `services/library-workflow/` |
 | save-layout, character-portraits | guest inputs in `runtime-recomp/guest/`; the stages are `scripts/save_layout_pipeline.py` and `scripts/character_portrait_pipeline.py` (run by `scripts/prepare_payloads.py`) |
 | camera-plus (scene kernel) | `scripts/camera_scene_kernel.py` (run by `scripts/prepare_payloads.py`) |
 | release-prep | `scripts/release/` and `docs/releases/<version>/` |

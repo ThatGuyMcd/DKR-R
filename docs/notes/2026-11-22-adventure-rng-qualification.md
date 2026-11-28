@@ -36,17 +36,7 @@ for each objective.
 - **All Trophy Races** ends after the fourth gold cup in Adventure.
 
 An independent runtime must reproduce the objective, input checkpoints
-and exact finish. Use the staged Worker test with a completed practice
-replay.
-
-```text
-node services/online-directory/tests/adventure_ranked_api.cjs BUNDLE RUNTIME ROM PRACTICE_REPLAY
-```
-
-It issues a local attempt, keeps the recorded controller bytes, reads the
-archived replay back, and requires a native engine proof before it can
-check moderator approval and the replay download in staging. Without a
-replay argument it checks only the API contract.
+and exact finish.
 
 Verify each of the same captures independently with the Linux AppImage
 using `scripts/verify_time_trial.py` with `--xvfb` and

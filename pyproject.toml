@@ -75,13 +75,6 @@ force-sort-within-sections = true
 "scripts/water_patch_baseline.py" = ["E501"]
 "scripts/water_profile_policy.py" = ["E501"]
 # END GENERATED BASELINE
-# services/ splices quote their anchors verbatim, one string each, matched
-# exactly against the deployed base; wrapping them would hide what they match.
-"services/library-workflow/transforms.py" = ["E501"]
-"services/mod-store/build.py" = ["E501"]
-"services/mod-store/frontend.py" = ["E501"]
-"services/mod-store/backfill_library.py" = ["E501"]
-"services/mod-store/release_manifest.py" = ["E501"]
 
 [tool.pyright]
 # Strict only for new tooling scripts; everything else is ratcheted in per path.

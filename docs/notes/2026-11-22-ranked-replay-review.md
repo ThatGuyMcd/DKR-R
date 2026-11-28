@@ -56,8 +56,7 @@ format. Full-game runs need a separately qualified larger format.
 Only the independent verifier may set `verified_ticks`, `verifier_digest`
 and `verified` after reproducing the run from a trusted clean start and
 checking every required event, RNG transition and state digest. The public
-Worker has no verifier-writes endpoint. D1 stores the queue and decisions.
-R2 objects are private and served by the authorised download route. Neither
+client cannot assign a verification outcome. Unpublished replays require authorised access. Neither
 the replay format nor the published object includes a ROM or a guest snapshot.
 
 ## Before opening ranked submissions
@@ -75,15 +74,3 @@ Configure a private `SPEEDRUN_REPLAYS` R2 binding during the ranked pilot.
 Run the additive speedrun D1 migration and check the acceptance, privacy and
 review cases in staging. The Online page and read-only track catalogue can
 be reviewed independently of ranked uploads.
-
-## Staging review
-
-The review package contains website and Worker sources plus screenshots from
-a local test. The screenshot times and lobbies are fixtures. The package's
-rollback sources are the base checkout used to build the review. Collect the
-actual deployed website files, Worker revisions and a D1 backup before rollout.
-Keep the current Cloudflare settings and bindings. The directory Worker must
-understand the public projection before the public API and website use it.
-
-Use the existing documented deployment commands only after review. No
-production changes are required to run the local tests.

@@ -20,7 +20,7 @@ def load(relative):
 
 
 class PackagingTests(unittest.TestCase):
-    def test_new_runtime_resources_and_backend_sources_without_local_residue(self):
+    def test_public_runtime_resources_exclude_private_sources(self):
         module = load("scripts/package_source.py")
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -30,13 +30,8 @@ class PackagingTests(unittest.TestCase):
                     "runtime-recomp/assets/localisation/en.json",
                     "runtime-recomp/assets/localisation/OFL-NotoSans.txt",
                     "runtime-recomp/assets/localisation/NotoSans-Regular.ttf",
-                    "runtime-recomp/src/game/crash_reports/backend/worker.mjs",
-                    "runtime-recomp/src/game/crash_reports/backend/wrangler.jsonc",
-                    "runtime-recomp/src/game/online_profile/backend/community_schema.sql",
-                    "runtime-recomp/src/game/mod_library/website/index.html",
-                    "runtime-recomp/src/game/mod_library/website/assets/community.css",
-                    "runtime-recomp/src/game/mod_library/website/assets/community-ui.js",
-                    "runtime-recomp/tests/mod_library_community_tests.cjs",
+                    "runtime-recomp/src/game/crash_reports/transport.cpp",
+                    "runtime-recomp/src/game/mod_store.cpp",
                 )
             ]
             denied = [
@@ -47,12 +42,22 @@ class PackagingTests(unittest.TestCase):
                     "downloads/worker.mjs",
                 )
             ]
-            for path in allowed + denied:
+            private_tracked = [
+                Path("runtime-recomp/src/game/crash_reports/backend/worker.mjs"),
+                Path("services/online-directory/build.py"),
+            ]
+            private_untracked = [
+                Path("runtime-recomp/src/game/online_profile/backend/community_schema.sql"),
+                Path("runtime-recomp/src/game/mod_library/website/index.html"),
+            ]
+            for path in allowed + denied + private_tracked + private_untracked:
                 (root / path).parent.mkdir(parents=True, exist_ok=True)
                 (root / path).write_text("synthetic")
             with (
                 mock.patch.object(module, "ROOT", root),
-                mock.patch.object(module, "git_paths", side_effect=[[], allowed + denied]),
+                mock.patch.object(
+                    module, "git_paths", side_effect=[private_tracked, allowed + denied + private_untracked]
+                ),
                 contextlib.redirect_stderr(io.StringIO()),
             ):
                 self.assertEqual(set(module.source_files()), set(allowed))

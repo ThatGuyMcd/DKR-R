@@ -147,15 +147,16 @@ runtime-recomp/build/
 # local test artifacts; rebuild them from Blender rather than sharing them.
 /custom-tracks/
 
-# Local Cloudflare development state
-/.wrangler/
+# Private web and server source workspaces
+/services/
+/runtime-recomp/src/game/mod_library/website/
+/runtime-recomp/src/game/crash_reports/backend/
+/runtime-recomp/src/game/online_profile/backend/
 
 # AI coding agents: personal permissions and per-session hook state
 /.claude/settings.local.json
 /.claude/session-base
 /.claude/session-base.*.tmp
 
-# Pinned Node tools for the services tests (npm ci in services/test-tools)
-/services/test-tools/node_modules/
 # Ruff writes local lint cache on both operating systems.
 .ruff_cache/

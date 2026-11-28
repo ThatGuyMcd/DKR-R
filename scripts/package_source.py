@@ -27,6 +27,15 @@ DENIED_SUFFIXES = {
 }
 N64_HEADERS = {b"\x80\x37\x12\x40", b"\x37\x80\x40\x12", b"\x40\x12\x37\x80"}
 SOURCE_PREFIX = "DKR-R/"
+PRIVATE_SOURCE_ROOTS = tuple(
+    pathlib.PurePosixPath(path)
+    for path in (
+        "services",
+        "runtime-recomp/src/game/mod_library/website",
+        "runtime-recomp/src/game/crash_reports/backend",
+        "runtime-recomp/src/game/online_profile/backend",
+    )
+)
 
 
 def git_paths(*arguments: str) -> list[pathlib.Path]:
@@ -136,7 +145,12 @@ def source_files() -> list[pathlib.Path]:
             selected.add(path)
         elif path.suffix.lower() in allowed_untracked_suffixes:
             print(f"Excluded untracked possible source file (outside supported roots): {path}", file=sys.stderr)
-    return sorted(path for path in selected if (ROOT / path).is_file())
+    public_files = []
+    for path in selected:
+        relative = pathlib.PurePosixPath(path.as_posix())
+        if (ROOT / path).is_file() and not any(relative.is_relative_to(root) for root in PRIVATE_SOURCE_ROOTS):
+            public_files.append(path)
+    return sorted(public_files)
 
 
 def create_archive(output: pathlib.Path) -> None:

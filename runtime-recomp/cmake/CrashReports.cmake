@@ -46,12 +46,5 @@ function(dkr_add_crash_reports)
                     "$<TARGET_FILE:DKRCrashContextProbe>"
             )
         endif()
-        find_program(DKR_NODE node)
-        if(DKR_NODE)
-            add_test(
-                NAME DKRCrashRelay
-                COMMAND "${DKR_NODE}" --test "${root}/runtime-recomp/tests/crash_relay_tests.mjs"
-            )
-        endif()
     endif()
 endfunction()

@@ -86,34 +86,12 @@ before any later delivery. Queue operations use a process lock, reject linked
 inputs and accept only fixed archive names and bounded metadata. Interrupted
 enqueue/acknowledgement cleanup removes only strictly named orphan archives.
 
-## Private Discord relay
+## Report delivery
 
-The client posts an archive over verified HTTPS to the dedicated
-`dkr-crash-reports` Cloudflare Worker. No Discord credential is in source,
-client binaries or release packages. The backend source and deployment
-configuration are in `runtime-recomp/src/game/crash_reports/backend/`.
-
-Deploy that dedicated Worker in the same Cloudflare account/subdomain as the
-existing DKR-R API; it does not replace the Mod Library or online service.
-Configure `DKR_CRASH_WEBHOOK` using **Wrangler secret put**, pasting the webhook
-through the hidden prompt/stdin. Do not add it to a config file, command-line
-argument, source archive, client setting or public hosting folder. The Worker
-requires its Durable Object and rate-limiter bindings. `/health` reports only
-the service/schema; it does not disclose the secret or accept a report.
-
-The relay limits request/archive sizes, fixed entry names, per-IP ingress and
-global daily delivery. The IP is used by Cloudflare's ephemeral limiter and is
-not stored in diagnostic receipts or forwarded to Discord. Cloudflare and
-Discord still process network metadata and uploaded content; network uploads
-cannot honestly be described as 100% anonymous. Worker observability is off.
-
-Discord receives a ZIP attachment with mentions disabled. The relay uses
-`wait=true`, requires a returned message ID and records a 31-day receipt before
-acknowledging the client. Ordinary retries are deduplicated by report ID and
-archive digest. Discord has no idempotency key: a connection/process failure
-after Discord accepts a message but before a receipt is saved can still cause
-a duplicate bearing the same report ID. Rate limits respect Discord's returned
-delay. A revoked/invalid webhook is suspended until its server secret changes.
+Reports are sent over verified HTTPS to the project's reporting service and
+forwarded to its private Discord channel. The service and Discord can process
+network metadata and uploaded content. Reports can still contain personal
+information after automatic redaction.
 
 ## Answering the question from the environment
 
@@ -135,10 +113,8 @@ ignored and the question is asked as usual.
 `DKRCrashReports` covers consent, no retroactive collection, redaction,
 immutable offline snapshots, restart/backoff, confirmed acknowledgements,
 duplicate suppression, dump revocation, linked inputs, queue bounds and expiry.
-`DKRCrashRelay` uses synthetic archives and a mocked Discord transport to cover
-admission, confirmation, concurrency, rate limits, network failures and revoked
-credentials. Live smoke tests must use synthetic data only. Never use another
-player's supplied logs or dump as an upload fixture without their consent.
+Use synthetic data for live smoke tests. Ask before using another player's
+supplied logs or dump as an upload fixture.
 
 New consent/status copy is source English pending translation review in the
 embedded catalogues; the privacy claims must remain accurate when translated.

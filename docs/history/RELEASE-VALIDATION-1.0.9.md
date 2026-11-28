@@ -53,7 +53,7 @@ profiles, credentials, installed mod libraries and private diagnostics.
 
 ## Service and hardware scope
 
-The directory's recorded local Cloudflare runtime suites cover 83 normal,
+The recorded local directory integration tests cover 83 normal,
 89 separately gated and 3,092 lease/load assertions, plus 21 existing-library
 regression checks. These include synthetic concurrent capacity, account/room
 leases, hibernation and preserved library API behaviour. They are local backend

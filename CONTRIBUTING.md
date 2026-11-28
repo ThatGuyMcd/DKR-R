@@ -18,8 +18,8 @@ can merge.
 
 Through v1.0.11 the release was built from first-party layers under
 `patches/`; the fold replaced them with source, and the guard's baseline
-(`architecture/pattern-guard-baseline.txt`) is empty. Server-side code is in
-`services/`.
+(`architecture/pattern-guard-baseline.txt`) is empty. Keep website source, server implementations and deployment files
+outside this repository.
 
 ## Local setup
 

@@ -68,25 +68,3 @@ Approved preparation can outlast a directory reservation without restarting a
 long mod transfer. Real authorization changes, including locking, privacy or
 starting, can revoke unused/obsolete admission. Benign account refresh and
 roster notifications do not revoke approved work by themselves.
-
-## Service configuration and operations
-
-`ONLINE_ENABLED` must be true in both the main API and private Online Worker
-for discovery. `RUNNING_SPECTATORS_ENABLED` is a separate switch in both; leave
-it false until late-spectator checkpoint/catch-up acceptance passes. Waiting
-spectators and late racers have different admission rules.
-
-The service uses a private binding to the single named SQLite Durable Object
-`dkrr-worldwide-v1`. It has no public private-worker route. Deploy the private
-Worker first and preserve the live API's existing account/FTP/database bindings.
-The launcher and existing website API are the feature's integration points;
-FTP remains the mod-upload method.
-
-Profile pictures and Discord metadata also need the private API's profile D1
-migrations and matching Workers. An already deployed friends/pictures bundle
-does not need redeploying for the final header layout. See [profiles and deployment](ONLINE_PROFILES.md#deploying-the-matching-profile-api).
-
-See the [deployment and rollback instructions](../services/online-directory/DEPLOYMENT.md),
-[local backend QA record](../services/online-directory/QA.md) and
-[owner acceptance checklist](../services/online-directory/PLAYTEST.txt).
-Do not treat local synthetic load tests as proof of worldwide network behaviour.
